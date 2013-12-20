@@ -11,13 +11,3 @@ Status
 It is able to “undump” Lua binaries, such as ```checktable.bin``` compiled from the [Lua test suite](http://www.lua.org/tests/5.2/).
 
 It can execute basic recursive functions, like ```fib```, tail-recursive functions & loops.
-
-Tasks
------
-
-- [ ] Support calls to Go functions
-- [ ] Implement Lua co-routines as goroutines
-- [ ] Implement a compiler
-- [ ] Replace brittle tests using ```luac``` compiled binaries with Lua source
-- [ ] Implement the Lua core library
-- [ ] Pass all tests from the [Lua test suite](http://www.lua.org/tests/5.2/) that are *not* specific to the C API
