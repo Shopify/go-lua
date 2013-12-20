@@ -1,9 +1,9 @@
 package lua
 
 import (
+	"fmt"
 	"math"
 	"strconv"
-	"fmt"
 )
 
 type value interface{}
