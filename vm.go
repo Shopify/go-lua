@@ -218,8 +218,8 @@ func (l *state) execute() {
 		return frame[field]
 	}
 	jump := func(i instruction) {
-		if a := stackIndex(i.a()); a > 0 {
-			l.close(ci.base + a - 1)
+		if a := i.a(); a > 0 {
+			l.close(ci.stackIndex(a - 1))
 		}
 		ci.jump(i.sbx())
 	}
@@ -343,7 +343,7 @@ func (l *state) execute() {
 			frame = ci.frame
 		case opConcat:
 			a, b, c := i.a(), i.b(), i.c()
-			l.top = ci.base + stackIndex(c+1) // mark the end of concat operands
+			l.top = ci.stackIndex(c+1) // mark the end of concat operands
 			l.concat(c - b + 1)
 			frame = ci.frame
 			frame[a] = frame[b]
@@ -380,9 +380,9 @@ func (l *state) execute() {
 		case opCall:
 			a, b, c := i.a(), i.b(), i.c()
 			if b != 0 {
-				l.top = ci.base + stackIndex(a+b)
+				l.top = ci.stackIndex(a+b)
 			} // else previous instruction set top
-			if n := int16(c - 1); l.preCall(ci.base+stackIndex(a), n) { // go function
+			if n := int16(c - 1); l.preCall(ci.stackIndex(a), n) { // go function
 				if n >= 0 {
 					l.top = ci.top() // adjust results
 				}
@@ -395,10 +395,10 @@ func (l *state) execute() {
 		case opTailCall:
 			a, b, c := i.a(), i.b(), i.c()
 			if b != 0 {
-				l.top = ci.base + stackIndex(a+b)
+				l.top = ci.stackIndex(a+b)
 			} // else previous instruction set top
 			l.assert(c-1 == MultipleReturns)
-			if l.preCall(ci.base+stackIndex(a), MultipleReturns) { // go function
+			if l.preCall(ci.stackIndex(a), MultipleReturns) { // go function
 				frame = ci.frame
 			} else {
 				// tail call: put called frame (n) in place of caller one (o)
@@ -408,28 +408,29 @@ func (l *state) execute() {
 				// last stack slot filled by 'precall'
 				lim := stackIndex(l.stack[nfn].(*luaClosure).prototype.parameterCount)
 				if len(closure.prototype.prototypes) > 0 { // close all upvalues from previous call
-					l.close(oci.base)
+					l.close(oci.base())
 				}
 				// move new frame into old one
 				copy(l.stack[ofn:ofn+lim+1], l.stack[nfn:nfn+lim+1])
-				oci.base = ofn + (nci.base - nfn) // correct base
+				base := ofn + (nci.base() - nfn) // correct base
+				oci.frame = l.stack[base:ci.top()]
 				oci.top_ = ofn + (l.top - nfn)    // correct top
 				oci.savedPC = nci.savedPC
 				oci.callStatus |= callStatusTail // function was tail called
 				l.top, l.callInfo, ci = oci.top(), oci, oci
-				l.assert(l.top == oci.base+stackIndex(l.stack[ofn].(*luaClosure).prototype.maxStackSize))
-				l.assert(&oci.frame[0] == &l.stack[oci.base] && len(oci.frame) == int(oci.top()-oci.base))
+				l.assert(l.top == oci.base() + stackIndex(l.stack[ofn].(*luaClosure).prototype.maxStackSize))
+				l.assert(&oci.frame[0] == &l.stack[oci.base()] && len(oci.frame) == int(oci.top()-oci.base()))
 				newFrame()
 			}
 		case opReturn:
-			a := stackIndex(i.a())
-			if b := stackIndex(i.b()); b != 0 {
-				l.top = ci.base + a + b - 1
+			a := i.a()
+			if b := i.b(); b != 0 {
+				l.top = ci.stackIndex(a + b - 1)
 			}
 			if len(closure.prototype.prototypes) > 0 {
-				l.close(ci.base)
+				l.close(ci.base())
 			}
-			n := l.postCall(ci.base + a)
+			n := l.postCall(ci.stackIndex(a))
 			if 0 == ci.callStatus&callStatusReentry { // ci still the called one?
 				return // external invocation: return
 			}
@@ -491,24 +492,24 @@ func (l *state) execute() {
 			l.top = ci.top()
 		case opClosure:
 			a, p := i.a(), &closure.prototype.prototypes[i.bx()]
-			if ncl := cached(p, closure.upValues, ci.base); ncl == nil { // no match?
-				frame[a] = l.newClosure(p, closure.upValues, ci.base) // create a new one
+			if ncl := cached(p, closure.upValues, ci.base()); ncl == nil { // no match?
+				frame[a] = l.newClosure(p, closure.upValues, ci.base()) // create a new one
 			} else {
 				frame[a] = ncl
 				clear(frame[a+1:])
 			}
 		case opVarArg:
 			a, b := int(i.a()), int(i.b()-1)
-			n := int(ci.base-ci.function()) - int(closure.prototype.parameterCount) - 1
+			n := int(ci.base()-ci.function()) - int(closure.prototype.parameterCount) - 1
 			if b < 0 {
 				b = n // get all var arguments
 				l.checkStack(n)
 				frame = ci.frame
-				l.top = ci.base + stackIndex(a+n)
+				l.top = ci.base() + stackIndex(a+n)
 			}
 			for j := 0; j < b; j++ {
 				if j < n {
-					frame[a+j] = l.stack[ci.base-stackIndex(n+j)]
+					frame[a+j] = l.stack[ci.base()-stackIndex(n+j)]
 				} else {
 					frame[a+j] = nil
 				}

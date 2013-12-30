@@ -162,9 +162,16 @@ func (ci *commonCallInfo) initialize(l *state, function, top stackIndex, resultC
 type luaCallInfo struct {
 	commonCallInfo
 	frame   []value
-	base    stackIndex
 	savedPC pc
 	code    []instruction
+}
+
+func (ci *luaCallInfo) stackIndex(slot opField) stackIndex {
+	return ci.top() - stackIndex(len(ci.frame)) + stackIndex(slot)
+}
+
+func (ci *luaCallInfo) base() stackIndex {
+	return ci.stackIndex(0)
 }
 
 type goCallInfo struct {
@@ -190,7 +197,6 @@ func (l *state) pushLuaFrame(function, base stackIndex, resultCount int16, p *pr
 	}
 	ci.initialize(l, function, base+stackIndex(p.maxStackSize), resultCount, callStatusLua)
 	ci.frame = l.stack[base:ci.top()]
-	ci.base = base
 	ci.savedPC = 0
 	ci.code = p.code
 	l.top = ci.top()
@@ -429,7 +435,8 @@ func (l *state) reallocStack(newSize int) {
 	_ = l.callInfo.push(nil)
 	for ci := l.callInfo; ci != nil; ci = ci.previous() {
 		if lci, ok := ci.(*luaCallInfo); ok {
-			lci.frame = l.stack[lci.base : lci.base+stackIndex(len(lci.frame))]
+			base := lci.base()
+			lci.frame = l.stack[base : base+stackIndex(len(lci.frame))]
 		}
 	}
 }
