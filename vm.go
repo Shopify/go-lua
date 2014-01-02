@@ -84,17 +84,17 @@ func (l *state) objectLength(v value) value {
 	return l.callTagMethod(tm.(*luaClosure), v, v)
 }
 
-func (l *state) equalTagMethod(mt1, mt2 *table, event tm) *luaClosure {
+func (l *state) equalTagMethod(mt1, mt2 *table, event tm) (c *luaClosure) {
 	if tm1 := l.fastTagMethod(mt1, event); tm1 == nil {
-		return nil // no metamethod
+		// no metamethod
 	} else if mt1 == mt2 {
-		return tm1.(*luaClosure) // same metatables => same metamethods
+		c = tm1.(*luaClosure) // same metatables => same metamethods
 	} else if tm2 := l.fastTagMethod(mt2, event); tm2 == nil {
-		return nil // no metamethod
+		// no metamethod
 	} else if tm1 == tm2 {
-		return tm1.(*luaClosure) // same metamethods
+		c = tm1.(*luaClosure) // same metamethods
 	}
-	return nil
+	return
 }
 
 func (l *state) equalObjects(t1, t2 value) bool {
@@ -161,9 +161,9 @@ func (l *state) lessOrEqual(left, right value) bool {
 	return false
 }
 
-func (l *state) concat(total opField) {
-	t := func(i int) value { return l.stack[l.top-stackIndex(i)] }
-	put := func(i int, v value) { l.stack[l.top-stackIndex(i)] = v }
+func (l *state) concat(total int) {
+	t := func(i int) value { return l.stack[l.top-i] }
+	put := func(i int, v value) { l.stack[l.top-i] = v }
 	concatTagMethod := func() {
 		if v, ok := l.callBinaryTagMethod(t(2), t(1), tmConcat); !ok {
 			l.concatError(t(2), t(1))
@@ -173,7 +173,7 @@ func (l *state) concat(total opField) {
 	}
 	l.assert(total >= 2)
 	for total > 1 {
-		top := int(l.top)
+		top := l.top
 		n := 2 // # of elements handled in this pass (at least 2)
 		s2, ok := t(2).(string)
 		if !ok {
@@ -191,15 +191,15 @@ func (l *state) concat(total opField) {
 		} else {
 			// at least 2 non-empty strings; scarf as many as possible
 			ss := make([]string, 0, total)
-			for i, ok, ss := 2, true, append(ss, s1); ok && i <= int(total); i++ {
+			for i, ok, ss := 2, true, append(ss, s1); ok && i <= total; i++ {
 				if s, ok := toString(l.stack[top-i]); ok {
 					ss = append(ss, s)
 				}
 			}
 			put(len(ss), strings.Join(ss, ""))
 		}
-		total -= opField(n - 1)    // created 1 new string from `n` strings
-		l.top -= stackIndex(n - 1) // popped `n` strings and pushed 1
+		total -= n - 1 // created 1 new string from `n` strings
+		l.top -= n - 1 // popped `n` strings and pushed 1
 	}
 }
 
@@ -211,9 +211,9 @@ func (l *state) execute() {
 	var closure *luaClosure
 	var constants []value
 	ci := l.callInfo.(*luaCallInfo)
-	k := func(field opField) value {
+	k := func(field int) value {
 		if isConstant(field) {
-			return constants[constantIndex(int(field))]
+			return constants[constantIndex(field)]
 		}
 		return frame[field]
 	}
@@ -289,18 +289,18 @@ func (l *state) execute() {
 			a, b := i.a(), i.b()
 			clear(frame[a : a+b+1])
 		case opGetUpValue:
-			frame[i.a()] = closure.upValue(int(i.b()))
+			frame[i.a()] = closure.upValue(i.b())
 		case opGetTableUp:
-			frame[i.a()] = l.tableAt(closure.upValue(int(i.b())), k(i.c()))
+			frame[i.a()] = l.tableAt(closure.upValue(i.b()), k(i.c()))
 			frame = ci.frame
 		case opGetTable:
 			frame[i.a()] = l.tableAt(frame[i.b()], k(i.c()))
 			frame = ci.frame
 		case opSetTableUp:
-			l.setTableAt(closure.upValue(int(i.a())), k(i.b()), k(i.c()))
+			l.setTableAt(closure.upValue(i.a()), k(i.b()), k(i.c()))
 			frame = ci.frame
 		case opSetUpValue:
-			closure.setUpValue(int(i.b()), frame[i.a()])
+			closure.setUpValue(i.b(), frame[i.a()])
 		case opSetTable:
 			l.setTableAt(frame[i.a()], k(i.b()), k(i.c()))
 			frame = ci.frame
@@ -343,7 +343,7 @@ func (l *state) execute() {
 			frame = ci.frame
 		case opConcat:
 			a, b, c := i.a(), i.b(), i.c()
-			l.top = ci.stackIndex(c+1) // mark the end of concat operands
+			l.top = ci.stackIndex(c + 1) // mark the end of concat operands
 			l.concat(c - b + 1)
 			frame = ci.frame
 			frame[a] = frame[b]
@@ -380,9 +380,9 @@ func (l *state) execute() {
 		case opCall:
 			a, b, c := i.a(), i.b(), i.c()
 			if b != 0 {
-				l.top = ci.stackIndex(a+b)
+				l.top = ci.stackIndex(a + b)
 			} // else previous instruction set top
-			if n := int16(c - 1); l.preCall(ci.stackIndex(a), n) { // go function
+			if n := c - 1; l.preCall(ci.stackIndex(a), n) { // go function
 				if n >= 0 {
 					l.top = ci.top() // adjust results
 				}
@@ -395,7 +395,7 @@ func (l *state) execute() {
 		case opTailCall:
 			a, b, c := i.a(), i.b(), i.c()
 			if b != 0 {
-				l.top = ci.stackIndex(a+b)
+				l.top = ci.stackIndex(a + b)
 			} // else previous instruction set top
 			l.assert(c-1 == MultipleReturns)
 			if l.preCall(ci.stackIndex(a), MultipleReturns) { // go function
@@ -406,7 +406,7 @@ func (l *state) execute() {
 				oci := nci.previous().(*luaCallInfo)       // caller frame
 				nfn, ofn := nci.function(), oci.function() // called & caller function
 				// last stack slot filled by 'precall'
-				lim := stackIndex(l.stack[nfn].(*luaClosure).prototype.parameterCount)
+				lim := l.stack[nfn].(*luaClosure).prototype.parameterCount
 				if len(closure.prototype.prototypes) > 0 { // close all upvalues from previous call
 					l.close(oci.base())
 				}
@@ -414,12 +414,12 @@ func (l *state) execute() {
 				copy(l.stack[ofn:ofn+lim+1], l.stack[nfn:nfn+lim+1])
 				base := ofn + (nci.base() - nfn) // correct base
 				oci.frame = l.stack[base:ci.top()]
-				oci.top_ = ofn + (l.top - nfn)    // correct top
+				oci.top_ = ofn + (l.top - nfn) // correct top
 				oci.savedPC = nci.savedPC
 				oci.callStatus |= callStatusTail // function was tail called
 				l.top, l.callInfo, ci = oci.top(), oci, oci
-				l.assert(l.top == oci.base() + stackIndex(l.stack[ofn].(*luaClosure).prototype.maxStackSize))
-				l.assert(&oci.frame[0] == &l.stack[oci.base()] && len(oci.frame) == int(oci.top()-oci.base()))
+				l.assert(l.top == oci.base()+l.stack[ofn].(*luaClosure).prototype.maxStackSize)
+				l.assert(&oci.frame[0] == &l.stack[oci.base()] && len(oci.frame) == oci.top()-oci.base())
 				newFrame()
 			}
 		case opReturn:
@@ -462,10 +462,10 @@ func (l *state) execute() {
 			}
 		case opTForCall:
 			a := i.a()
-			callBase := stackIndex(a + 3)
+			callBase := a + 3
 			copy(frame[callBase:callBase+3], frame[a:a+3])
 			l.top = callBase + 3 // function + 2 args (state and index)
-			l.call(callBase, int16(i.c()), true)
+			l.call(callBase, i.c(), true)
 			frame, l.top = ci.frame, ci.top()
 			i = expectNext(opTForLoop) // go to next instruction
 			fallthrough
@@ -475,12 +475,12 @@ func (l *state) execute() {
 				ci.jump(i.sbx())      // jump back
 			}
 		case opSetList:
-			a, n, c := int(i.a()), int(i.b()), int(i.c())
+			a, n, c := i.a(), i.b(), i.c()
 			if n == 0 {
-				n = int(l.top) - a - 1
+				n = l.top - a - 1
 			}
 			if c == 0 {
-				c = int(expectNext(opExtraArg).ax())
+				c = expectNext(opExtraArg).ax()
 			}
 			h := frame[a].(*table)
 			start := c - 1*listItemsPerFlush
@@ -499,17 +499,17 @@ func (l *state) execute() {
 				clear(frame[a+1:])
 			}
 		case opVarArg:
-			a, b := int(i.a()), int(i.b()-1)
-			n := int(ci.base()-ci.function()) - int(closure.prototype.parameterCount) - 1
+			a, b := i.a(), i.b()-1
+			n := ci.base() - ci.function() - closure.prototype.parameterCount - 1
 			if b < 0 {
 				b = n // get all var arguments
 				l.checkStack(n)
 				frame = ci.frame
-				l.top = ci.base() + stackIndex(a+n)
+				l.top = ci.base() + a + n
 			}
 			for j := 0; j < b; j++ {
 				if j < n {
-					frame[a+j] = l.stack[ci.base()-stackIndex(n+j)]
+					frame[a+j] = l.stack[ci.base()-n+j]
 				} else {
 					frame[a+j] = nil
 				}

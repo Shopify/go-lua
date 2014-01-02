@@ -1,10 +1,9 @@
 package lua
 
 type opCode uint
-type opField int
 
 const (
-	iABC opField = iota
+	iABC int = iota
 	iABx
 	iAsBx
 	iAx
@@ -117,12 +116,12 @@ const (
 
 type instruction uint32
 
-func isConstant(x opField) bool {
+func isConstant(x int) bool {
 	return 0 != x&bitRK
 }
 
 func constantIndex(r int) int {
-	return r & ^int(bitRK)
+	return r & ^bitRK
 }
 
 // creates a mask with 'n' 1 bits at position 'p'
@@ -139,31 +138,31 @@ func (i instruction) opCode() opCode {
 	return opCode(i >> posOp & mask1(sizeOp, 0))
 }
 
-func (i instruction) arg(pos, size uint) opField {
-	return opField(i >> pos & mask1(size, 0))
+func (i instruction) arg(pos, size uint) int {
+	return int(i >> pos & mask1(size, 0))
 }
 
-func (i instruction) a() opField {
+func (i instruction) a() int {
 	return i.arg(posA, sizeA)
 }
 
-func (i instruction) b() opField {
+func (i instruction) b() int {
 	return i.arg(posB, sizeB)
 }
 
-func (i instruction) c() opField {
+func (i instruction) c() int {
 	return i.arg(posC, sizeC)
 }
 
-func (i instruction) bx() opField {
+func (i instruction) bx() int {
 	return i.arg(posBx, sizeBx)
 }
 
-func (i instruction) ax() opField {
+func (i instruction) ax() int {
 	return i.arg(posAx, sizeAx)
 }
 
-func (i instruction) sbx() opField {
+func (i instruction) sbx() int {
 	return i.bx() - maxArgSBx
 }
 

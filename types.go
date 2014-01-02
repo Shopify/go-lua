@@ -7,7 +7,6 @@ import (
 )
 
 type value interface{}
-type stackIndex int
 type float8 int
 
 func printValue(v value) {
@@ -44,12 +43,12 @@ type userData struct {
 type upValueDesc struct {
 	name    string
 	isLocal bool
-	index   byte
+	index   int
 }
 
 type stackLocation struct {
 	state *state
-	index stackIndex
+	index int
 }
 
 type prototype struct {
@@ -62,7 +61,7 @@ type prototype struct {
 	cache                        *luaClosure
 	source                       string
 	lineDefined, lastLineDefined int
-	parameterCount, maxStackSize byte
+	parameterCount, maxStackSize int
 	isVarArg                     bool
 }
 

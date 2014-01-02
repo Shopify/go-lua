@@ -103,7 +103,7 @@ func (state *loadState) readUpValues() (u []upValueDesc, err error) {
 	}
 	u = make([]upValueDesc, n)
 	for i := range v {
-		u[i].isLocal, u[i].index = v[i].IsLocal != 0, v[i].Index
+		u[i].isLocal, u[i].index = v[i].IsLocal != 0, int(v[i].Index)
 	}
 	return
 }
@@ -195,17 +195,19 @@ func (state *loadState) readFunction() (p prototype, err error) {
 		return
 	}
 	p.lastLineDefined = int(n)
-	if p.parameterCount, err = state.readByte(); err != nil {
+	var b byte
+	if b, err = state.readByte(); err != nil {
 		return
 	}
-	var va byte
-	if va, err = state.readByte(); err != nil {
+	p.parameterCount = int(b)
+	if b, err = state.readByte(); err != nil {
 		return
 	}
-	p.isVarArg = va != 0
-	if p.maxStackSize, err = state.readByte(); err != nil {
+	p.isVarArg = b != 0
+	if b, err = state.readByte(); err != nil {
 		return
 	}
+	p.maxStackSize = int(b)
 	if p.code, err = state.readCode(); err != nil {
 		return
 	}

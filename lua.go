@@ -99,14 +99,14 @@ const (
 // per thread state
 type state struct {
 	status                byte
-	top                   stackIndex // first free slot in the stack
+	top                   int // first free slot in the stack
 	global                *globalState
-	callInfo              callInfo   // call info for current function
-	oldPC                 pc         // last pC traced
-	stackLast             stackIndex // last free slot in the stack
+	callInfo              callInfo // call info for current function
+	oldPC                 pc       // last pC traced
+	stackLast             int      // last free slot in the stack
 	stack                 []value
-	nonYieldableCallCount uint16
-	nestedGoCallCount     uint16
+	nonYieldableCallCount uint
+	nestedGoCallCount     uint
 	hookMask              byte
 	allowHook             bool
 	baseHookCount         int
@@ -114,7 +114,7 @@ type state struct {
 	hooker                Hook
 	upValues              *openUpValue
 	// errorJmp *longjmp // current error recover point
-	// errorFunc stackIndex // current error handling function (stack index)
+	// errorFunc int // current error handling function (stack index)
 	baseCallInfo luaCallInfo // callInfo for first level (go calling lua)
 }
 
@@ -154,7 +154,7 @@ func (g *globalState) metaTable(o value) *table {
 }
 
 func (l *state) ApiCheckStackSpace(n int) {
-	l.assert(n < int(l.top-l.callInfo.function()))
+	l.assert(n < l.top-l.callInfo.function())
 }
 
 func (l *state) adjustResults(resultCount int) {
@@ -169,12 +169,12 @@ func (l *state) Call(argCount, resultCount, context int, k interface{}) { // TOD
 	// check element count argCount+1
 	// check l.status==OK "cannot do calls on non-normal thread"
 	// checkresults argCount, resultCount
-	f := l.top - stackIndex(argCount+1)
+	f := l.top - argCount - 1
 	if k != nil && l.nonYieldableCallCount == 0 { // need to prepare continuation?
 		panic("continuations not yet supported")
-		l.call(f, int16(resultCount), true) // just do the call
+		l.call(f, resultCount, true) // just do the call
 	} else { // no continuation or not yieldable
-		l.call(f, int16(resultCount), false) // just do the call
+		l.call(f, resultCount, false) // just do the call
 	}
 	// adjustresults resultCount
 }

@@ -65,8 +65,8 @@ func TestUndump(t *testing.T) {
 	validate(4, len(p.prototypes), "prototypes", t)
 	validate(1, len(p.upValues), "upvalues", t)
 	validate(0, len(p.localVariables), "local variables", t)
-	validate(0, int(p.parameterCount), "parameters", t)
-	validate(4, int(p.maxStackSize), "stack slots", t)
+	validate(0, p.parameterCount, "parameters", t)
+	validate(4, p.maxStackSize, "stack slots", t)
 	if !p.isVarArg {
 		t.Error("expected main function to be var arg, but wasn't")
 	}
