@@ -38,6 +38,7 @@ type localVariable struct {
 
 type userData struct {
 	metaTable, env *table
+	data           interface{}
 }
 
 type upValueDesc struct {
@@ -73,21 +74,21 @@ func intFromFloat8(x float8) int {
 	return int((x&7)+8) << uint(e-1)
 }
 
-func arith(op tm, v1, v2 float64) float64 {
+func arith(op int, v1, v2 float64) float64 {
 	switch op {
-	case tmAdd:
+	case OpAdd:
 		return v1 + v2
-	case tmSub:
+	case OpSub:
 		return v1 - v2
-	case tmMul:
+	case OpMul:
 		return v1 * v2
-	case tmDiv:
+	case OpDiv:
 		return v1 / v2
-	case tmMod:
+	case OpMod:
 		return math.Mod(v1, v2)
-	case tmPow:
+	case OpPow:
 		return math.Pow(v1, v2)
-	case tmUnaryMinus:
+	case OpUnaryMinus:
 		return -v1
 	}
 	panic(op)

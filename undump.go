@@ -4,6 +4,7 @@ import (
 	"encoding/binary"
 	"errors"
 	"io"
+	"math"
 	"unsafe"
 )
 
@@ -59,13 +60,14 @@ func (state *loadState) readBool() (bool, error) {
 
 func (state *loadState) readString() (s string, err error) {
 	// Feel my pain
+	maxUint := ^uint(0)
 	var size uintptr
 	var size64 uint64
 	var size32 uint32
-	if unsafe.Sizeof(size) == unsafe.Sizeof(size64) {
+	if maxUint == math.MaxUint64 {
 		err = state.read(&size64)
 		size = uintptr(size64)
-	} else if unsafe.Sizeof(size) == unsafe.Sizeof(size32) {
+	} else if maxUint == math.MaxUint32 {
 		err = state.read(&size32)
 		size = uintptr(size32)
 	} else {
@@ -228,10 +230,6 @@ func (state *loadState) readFunction() (p prototype, err error) {
 }
 
 func init() {
-	var i int32
-	var f float64
-	var p uintptr
-	var in instruction
 	copy(header.Signature[:], Signature)
 	header.Version = VersionMajor<<4 | VersionMinor
 	header.Format = 0
@@ -240,15 +238,26 @@ func init() {
 	} else {
 		header.Endianness = 0
 	}
-	header.IntSize = byte(unsafe.Sizeof(i))
-	header.PointerSize = byte(unsafe.Sizeof(p))
-	header.InstructionSize = byte(unsafe.Sizeof(in))
-	header.NumberSize = byte(unsafe.Sizeof(f))
+	header.IntSize = 4
+	header.PointerSize = byte(1+^uintptr(0)>>32&1) * 4
+	header.InstructionSize = byte(1+^instruction(0)>>32&1) * 4
+	header.NumberSize = 8
 	header.IntegralNumber = 0
 	tail := "\x19\x93\r\n\x1a\n"
 	copy(header.Tail[:], tail)
-	return
+
+	// The uintptr numeric type is implementation-specific
+	uintptrBitCount := byte(0)
+	for bits := ^uintptr(0); bits != 0; bits >>= 1 {
+		uintptrBitCount++
+	}
+	if uintptrBitCount != header.PointerSize*8 {
+		panic("invalid pointer size")
+	}
 }
+
+// The int and uint numeric types are IntBits wide.
+const IntBits = (1 + ^uint(0)>>32&1) * 32
 
 func endianness() binary.ByteOrder {
 	if x := 1; *(*byte)(unsafe.Pointer(&x)) == 1 {

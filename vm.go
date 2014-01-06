@@ -10,7 +10,7 @@ func (l *state) arith(rb, rc value, op tm) value {
 	b, bok := toNumber(rb)
 	c, cok := toNumber(rc)
 	if bok && cok {
-		return arith(op, b, c)
+		return arith(int(op-tmAdd)+OpAdd, b, c)
 	} else if result, ok := l.callBinaryTagMethod(rb, rc, op); ok {
 		return result
 	}
@@ -85,14 +85,12 @@ func (l *state) objectLength(v value) value {
 }
 
 func (l *state) equalTagMethod(mt1, mt2 *table, event tm) (c *luaClosure) {
-	if tm1 := l.fastTagMethod(mt1, event); tm1 == nil {
-		// no metamethod
-	} else if mt1 == mt2 {
-		c = tm1.(*luaClosure) // same metatables => same metamethods
-	} else if tm2 := l.fastTagMethod(mt2, event); tm2 == nil {
-		// no metamethod
-	} else if tm1 == tm2 {
-		c = tm1.(*luaClosure) // same metamethods
+	if tm1 := l.fastTagMethod(mt1, event); tm1 == nil { // no metamethod
+	} else if mt1 == mt2 { // same metatables => same metamethods
+		c = tm1.(*luaClosure)
+	} else if tm2 := l.fastTagMethod(mt2, event); tm2 == nil { // no metamethod
+	} else if tm1 == tm2 { // same metamethods
+		c = tm1.(*luaClosure)
 	}
 	return
 }
@@ -100,9 +98,6 @@ func (l *state) equalTagMethod(mt1, mt2 *table, event tm) (c *luaClosure) {
 func (l *state) equalObjects(t1, t2 value) bool {
 	var tm *luaClosure
 	switch t1 := t1.(type) {
-	// TODO
-	//case lightUserData: return pvalue(t1) == pvalue(t2)
-	//case luaGoFunction: return fvalue(t1) == fvalue(t2)
 	case *userData:
 		if t1 == t2 {
 			return true
@@ -389,7 +384,7 @@ func (l *state) execute() {
 				frame = ci.frame
 			} else { // lua function
 				ci = l.callInfo.(*luaCallInfo)
-				ci.callStatus |= callStatusReentry
+				ci.callStatus_ |= callStatusReentry
 				newFrame()
 			}
 		case opTailCall:
@@ -416,7 +411,7 @@ func (l *state) execute() {
 				oci.frame = l.stack[base:ci.top()]
 				oci.top_ = ofn + (l.top - nfn) // correct top
 				oci.savedPC = nci.savedPC
-				oci.callStatus |= callStatusTail // function was tail called
+				oci.callStatus_ |= callStatusTail // function was tail called
 				l.top, l.callInfo, ci = oci.top(), oci, oci
 				l.assert(l.top == oci.base()+l.stack[ofn].(*luaClosure).prototype.maxStackSize)
 				l.assert(&oci.frame[0] == &l.stack[oci.base()] && len(oci.frame) == oci.top()-oci.base())
@@ -431,7 +426,7 @@ func (l *state) execute() {
 				l.close(ci.base())
 			}
 			n := l.postCall(ci.stackIndex(a))
-			if 0 == ci.callStatus&callStatusReentry { // ci still the called one?
+			if 0 == ci.callStatus_&callStatusReentry { // ci still the called one?
 				return // external invocation: return
 			}
 			ci = l.callInfo.(*luaCallInfo)

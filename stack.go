@@ -17,6 +17,7 @@ type upValue struct {
 type closure interface {
 	upValue(i int) value
 	setUpValue(i int, v value)
+	upValueCount() int
 }
 
 type luaClosure struct {
@@ -37,12 +38,20 @@ func (c *luaClosure) setUpValue(i int, v value) {
 	c.upValues[i].setValue(v)
 }
 
+func (c *luaClosure) upValueCount() int {
+	return len(c.upValues)
+}
+
 func (c *goClosure) upValue(i int) value {
 	return c.upValues[i]
 }
 
 func (c *goClosure) setUpValue(i int, v value) {
 	c.upValues[i] = v
+}
+
+func (c *goClosure) upValueCount() int {
+	return len(c.upValues)
 }
 
 func (l *state) newUpValue() *upValue {
@@ -116,6 +125,8 @@ type callInfo interface {
 	function() int
 	top() int
 	setTop(int)
+	isLua() bool
+	callStatus() callStatus
 }
 
 type commonCallInfo struct {
@@ -123,7 +134,7 @@ type commonCallInfo struct {
 	top_             int
 	previous_, next_ callInfo
 	resultCount      int
-	callStatus       callStatus
+	callStatus_      callStatus
 }
 
 func (ci *commonCallInfo) top() int {
@@ -151,12 +162,16 @@ func (ci *commonCallInfo) function() int {
 	return ci.function_
 }
 
+func (ci *commonCallInfo) callStatus() callStatus {
+	return ci.callStatus_
+}
+
 func (ci *commonCallInfo) initialize(l *state, function, top, resultCount int, callStatus callStatus) {
 	ci.function_ = function
 	ci.top_ = top
 	l.assert(ci.top() <= l.stackLast)
 	ci.resultCount = resultCount
-	ci.callStatus = callStatus
+	ci.callStatus_ = callStatus
 }
 
 type luaCallInfo struct {
@@ -164,6 +179,16 @@ type luaCallInfo struct {
 	frame   []value
 	savedPC pc
 	code    []instruction
+}
+
+func (ci *luaCallInfo) isLua() bool {
+	return true
+}
+
+func (ci *luaCallInfo) setTop(top int) {
+	diff := top - ci.top()
+	ci.frame = ci.frame[:len(ci.frame)+diff]
+	ci.commonCallInfo.setTop(top)
 }
 
 func (ci *luaCallInfo) stackIndex(slot int) int {
@@ -183,14 +208,18 @@ func (ci *luaCallInfo) base() int {
 
 type goCallInfo struct {
 	commonCallInfo
-	context int
+	context      int
+	continuation Function
 	/*
-		continuation goFunction
 		oldErrorFunction ptrdiff_t
 		extra ptrdiff_t
 	*/
 	oldAllowHook bool
 	status       byte
+}
+
+func (ci *goCallInfo) isLua() bool {
+	return false
 }
 
 func (l *state) pushLuaFrame(function, base, resultCount int, p *prototype) *luaCallInfo {
@@ -326,7 +355,7 @@ func (l *state) preCall(function int, resultCount int) bool {
 func (l *state) callHook(ci *luaCallInfo) {
 	ci.savedPC++ // hooks assume 'pc' is already incremented
 	if pci, ok := ci.previous().(*luaCallInfo); ok && pci.code[pci.savedPC-1].opCode() == opTailCall {
-		ci.callStatus |= callStatusTail
+		ci.callStatus_ |= callStatusTail
 		l.hook(HookTailCall, -1)
 	} else {
 		l.hook(HookCall, -1)
@@ -379,7 +408,7 @@ func (l *state) call(function int, resultCount int, allowYield bool) {
 	if l.nestedGoCallCount++; l.nestedGoCallCount == maxCallCount {
 		l.runtimeError("Go stack overflow")
 	} else if l.nestedGoCallCount >= maxCallCount+maxCallCount>>3 {
-		l.throw(Error) // error while handling stack error
+		l.throw(ErrorError) // error while handling stack error
 	}
 	if !allowYield {
 		l.nonYieldableCallCount++
@@ -393,7 +422,7 @@ func (l *state) call(function int, resultCount int, allowYield bool) {
 	l.nestedGoCallCount--
 }
 
-func (l *state) throw(errorCode int) {
+func (l *state) throw(errorCode Status) {
 	// TODO
 	panic(errorCode)
 }
@@ -410,13 +439,13 @@ func (l *state) hook(event, line int) {
 	ci.top_ = l.top + MinStack
 	l.assert(ci.top() <= l.stackLast)
 	l.allowHook = false // can't hook calls inside a hook
-	ci.callStatus |= callStatusHooked
+	ci.callStatus_ |= callStatusHooked
 	l.hooker(l, &ar)
 	l.assert(!l.allowHook)
 	l.allowHook = true
 	ci.top_ = ciTop
 	l.top = top
-	ci.callStatus &^= callStatusHooked
+	ci.callStatus_ &^= callStatusHooked
 }
 
 func (l *state) initializeStack() {
@@ -450,7 +479,7 @@ func (l *state) reallocStack(newSize int) {
 
 func (l *state) growStack(n int) {
 	if len(l.stack) > maxStack { // error after extra size?
-		l.throw(Error)
+		l.throw(ErrorError)
 	} else {
 		needed := l.top + n + extraStack
 		newSize := 2 * len(l.stack)

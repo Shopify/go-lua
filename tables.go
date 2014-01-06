@@ -134,3 +134,44 @@ func (t *table) length() int {
 	}
 	return t.unboundSearch(j)
 }
+
+func arrayIndex(k value) int {
+	if n, ok := k.(float64); ok {
+		if i := int(n); float64(i) == n {
+			return i
+		}
+	}
+	return -1
+}
+
+func (l *state) next(t *table, key int) bool {
+	i, k := 0, l.stack[key]
+	if k == nil { // first iteration
+	} else if i = arrayIndex(k); 0 < i && i <= len(t.array) {
+		i-- // Lua index -> Go index
+	} else if _, ok := t.hash[k]; !ok {
+		l.runtimeError("invalid key to 'next'") // key not found
+	} else {
+		i = len(t.array)
+	}
+	for ; i < len(t.array); i++ {
+		if t.array[i] != nil {
+			l.stack[key] = float64(i + 1)
+			l.stack[key+1] = t.array[i]
+			return true
+		}
+	}
+	found := false
+	for hk, v := range t.hash {
+		if found {
+			if v != nil {
+				l.stack[key] = hk
+				l.stack[key+1] = v
+				return true
+			}
+		} else if l.equalObjects(hk, k) {
+			found = true
+		}
+	}
+	return false // no more elements
+}

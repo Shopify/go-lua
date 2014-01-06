@@ -43,6 +43,21 @@ var eventNames = []string{
 	"__call",
 }
 
+var typeNames = []string{
+	"no value",
+	"nil",
+	"boolean",
+	"userdata",
+	"number",
+	"string",
+	"table",
+	"function",
+	"userdata",
+	"thread",
+	"proto", // these last two cases are used for tests only
+	"upval",
+}
+
 func (events *table) tagMethod(event tm, name string) value {
 	tm := events.atString(name)
 	//l.assert(event <= tmEq)
