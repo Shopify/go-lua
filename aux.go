@@ -81,7 +81,7 @@ func Where(l State, level int) {
 
 func Error(l State, format string, a ...interface{}) {
 	Where(l, 1)
-	l.PushFString(format, a)
+	l.PushFString(format, a...)
 	l.Concat(2)
 	l.Error()
 }

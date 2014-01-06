@@ -14,4 +14,23 @@ func TestStringCompare(t *testing.T) {
 	}
 }
 
+func TestReslicing(t *testing.T) {
+	a := [5]int{0, 1, 2, 3, 4}
+	s := a[:0]
+	if cap(s) != cap(a) {
+		t.Error("cap(s) != cap(a)")
+	}
+	if len(s) != 0 {
+		t.Error("len(s) != 0")
+	}
+	s = a[1:3]
+	if cap(s) == len(s) {
+		t.Error("cap(s) == len(s)")
+	}
+	s = s[:cap(s)]
+	if cap(s) != len(s) {
+		t.Error("cap(s) != len(s)")
+	}
+}
+
 /* go test */

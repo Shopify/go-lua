@@ -127,13 +127,14 @@ type callInfo interface {
 	setTop(int)
 	isLua() bool
 	callStatus() callStatus
+	resultCount() int
 }
 
 type commonCallInfo struct {
 	function_        int
 	top_             int
 	previous_, next_ callInfo
-	resultCount      int
+	resultCount_     int
 	callStatus_      callStatus
 }
 
@@ -162,6 +163,10 @@ func (ci *commonCallInfo) function() int {
 	return ci.function_
 }
 
+func (ci *commonCallInfo) resultCount() int {
+	return ci.resultCount_
+}
+
 func (ci *commonCallInfo) callStatus() callStatus {
 	return ci.callStatus_
 }
@@ -182,7 +187,7 @@ func (ci *commonCallInfo) initialize(l *state, function, top, resultCount int, c
 	ci.function_ = function
 	ci.top_ = top
 	l.assert(ci.top() <= l.stackLast)
-	ci.resultCount = resultCount
+	ci.resultCount_ = resultCount
 	ci.callStatus_ = callStatus
 }
 
@@ -315,18 +320,31 @@ func cached(p *prototype, upValues []*upValue, base int) *luaClosure {
 	return c
 }
 
+func (l *state) callGo(f value, function int, resultCount int) {
+	l.checkStack(MinStack)
+	l.pushGoFrame(function, resultCount)
+	if l.hookMask&MaskCall != 0 {
+		l.hook(HookCall, -1)
+	}
+	var n int
+	switch f := f.(type) {
+	case *goClosure:
+		n = f.function(l)
+	case Function:
+		n = f(l)
+	}
+	l.ApiCheckStackSpace(n)
+	l.postCall(l.top - n)
+}
+
 func (l *state) preCall(function int, resultCount int) bool {
 	for {
 		switch f := l.stack[function].(type) {
 		case *goClosure:
-			l.checkStack(MinStack)
-			l.pushGoFrame(function, resultCount)
-			if l.hookMask&MaskCall != 0 {
-				l.hook(HookCall, -1)
-			}
-			n := f.function(l)
-			l.ApiCheckStackSpace(n)
-			l.postCall(l.top - n)
+			l.callGo(f, function, resultCount)
+			return true
+		case Function:
+			l.callGo(f, function, resultCount)
 			return true
 		case *luaClosure:
 			p := f.prototype
@@ -346,6 +364,7 @@ func (l *state) preCall(function int, resultCount int) bool {
 			}
 			return false
 		default:
+			printStack(l.stack[:function+1])
 			if tm := l.tagMethodByObject(f, tmCall); tm == nil {
 				l.typeError(f, "call")
 			} else if fun, ok := tm.(*luaClosure); !ok {
@@ -390,12 +409,12 @@ func (l *state) adjustVarArgs(p *prototype, argCount int) int {
 }
 
 func (l *state) postCall(firstResult int) bool {
-	ci := l.callInfo.(*luaCallInfo)
+	ci := l.callInfo.(callInfo)
 	if l.hookMask&MaskReturn != 0 {
 		l.hook(HookReturn, -1)
 	}
 	result := ci.function() // final position of first result
-	wanted := ci.resultCount
+	wanted := ci.resultCount()
 	if base, limit := firstResult, firstResult+wanted; l.top > limit {
 		copy(l.stack[result:result+wanted], l.stack[base:limit])
 	} else {
@@ -448,14 +467,14 @@ func (l *state) hook(event, line int) {
 	ciTop := ci.top()
 	ar := Debug{Event: event, CurrentLine: line, callInfo: ci}
 	l.checkStack(MinStack)
-	ci.top_ = l.top + MinStack
+	ci.setTop(l.top + MinStack)
 	l.assert(ci.top() <= l.stackLast)
 	l.allowHook = false // can't hook calls inside a hook
 	ci.setCallStatus(callStatusHooked)
 	l.hooker(l, &ar)
 	l.assert(!l.allowHook)
 	l.allowHook = true
-	ci.top_ = ciTop
+	ci.setTop(ciTop)
 	l.top = top
 	ci.clearCallStatus(callStatusHooked)
 }
@@ -465,7 +484,8 @@ func (l *state) initializeStack() {
 	l.stackLast = basicStackSize - extraStack
 	l.top++
 	ci := &l.baseCallInfo
-	ci.top_ = l.top + MinStack
+	ci.frame = l.stack[:0]
+	ci.setTop(l.top + MinStack)
 	l.callInfo = ci
 }
 
@@ -483,8 +503,8 @@ func (l *state) reallocStack(newSize int) {
 	_ = l.callInfo.push(nil)
 	for ci := l.callInfo; ci != nil; ci = ci.previous() {
 		if lci, ok := ci.(*luaCallInfo); ok {
-			base := lci.base()
-			lci.frame = l.stack[base : base+len(lci.frame)]
+			top := lci.top()
+			lci.frame = l.stack[top-len(lci.frame) : top]
 		}
 	}
 }

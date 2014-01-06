@@ -1,7 +1,7 @@
 package lua
 
 func assert(l State) int {
-	if l.ToBoolean(1) {
+	if !l.ToBoolean(1) {
 		Error(l, "%s", OptString(l, 2, "assertion failed!"))
 		panic("unreachable")
 	}

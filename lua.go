@@ -332,9 +332,7 @@ func NewState() State {
 	l.initializeStack()
 	g.registry.putAtInt(RegistryIndexMainThread, l)
 	g.registry.putAtInt(RegistryIndexGlobals, newTable())
-	for i := range g.tagMethodNames {
-		g.tagMethodNames[i] = eventNames[i]
-	}
+	copy(g.tagMethodNames[:], eventNames)
 	return l
 }
 
@@ -434,8 +432,16 @@ func (l *state) Copy(from, to int) {
 }
 
 func (l *state) CheckStack(size int) bool {
-	// TODO
-	return false
+	callInfo := l.callInfo
+	ok := l.stackLast-l.top > size
+	if !ok && l.top+extraStack <= maxStack-size {
+		l.growStack(size) // TODO rawRunUnprotected?
+		ok = true
+	}
+	if ok && callInfo.top() < l.top+size {
+		callInfo.setTop(l.top + size)
+	}
+	return ok
 }
 
 func (l *state) Type(index int) int {

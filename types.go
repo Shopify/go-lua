@@ -19,10 +19,23 @@ func printValue(v value) {
 		print(v)
 	case *luaClosure:
 		print("closure ", v)
+	case *goClosure:
+		print("go closure ", v)
+	case Function:
+		print("go function ", v)
 	case nil:
 		print("nil")
 	default:
 		print("unknown ", v)
+	}
+}
+
+func printStack(s []value) {
+	println("stack (len: ", len(s), ", cap: ", cap(s), "):")
+	for i, v := range s {
+		print("  ", i, ": ")
+		printValue(v)
+		println()
 	}
 }
 
