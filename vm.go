@@ -384,7 +384,7 @@ func (l *state) execute() {
 				frame = ci.frame
 			} else { // lua function
 				ci = l.callInfo.(*luaCallInfo)
-				ci.callStatus_ |= callStatusReentry
+				ci.setCallStatus(callStatusReentry)
 				newFrame()
 			}
 		case opTailCall:
@@ -411,7 +411,7 @@ func (l *state) execute() {
 				oci.frame = l.stack[base:ci.top()]
 				oci.top_ = ofn + (l.top - nfn) // correct top
 				oci.savedPC = nci.savedPC
-				oci.callStatus_ |= callStatusTail // function was tail called
+				oci.setCallStatus(callStatusTail) // function was tail called
 				l.top, l.callInfo, ci = oci.top(), oci, oci
 				l.assert(l.top == oci.base()+l.stack[ofn].(*luaClosure).prototype.maxStackSize)
 				l.assert(&oci.frame[0] == &l.stack[oci.base()] && len(oci.frame) == oci.top()-oci.base())
@@ -426,7 +426,7 @@ func (l *state) execute() {
 				l.close(ci.base())
 			}
 			n := l.postCall(ci.stackIndex(a))
-			if 0 == ci.callStatus_&callStatusReentry { // ci still the called one?
+			if !ci.isCallStatus(callStatusReentry) { // ci still the called one?
 				return // external invocation: return
 			}
 			ci = l.callInfo.(*luaCallInfo)

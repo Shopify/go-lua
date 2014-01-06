@@ -166,6 +166,18 @@ func (ci *commonCallInfo) callStatus() callStatus {
 	return ci.callStatus_
 }
 
+func (ci *commonCallInfo) setCallStatus(flag callStatus) {
+	ci.callStatus_ |= flag
+}
+
+func (ci *commonCallInfo) clearCallStatus(flag callStatus) {
+	ci.callStatus_ &^= flag
+}
+
+func (ci *commonCallInfo) isCallStatus(flag callStatus) bool {
+	return ci.callStatus_&flag != 0
+}
+
 func (ci *commonCallInfo) initialize(l *state, function, top, resultCount int, callStatus callStatus) {
 	ci.function_ = function
 	ci.top_ = top
@@ -355,7 +367,7 @@ func (l *state) preCall(function int, resultCount int) bool {
 func (l *state) callHook(ci *luaCallInfo) {
 	ci.savedPC++ // hooks assume 'pc' is already incremented
 	if pci, ok := ci.previous().(*luaCallInfo); ok && pci.code[pci.savedPC-1].opCode() == opTailCall {
-		ci.callStatus_ |= callStatusTail
+		ci.setCallStatus(callStatusTail)
 		l.hook(HookTailCall, -1)
 	} else {
 		l.hook(HookCall, -1)
@@ -439,13 +451,13 @@ func (l *state) hook(event, line int) {
 	ci.top_ = l.top + MinStack
 	l.assert(ci.top() <= l.stackLast)
 	l.allowHook = false // can't hook calls inside a hook
-	ci.callStatus_ |= callStatusHooked
+	ci.setCallStatus(callStatusHooked)
 	l.hooker(l, &ar)
 	l.assert(!l.allowHook)
 	l.allowHook = true
 	ci.top_ = ciTop
 	l.top = top
-	ci.callStatus_ &^= callStatusHooked
+	ci.clearCallStatus(callStatusHooked)
 }
 
 func (l *state) initializeStack() {
