@@ -364,7 +364,6 @@ func (l *state) preCall(function int, resultCount int) bool {
 			}
 			return false
 		default:
-			printStack(l.stack[:function+1])
 			if tm := l.tagMethodByObject(f, tmCall); tm == nil {
 				l.typeError(f, "call")
 			} else if fun, ok := tm.(*luaClosure); !ok {
@@ -413,20 +412,19 @@ func (l *state) postCall(firstResult int) bool {
 	if l.hookMask&MaskReturn != 0 {
 		l.hook(HookReturn, -1)
 	}
-	result := ci.function() // final position of first result
-	wanted := ci.resultCount()
-	if base, limit := firstResult, firstResult+wanted; l.top > limit {
-		copy(l.stack[result:result+wanted], l.stack[base:limit])
-	} else {
-		copy(l.stack[result:result+wanted], l.stack[base:l.top])
-		results := l.stack[result+wanted-(limit-l.top) : result+wanted]
-		for i := range results {
-			results[i] = nil
-		}
-	}
-	l.top = result
+	result, wanted, available := ci.function(), ci.resultCount(), l.top-firstResult
 	l.callInfo = ci.previous() // back to caller
-	if l.hookMask&MaskReturn|MaskLine != 0 {
+	if available > wanted {
+		available = wanted
+	}
+	if available > 0 { // copy available results to final position
+		copy(l.stack[result:result+available], l.stack[firstResult:firstResult+available])
+	}
+	for i := result + available; i < result+wanted; i++ { // clear remaining results
+		l.stack[i] = nil
+	}
+	l.top = result + wanted
+	if l.hookMask&(MaskReturn|MaskLine) != 0 {
 		l.oldPC = l.callInfo.(*luaCallInfo).savedPC // oldPC for caller function
 	}
 	return wanted != MultipleReturns

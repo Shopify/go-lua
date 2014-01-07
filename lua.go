@@ -144,6 +144,18 @@ type State interface {
 	PushLightUserData(d interface{})
 	PushThread() (isMainThread bool)
 
+	// Get functions (Lua -> stack)
+	Global(name string)
+	Table(index int)
+	Field(index int, name string)
+	RawGet(index int)
+	RawGetI(index, n int)
+	RawGetP(index int, p interface{})
+	CreateTable(arrayCount, recordCount int)
+	// TODO NewUserData(?) interface{}
+	MetaTable(index int) bool
+	UserValue(index int)
+
 	// Set functions (stack -> Lua)
 	SetGlobal(name string)
 	// SetTable(index int)
@@ -153,6 +165,9 @@ type State interface {
 	// RawSetP(index int, p interface{})
 	// SetMetaTable(objectIndex int) int
 	// SetUserValue(index int)
+
+	CallWithContinuation(argCount, resultCount, context int, continuation Function)
+	Call(argCount, resultCount int)
 
 	RawGetInt(index, key int)
 	SetField(index int, key string)
@@ -260,8 +275,10 @@ func (g *globalState) metaTable(o value) *table {
 		t = TypeTable
 	case Function:
 		t = TypeFunction
-		// TODO TypeUserData
-		// TODO TypeThread
+	case *userData:
+		t = TypeUserData
+	case *state:
+		t = TypeThread
 	default:
 		return nil
 	}
@@ -303,7 +320,7 @@ func (l *state) checkResults(argCount, resultCount int) {
 		"results from function overflow current stack size")
 }
 
-func (l *state) Call(argCount, resultCount, context int, continuation Function) {
+func (l *state) CallWithContinuation(argCount, resultCount, context int, continuation Function) {
 	apiCheck(continuation == nil || !l.callInfo.isLua(), "cannot use continuations inside hooks")
 	l.checkElementCount(argCount + 1)
 	apiCheck(l.status == Ok, "cannot do calls on non-normal thread")
@@ -318,6 +335,10 @@ func (l *state) Call(argCount, resultCount, context int, continuation Function) 
 		l.call(f, resultCount, false) // just do the call
 	}
 	l.adjustResults(resultCount)
+}
+
+func (l *state) Call(argCount, resultCount int) {
+	l.CallWithContinuation(argCount, resultCount, 0, nil)
 }
 
 func (l *state) Version() *float64 {
@@ -710,6 +731,63 @@ func (l *state) PushLightUserData(d interface{}) {
 func (l *state) PushThread() bool {
 	l.apiPush(l)
 	return l.global.mainThread == l
+}
+
+func (l *state) Global(name string) {
+	g := l.global.registry.atInt(RegistryIndexGlobals)
+	l.push(name)
+	l.stack[l.top-1] = l.tableAt(g, l.stack[l.top-1])
+}
+
+func (l *state) Table(index int) {
+	l.stack[l.top-1] = l.tableAt(l.indexToValue(index), l.stack[l.top-1])
+}
+
+func (l *state) Field(index int, name string) {
+	t := l.indexToValue(index)
+	l.apiPush(name)
+	l.stack[l.top-1] = l.tableAt(t, l.stack[l.top-1])
+}
+
+func (l *state) RawGet(index int) {
+	t, ok := l.indexToValue(index).(*table)
+	apiCheck(ok, "table expected")
+	l.stack[l.top-1] = t.at(l.stack[l.top-1])
+}
+
+func (l *state) RawGetI(index, n int) {
+	// TODO
+}
+
+func (l *state) RawGetP(index int, p interface{}) {
+	// TODO
+}
+
+func (l *state) CreateTable(arrayCount, recordCount int) {
+	// TODO
+}
+
+func (l *state) MetaTable(index int) bool {
+	var mt *table
+	switch v := l.indexToValue(index).(type) {
+	case *table:
+		mt = v.metaTable
+	case *userData:
+		mt = v.metaTable
+	default:
+		mt = l.global.metaTable(v)
+	}
+	if mt == nil {
+		return false
+	}
+	l.apiPush(mt)
+	return true
+}
+
+func (l *state) UserValue(index int) {
+	d, ok := l.indexToValue(index).(*userData)
+	apiCheck(ok, "userdata expected")
+	l.apiPush(d.env)
 }
 
 func (l *state) SetGlobal(name string) {

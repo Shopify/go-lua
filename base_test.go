@@ -27,5 +27,5 @@ func TestBase(t *testing.T) {
 		globals := l.global.registry.atInt(RegistryIndexGlobals)
 		closure.upValues[0].setValue(globals)
 	}
-	l.Call(0, 0, 0, nil)
+	l.Call(0, 0)
 }

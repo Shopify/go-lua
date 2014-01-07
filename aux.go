@@ -1,5 +1,29 @@
 package lua
 
+func MetaField(l State, index int, event string) bool {
+	if !l.MetaTable(index) {
+		return false
+	}
+	l.PushString(event)
+	l.RawGet(-2)
+	if l.IsNil(-1) {
+		l.Pop(2) // remove metatable and metafield
+		return false
+	}
+	l.Remove(-2) // remove only metatable
+	return true
+}
+
+func CallMeta(l State, index int, event string) bool {
+	index = l.AbsIndex(index)
+	if !MetaField(l, index, event) {
+		return false
+	}
+	l.PushValue(index)
+	l.Call(1, 1)
+	return true
+}
+
 func ArgumentError(l State, argCount int, extraMessage string) {
 	var activationRecord Debug
 	if !l.Stack(0, &activationRecord) { // no stack frame?
@@ -84,6 +108,32 @@ func Error(l State, format string, a ...interface{}) {
 	l.PushFString(format, a...)
 	l.Concat(2)
 	l.Error()
+}
+
+func ToString(l State, index int) (string, bool) {
+	if !CallMeta(l, index, "__tostring") {
+		switch l.Type(index) {
+		case TypeNumber, TypeString:
+			l.PushValue(index)
+		case TypeBoolean:
+			if l.ToBoolean(index) {
+				l.PushString("true")
+			} else {
+				l.PushString("false")
+			}
+		case TypeNil:
+			l.PushString("nil")
+		default:
+			l.PushFString("%s: %p", TypeName(l, index), l.ToInterface(index))
+		}
+	}
+	return l.ToString(-1)
+}
+
+func CheckAny(l State, index int) {
+	if l.Type(index) == TypeNone {
+		ArgumentError(l, index, "value expected")
+	}
 }
 
 func CheckString(l State, index int) string {
