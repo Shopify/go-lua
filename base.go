@@ -118,18 +118,18 @@ func _select(l State) int {
 	n := l.Top()
 	if l.Type(1) == TypeString {
 		if s, _ := l.ToString(1); s[0] == '#' {
-			l.PushInteger(n-1)
+			l.PushInteger(n - 1)
 			return 1
 		}
 	}
 	i := CheckInteger(l, 1)
 	if i < 0 {
-		i = n+i
+		i = n + i
 	} else if i > n {
 		i = n
 	}
 	ArgumentCheck(l, 1 <= i, 1, "index out of range")
-	return n-i
+	return n - i
 }
 
 func _toString(l State) int {
@@ -141,20 +141,20 @@ func _toString(l State) int {
 var baseFunctions = []RegistryFunction{
 	{"assert", _assert},
 
-  {"next", _next},
-  // {"pairs", _pairs},
-  // {"pcall", _pcall},
-  {"print", _print},
-  {"rawequal", _rawEqual},
-  {"rawlen", _rawLength},
-  {"rawget", _rawGet},
-  {"rawset", _rawSet},
-  {"select", _select},
-  {"setmetatable", _setMetaTable},
-  // {"tonumber", _toNumber},
-  {"tostring", _toString},
-  {"type", _type},
-  // {"xpcall", _xpcall},
+	{"next", _next},
+	// {"pairs", _pairs},
+	// {"pcall", _pcall},
+	{"print", _print},
+	{"rawequal", _rawEqual},
+	{"rawlen", _rawLength},
+	{"rawget", _rawGet},
+	{"rawset", _rawSet},
+	{"select", _select},
+	{"setmetatable", _setMetaTable},
+	// {"tonumber", _toNumber},
+	{"tostring", _toString},
+	{"type", _type},
+	// {"xpcall", _xpcall},
 }
 
 func OpenBase(l State) {

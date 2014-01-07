@@ -800,26 +800,26 @@ func (l *state) SetGlobal(name string) {
 
 func (l *state) RawSet(index int) {
 	l.checkElementCount(2)
-  t, ok := l.stack[index].(*table)
-  apiCheck(ok, "table expected")
-  t.put(l.stack[l.top-2], l.stack[l.top-1])
-  t.invalidateTagMethodCache()
-  l.top -= 2
+	t, ok := l.stack[index].(*table)
+	apiCheck(ok, "table expected")
+	t.put(l.stack[l.top-2], l.stack[l.top-1])
+	t.invalidateTagMethodCache()
+	l.top -= 2
 }
 
 func (l *state) SetMetaTable(index int) {
 	l.checkElementCount(1)
-  mt, ok := l.stack[l.top - 1].(*table)
-  apiCheck(ok || l.stack[l.top - 1] == nil, "table expected")
-  switch v := l.indexToValue(index).(type) {
-  case *table:
-  	v.metaTable = mt
-  case *userData:
-  	v.metaTable = mt
-  default:
-  	l.global.metaTables[l.Type(index)] = mt
-  }
-  l.top--
+	mt, ok := l.stack[l.top-1].(*table)
+	apiCheck(ok || l.stack[l.top-1] == nil, "table expected")
+	switch v := l.indexToValue(index).(type) {
+	case *table:
+		v.metaTable = mt
+	case *userData:
+		v.metaTable = mt
+	default:
+		l.global.metaTables[l.Type(index)] = mt
+	}
+	l.top--
 }
 
 func (l *state) Error() {
