@@ -130,9 +130,21 @@ func ToString(l State, index int) (string, bool) {
 	return l.ToString(-1)
 }
 
+func CheckType(l State, index, t int) {
+	if l.Type(index) != t {
+		tagError(l, index, t)
+	}
+}
+
 func CheckAny(l State, index int) {
 	if l.Type(index) == TypeNone {
 		ArgumentError(l, index, "value expected")
+	}
+}
+
+func ArgumentCheck(l State, cond bool, index int, extraMessage string) {
+	if !cond {
+		ArgumentError(l, index, extraMessage)
 	}
 }
 
@@ -142,6 +154,21 @@ func CheckString(l State, index int) string {
 	}
 	tagError(l, index, TypeString)
 	panic("unreachable")
+}
+
+func CheckInteger(l State, index int) int {
+	i, ok := l.ToInteger(index)
+	if !ok {
+		tagError(l, index, TypeNumber)
+	}
+	return i
+}
+
+func OptInteger(l State, index, def int) int {
+	if l.IsNoneOrNil(index) {
+		return def
+	}
+	return CheckInteger(l, index)
 }
 
 func OptString(l State, index int, def string) string {

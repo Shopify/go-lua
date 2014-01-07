@@ -160,10 +160,10 @@ type State interface {
 	SetGlobal(name string)
 	// SetTable(index int)
 	// SetField(index int, name string)
-	// RawSet(index int)
+	RawSet(index int)
 	// RawSetI(index, n int)
 	// RawSetP(index int, p interface{})
-	// SetMetaTable(objectIndex int) int
+	SetMetaTable(index int)
 	// SetUserValue(index int)
 
 	CallWithContinuation(argCount, resultCount, context int, continuation Function)
@@ -796,6 +796,30 @@ func (l *state) SetGlobal(name string) {
 	l.push(name)
 	l.setTableAt(g, l.stack[l.top-1], l.stack[l.top-2])
 	l.top -= 2 // pop value and key
+}
+
+func (l *state) RawSet(index int) {
+	l.checkElementCount(2)
+  t, ok := l.stack[index].(*table)
+  apiCheck(ok, "table expected")
+  t.put(l.stack[l.top-2], l.stack[l.top-1])
+  t.invalidateTagMethodCache()
+  l.top -= 2
+}
+
+func (l *state) SetMetaTable(index int) {
+	l.checkElementCount(1)
+  mt, ok := l.stack[l.top - 1].(*table)
+  apiCheck(ok || l.stack[l.top - 1] == nil, "table expected")
+  switch v := l.indexToValue(index).(type) {
+  case *table:
+  	v.metaTable = mt
+  case *userData:
+  	v.metaTable = mt
+  default:
+  	l.global.metaTables[l.Type(index)] = mt
+  }
+  l.top--
 }
 
 func (l *state) Error() {
