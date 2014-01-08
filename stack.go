@@ -127,6 +127,9 @@ type callInfo interface {
 	setTop(int)
 	isLua() bool
 	callStatus() callStatus
+	setCallStatus(callStatus)
+	clearCallStatus(callStatus)
+	isCallStatus(callStatus) bool
 	resultCount() int
 }
 
@@ -232,7 +235,7 @@ type goCallInfo struct {
 		extra ptrdiff_t
 	*/
 	oldAllowHook bool
-	status       byte
+	status       Status
 }
 
 func (ci *goCallInfo) isLua() bool {

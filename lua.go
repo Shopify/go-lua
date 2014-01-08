@@ -166,8 +166,10 @@ type State interface {
 	SetMetaTable(index int)
 	// SetUserValue(index int)
 
+	Context() (Status, int)
 	CallWithContinuation(argCount, resultCount, context int, continuation Function)
 	Call(argCount, resultCount int)
+	ProtectedCallWithContinuation(argCount, resultCount, errorFunction, context int, continuation Function) Status
 
 	RawGetInt(index, key int)
 	SetField(index int, key string)
@@ -320,6 +322,14 @@ func (l *state) checkResults(argCount, resultCount int) {
 		"results from function overflow current stack size")
 }
 
+func (l *state) Context() (Status, int) {
+	if l.callInfo.isCallStatus(callStatusYielded) {
+		callInfo := l.callInfo.(*goCallInfo)
+		return callInfo.status, callInfo.context
+	}
+	return Ok, 0
+}
+
 func (l *state) CallWithContinuation(argCount, resultCount, context int, continuation Function) {
 	apiCheck(continuation == nil || !l.callInfo.isLua(), "cannot use continuations inside hooks")
 	l.checkElementCount(argCount + 1)
@@ -339,6 +349,15 @@ func (l *state) CallWithContinuation(argCount, resultCount, context int, continu
 
 func (l *state) Call(argCount, resultCount int) {
 	l.CallWithContinuation(argCount, resultCount, 0, nil)
+}
+
+func (l *state) ProtectedCallWithContinuation(argCount, resultCount, errorFunction, context int, continuation Function) Status {
+	apiCheck(continuation == nil || !l.callInfo.isLua(), "cannot use continuations inside hooks")
+	l.checkElementCount(argCount + 1)
+	apiCheck(l.status == Ok, "cannot do calls on non-normal thread")
+	l.checkResults(argCount, resultCount)
+	// TODO ...
+	return Ok
 }
 
 func (l *state) Version() *float64 {

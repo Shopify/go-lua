@@ -235,6 +235,22 @@ func CheckStack(l State, space int, message string) {
 	}
 }
 
+func CheckOption(l State, index int, def string, list []string) int {
+	var name string
+	if def == "" {
+		name = OptString(l, index, def)
+	} else {
+		name = CheckString(l, index)
+	}
+	for i, s := range list {
+		if name == s {
+			return i
+		}
+	}
+	ArgumentError(l, index, l.PushFString("invalid option '%s'", name))
+	panic("unreachable")
+}
+
 func SubTable(l State, index int, name string) bool {
 	l.Field(index, name)
 	if l.IsTable(-1) {
