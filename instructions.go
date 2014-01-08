@@ -109,7 +109,7 @@ const (
 	posBx             = posC
 	posAx             = posA
 	bitRK             = 1 << (sizeB - 1)
-	maxArgBx          = (1 << sizeBx) - 1
+	maxArgBx          = 1<<sizeBx - 1
 	maxArgSBx         = maxArgBx >> 1 // sBx is signed
 	listItemsPerFlush = 50            // # list items to accumulate before a setList instruction
 )

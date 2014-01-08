@@ -427,7 +427,7 @@ func (l *state) SetTop(index int) {
 			l.stack[i] = nil
 		}
 	} else {
-		apiCheck(-(index+1) <= (l.top-(f+1)), "invalid new top")
+		apiCheck(-(index+1) <= l.top-(f+1), "invalid new top")
 		l.top += index + 1 // 'subtract' index (index is negative)
 	}
 }

@@ -41,7 +41,7 @@ func printStack(s []value) {
 
 func isFalse(s value) bool {
 	b, isBool := s.(bool)
-	return s == nil || (isBool && !b)
+	return s == nil || isBool && !b
 }
 
 type localVariable struct {
@@ -80,11 +80,11 @@ type prototype struct {
 }
 
 func intFromFloat8(x float8) int {
-	e := (x >> 3) & 0x1f
+	e := x >> 3 & 0x1f
 	if e == 0 {
 		return int(x)
 	}
-	return int((x&7)+8) << uint(e-1)
+	return int(x&7+8) << uint(e-1)
 }
 
 func arith(op int, v1, v2 float64) float64 {

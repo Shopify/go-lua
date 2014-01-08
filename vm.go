@@ -363,10 +363,10 @@ func (l *state) execute() {
 			frame = ci.frame
 		case opTest:
 			test, t := i.c() != 0, !isFalse(frame[i.a()])
-			condJump((test && t) || !t)
+			condJump(test && t || !t)
 		case opTestSet:
 			b := frame[i.b()]
-			if test, t := i.c() != 0, !isFalse(b); (test && t) || !t {
+			if test, t := i.c() != 0, !isFalse(b); test && t || !t {
 				frame[i.a()] = b
 				jump(ci.step())
 			} else {
@@ -438,7 +438,7 @@ func (l *state) execute() {
 		case opForLoop:
 			a := i.a()
 			index, limit, step := frame[a+0].(float64), frame[a+1].(float64), frame[a+2].(float64)
-			if index += step; (0 < step && index <= limit) || limit <= index {
+			if index += step; 0 < step && index <= limit || limit <= index {
 				ci.jump(i.sbx())
 				frame[a+0] = index // update internal index...
 				frame[a+3] = index // ... and external index
