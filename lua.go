@@ -383,6 +383,10 @@ func isPseudoIndex(i int) bool {
 	return i <= RegistryIndex
 }
 
+func apiCheckStackIndex(index int, v value) {
+	apiCheck(v != nil && !isPseudoIndex(index), "index not in the stack")
+}
+
 func (l *state) SetField(index int, key string) {
 	l.checkElementCount(1)
 	t := l.indexToValue(index)
@@ -419,6 +423,33 @@ func (l *state) indexToValue(index int) value {
 	}
 }
 
+func (l *state) setIndexToValue(index int, v value) {
+	switch callInfo := l.callInfo; {
+	case index > 0:
+		// TODO are these checks necessary? Can we just return l.callInfo[index]?
+		apiCheck(index <= callInfo.top()-(callInfo.function()+1), "unacceptable index")
+		if i := callInfo.function() + index; i < l.top {
+			l.stack[i] = v
+		}
+		panic("unacceptable index")
+	case !isPseudoIndex(index): // negative index
+		apiCheck(index != 0 && -index <= l.top-(callInfo.function()+1), "invalid index")
+		l.stack[l.top+index] = v
+	case index == RegistryIndex:
+		l.global.registry = v.(*table)
+	default: // upvalues
+		i := RegistryIndex - index
+		apiCheck(i <= maxUpValue+1, "upvalue index too large")
+		if _, ok := l.stack[callInfo.function()].(Function); ok {
+			panic("light Go functions have no upvalues")
+		}
+		if closure := l.stack[callInfo.function()].(*goClosure); i <= len(closure.upValues) {
+			closure.upValues[i-1] = v
+		}
+		panic("upvalue index too large")
+	}
+}
+
 func (l *state) AbsIndex(index int) int {
 	if index > 0 || isPseudoIndex(index) {
 		return index
@@ -449,19 +480,32 @@ func (l *state) PushValue(index int) {
 }
 
 func (l *state) Remove(index int) {
-	// TODO
+	apiCheckStackIndex(index, l.indexToValue(index))
+	i := l.AbsIndex(index)
+	copy(l.stack[i:l.top-1], l.stack[i+1:l.top])
+	l.top--
 }
 
 func (l *state) Insert(index int) {
-	// TODO
+	apiCheckStackIndex(index, l.indexToValue(index))
+	i := l.AbsIndex(index)
+	copy(l.stack[i+1:l.top+1], l.stack[i:l.top])
+	l.stack[i] = l.stack[l.top]
+}
+
+func (l *state) move(dest int, src value) {
+	apiCheck(src != nil, "invalid index")
+	l.setIndexToValue(dest, src)
 }
 
 func (l *state) Replace(index int) {
-	// TODO
+	l.checkElementCount(1)
+	l.move(index, l.stack[l.top-1])
+	l.top--
 }
 
 func (l *state) Copy(from, to int) {
-	// TODO
+	l.move(to, l.indexToValue(from))
 }
 
 func (l *state) CheckStack(size int) bool {
