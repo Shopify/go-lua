@@ -764,7 +764,7 @@ func (l *state) RawGetP(index int, p interface{}) {
 }
 
 func (l *state) CreateTable(arrayCount, recordCount int) {
-	// TODO
+	l.apiPush(newTableWithSize(arrayCount, recordCount))
 }
 
 func (l *state) MetaTable(index int) bool {
@@ -857,7 +857,7 @@ func (l *state) Pop(n int) {
 }
 
 func (l *state) NewTable() {
-	// TODO l.CreateTable(0, 0)
+	l.CreateTable(0, 0)
 }
 
 func (l *state) Register(name string, f Function) {

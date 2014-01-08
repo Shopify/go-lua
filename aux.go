@@ -156,6 +156,28 @@ func CheckString(l State, index int) string {
 	panic("unreachable")
 }
 
+func OptString(l State, index int, def string) string {
+	if l.IsNoneOrNil(index) {
+		return def
+	}
+	return CheckString(l, index)
+}
+
+func CheckNumber(l State, index int) float64 {
+	n, ok := l.ToNumber(index)
+	if !ok {
+		tagError(l, index, TypeNumber)
+	}
+	return n
+}
+
+func OptNumber(l State, index int, def float64) float64 {
+	if l.IsNoneOrNil(index) {
+		return def
+	}
+	return CheckNumber(l, index)
+}
+
 func CheckInteger(l State, index int) int {
 	i, ok := l.ToInteger(index)
 	if !ok {
@@ -171,11 +193,19 @@ func OptInteger(l State, index, def int) int {
 	return CheckInteger(l, index)
 }
 
-func OptString(l State, index int, def string) string {
+func CheckUnsigned(l State, index int) uint {
+	i, ok := l.ToUnsigned(index)
+	if !ok {
+		tagError(l, index, TypeNumber)
+	}
+	return i
+}
+
+func OptUnsigned(l State, index int, def uint) uint {
 	if l.IsNoneOrNil(index) {
 		return def
 	}
-	return CheckString(l, index)
+	return CheckUnsigned(l, index)
 }
 
 func TypeName(l State, index int) string {
@@ -203,4 +233,40 @@ func CheckStack(l State, space int, message string) {
 			Error(l, "stack overflow")
 		}
 	}
+}
+
+func SubTable(l State, index int, name string) bool {
+	l.Field(index, name)
+	if l.IsTable(-1) {
+		return true // table already there
+	}
+	l.Pop(1) // remove previous result
+	index = l.AbsIndex(index)
+	l.NewTable()
+	l.PushValue(-1)         // copy to be left at top
+	l.SetField(index, name) // assign new table to field
+	return false            // did not find table there
+}
+
+func Require(l State, name string, f Function, global bool) {
+	l.PushGoFunction(f)
+	l.PushString(name) // argument to f
+	l.Call(1, 1)       // open module
+	SubTable(l, RegistryIndex, "_LOADED")
+	l.PushValue(-2)      // make copy of module (call result)
+	l.SetField(-2, name) // _LOADED[name] = module
+	l.Pop(1)             // remove _LOADED table
+	if global {
+		l.PushValue(-1)   // copy of module
+		l.SetGlobal(name) // _G[name] = module
+	}
+}
+
+func NewLibraryTable(l State, functions []RegistryFunction) {
+	l.CreateTable(0, len(functions))
+}
+
+func NewLibrary(l State, functions []RegistryFunction) {
+	NewLibraryTable(l, functions)
+	SetFunctions(l, functions, 0)
 }
