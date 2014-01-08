@@ -124,7 +124,7 @@ func ToString(l State, index int) (string, bool) {
 		case TypeNil:
 			l.PushString("nil")
 		default:
-			l.PushFString("%s: %p", TypeName(l, index), l.ToInterface(index))
+			l.PushFString("%s: %p", TypeName(l, index), l.ToValue(index))
 		}
 	}
 	return l.ToString(-1)

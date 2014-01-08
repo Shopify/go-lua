@@ -125,7 +125,7 @@ type State interface {
 	ToGoFunction(index int) Function
 	ToUserData(index int) interface{}
 	ToThread(index int) State
-	ToInterface(index int) interface{}
+	ToValue(index int) interface{}
 
 	// Comparison and arithmetic functions
 	Arith(op int)
@@ -149,8 +149,8 @@ type State interface {
 	Table(index int)
 	Field(index int, name string)
 	RawGet(index int)
-	RawGetI(index, n int)
-	RawGetP(index int, p interface{})
+	RawGetInt(index, key int)
+	RawGetValue(index int, p interface{})
 	CreateTable(arrayCount, recordCount int)
 	// TODO NewUserData(?) interface{}
 	MetaTable(index int) bool
@@ -161,8 +161,8 @@ type State interface {
 	// SetTable(index int)
 	// SetField(index int, name string)
 	RawSet(index int)
-	// RawSetI(index, n int)
-	// RawSetP(index int, p interface{})
+	// RawSetInt(index, n int)
+	// RawSetValue(index int, p interface{})
 	SetMetaTable(index int)
 	// SetUserValue(index int)
 
@@ -171,7 +171,6 @@ type State interface {
 	Call(argCount, resultCount int)
 	ProtectedCallWithContinuation(argCount, resultCount, errorFunction, context int, continuation Function) Status
 
-	RawGetInt(index, key int)
 	SetField(index int, key string)
 	ApiCheckStackSpace(n int)
 
@@ -384,12 +383,6 @@ func isPseudoIndex(i int) bool {
 	return i <= RegistryIndex
 }
 
-func (l *state) RawGetInt(index, key int) {
-	t, ok := l.indexToValue(index).(*table)
-	apiCheck(ok, "table expected")
-	l.apiPush(t.atInt(key))
-}
-
 func (l *state) SetField(index int, key string) {
 	l.checkElementCount(1)
 	t := l.indexToValue(index)
@@ -416,9 +409,9 @@ func (l *state) indexToValue(index int) value {
 	default: // upvalues
 		i := RegistryIndex - index
 		apiCheck(i <= maxUpValue+1, "upvalue index too large")
-		// if ttislcf(ci->func) { // light C function? TODO
-		// 	return nil // it has no upvalues
-		// }
+		if _, ok := l.stack[callInfo.function()].(Function); ok {
+			return nil // light Go functions have no upvalues
+		}
 		if closure := l.stack[callInfo.function()].(*goClosure); i <= len(closure.upValues) {
 			return closure.upValues[i-1]
 		}
@@ -644,7 +637,7 @@ func (l *state) ToThread(index int) State {
 	return nil
 }
 
-func (l *state) ToInterface(index int) interface{} {
+func (l *state) ToValue(index int) interface{} {
 	v := l.indexToValue(index)
 	switch v := v.(type) {
 	case *table:
@@ -774,12 +767,16 @@ func (l *state) RawGet(index int) {
 	l.stack[l.top-1] = t.at(l.stack[l.top-1])
 }
 
-func (l *state) RawGetI(index, n int) {
-	// TODO
+func (l *state) RawGetInt(index, key int) {
+	t, ok := l.indexToValue(index).(*table)
+	apiCheck(ok, "table expected")
+	l.apiPush(t.atInt(key))
 }
 
-func (l *state) RawGetP(index int, p interface{}) {
-	// TODO
+func (l *state) RawGetValue(index int, p interface{}) {
+	t, ok := l.indexToValue(index).(*table)
+	apiCheck(ok, "table expected")
+	l.apiPush(t.at(p))
 }
 
 func (l *state) CreateTable(arrayCount, recordCount int) {
