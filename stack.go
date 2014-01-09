@@ -265,6 +265,8 @@ func (l *state) pushGoFrame(function, resultCount int) {
 		ci = &goCallInfo{}
 		ci.previous_ = l.callInfo
 		l.callInfo = l.callInfo.push(ci)
+	} else {
+		l.callInfo = ci
 	}
 	ci.initialize(l, function, l.top+MinStack, resultCount, 0)
 }

@@ -5,13 +5,17 @@ import (
 	"testing"
 )
 
-func TestBase(t *testing.T) {
-	file, err := os.Open("base.bin")
+// This is a temporary helper API until the Lua compiler is complete
+func BinaryTest(t *testing.T, fileName string, libs ...RegistryFunction) State {
+	file, err := os.Open(fileName)
 	if err != nil {
-		t.Fatal("couldn't open base.bin")
+		t.Fatal("couldn't open " + fileName)
 	}
 	l := NewState().(*state)
-	OpenBase(l)
+	for _, lib := range libs {
+		Require(l, lib.Name, lib.Function, true)
+		l.Pop(1)
+	}
 	closure, err := l.undump(file, "test")
 	if err != nil {
 		offset, _ := file.Seek(0, 1)
@@ -27,5 +31,5 @@ func TestBase(t *testing.T) {
 		globals := l.global.registry.atInt(RegistryIndexGlobals)
 		closure.upValues[0].setValue(globals)
 	}
-	l.Call(0, 0)
+	return l
 }
