@@ -1,3 +1,5 @@
+[![Build Status](https://circleci.com/gh/Shopify/go-lua.png?circle-token=997f951c602c0c63a263eba92975428a49ee4c2e)](https://circleci.com/gh/Shopify/go-lua)
+
 A Lua VM in pure Go
 ===================
 
