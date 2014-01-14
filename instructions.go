@@ -111,7 +111,10 @@ const (
 	bitRK             = 1 << (sizeB - 1)
 	maxArgBx          = 1<<sizeBx - 1
 	maxArgSBx         = maxArgBx >> 1 // sBx is signed
-	listItemsPerFlush = 50            // # list items to accumulate before a setList instruction
+	maxArgA           = 1<<sizeA - 1
+	maxArgB           = 1<<sizeB - 1
+	maxArgC           = 1<<sizeC - 1
+	listItemsPerFlush = 50 // # list items to accumulate before a setList instruction
 )
 
 type instruction uint32
@@ -166,19 +169,94 @@ func (i instruction) sbx() int {
 	return i.bx() - maxArgSBx
 }
 
-func createABC(op, a, b, c int) instruction {
+func createABC(op opCode, a, b, c int) instruction {
 	return instruction(op)<<posOp |
 		instruction(a)<<posA |
 		instruction(b)<<posB |
 		instruction(c)<<posC
 }
 
-func createAbx(op, a, bx int) instruction {
+func createAbx(op opCode, a, bx int) instruction {
 	return instruction(op)<<posOp |
 		instruction(a)<<posA |
 		instruction(bx)<<posBx
 }
 
-func createAx(op, a int) instruction {
+func createAx(op opCode, a int) instruction {
 	return instruction(op)<<posOp | instruction(a)<<posAx
+}
+
+func opmode(t, a, b, c, m int) byte {
+	return byte(t<<7 | a<<6 | b<<4 | c<<2 | m)
+}
+
+const (
+	opArgN = iota // argument is not used
+	opArgU        // argument is used
+	opArgR        // argument is a register or a jump offset
+	opArgK        // argument is a constant or register/constant
+)
+
+func opMode(m opCode) int {
+	return int(opModes[m] & 3)
+}
+
+func bMode(m opCode) byte {
+	return (opModes[m] >> 4) & 3
+}
+
+func cMode(m opCode) byte {
+	return (opModes[m] >> 2) & 3
+}
+
+func testAMode(m opCode) bool {
+	return opModes[m]&(1<<6) != 0
+}
+
+func testTMode(m opCode) bool {
+	return opModes[m]&(1<<7) != 0
+}
+
+var opModes []byte = []byte{
+	//     T  A    B       C     mode		    opcode
+	opmode(0, 1, opArgR, opArgN, iABC),  // opMove
+	opmode(0, 1, opArgK, opArgN, iABx),  // opLoadConstant
+	opmode(0, 1, opArgN, opArgN, iABx),  // opLoadConstantEx
+	opmode(0, 1, opArgU, opArgU, iABC),  // opLoadBool
+	opmode(0, 1, opArgU, opArgN, iABC),  // opLoadNil
+	opmode(0, 1, opArgU, opArgN, iABC),  // opGetUpValue
+	opmode(0, 1, opArgU, opArgK, iABC),  // opGetTableUp
+	opmode(0, 1, opArgR, opArgK, iABC),  // opGetTable
+	opmode(0, 0, opArgK, opArgK, iABC),  // opSetTableUp
+	opmode(0, 0, opArgU, opArgN, iABC),  // opSetUpValue
+	opmode(0, 0, opArgK, opArgK, iABC),  // opSetTable
+	opmode(0, 1, opArgU, opArgU, iABC),  // opNewTable
+	opmode(0, 1, opArgR, opArgK, iABC),  // opSelf
+	opmode(0, 1, opArgK, opArgK, iABC),  // opAdd
+	opmode(0, 1, opArgK, opArgK, iABC),  // opSub
+	opmode(0, 1, opArgK, opArgK, iABC),  // opMul
+	opmode(0, 1, opArgK, opArgK, iABC),  // opDiv
+	opmode(0, 1, opArgK, opArgK, iABC),  // opMod
+	opmode(0, 1, opArgK, opArgK, iABC),  // opPow
+	opmode(0, 1, opArgR, opArgN, iABC),  // opUnaryMinus
+	opmode(0, 1, opArgR, opArgN, iABC),  // opNot
+	opmode(0, 1, opArgR, opArgN, iABC),  // opLength
+	opmode(0, 1, opArgR, opArgR, iABC),  // opConcat
+	opmode(0, 0, opArgR, opArgN, iAsBx), // opJump
+	opmode(1, 0, opArgK, opArgK, iABC),  // opEqual
+	opmode(1, 0, opArgK, opArgK, iABC),  // opLessThan
+	opmode(1, 0, opArgK, opArgK, iABC),  // opLessOrEqual
+	opmode(1, 0, opArgN, opArgU, iABC),  // opTest
+	opmode(1, 1, opArgR, opArgU, iABC),  // opTestSet
+	opmode(0, 1, opArgU, opArgU, iABC),  // opCall
+	opmode(0, 1, opArgU, opArgU, iABC),  // opTailCall
+	opmode(0, 0, opArgU, opArgN, iABC),  // opReturn
+	opmode(0, 1, opArgR, opArgN, iAsBx), // opForLoop
+	opmode(0, 1, opArgR, opArgN, iAsBx), // opForPrep
+	opmode(0, 0, opArgN, opArgU, iABC),  // opTForCall
+	opmode(0, 1, opArgR, opArgN, iAsBx), // opTForLoop
+	opmode(0, 0, opArgU, opArgU, iABC),  // opSetList
+	opmode(0, 1, opArgU, opArgN, iABx),  // opClosure
+	opmode(0, 1, opArgU, opArgN, iABC),  // opVarArg
+	opmode(0, 0, opArgU, opArgU, iAx),   // opExtraArg
 }

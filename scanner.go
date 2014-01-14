@@ -1,6 +1,16 @@
 package lua
 
+import (
+	"bytes"
+	"math"
+	"strconv"
+	"strings"
+	"unicode"
+)
+
 const firstReserved = 257
+const endOfStream = -1
+const maxInt = int(^uint(0) >> 1)
 
 const (
 	tkAnd = iota + firstReserved
@@ -39,23 +49,422 @@ const (
 	reservedCount = tkWhile - firstReserved + 1
 )
 
+var tokens []string = []string{
+	"and", "break", "do", "else", "elseif",
+	"end", "false", "for", "function", "goto", "if",
+	"in", "local", "nil", "not", "or", "repeat",
+	"return", "then", "true", "until", "while",
+	"..", "...", "==", ">=", "<=", "~=", "::", "<eof>",
+	"<number>", "<name>", "<string>",
+}
+
 type token struct {
-	t int
+	t rune
 	n float64
 	s string
 }
 
 type scanner struct {
 	l                    *state
+	buffer               bytes.Buffer
+	r                    *strings.Reader
 	current              rune
 	lineNumber, lastLine int
 	token
 	lookAheadToken token
 }
 
-func (l *scanner) scan() token {
-	var t token
-	return t
+func (s *scanner) assert(cond bool) {
+	s.l.assert(cond)
+}
+
+func (s *scanner) scanError(message string, token rune) {
+	// TODO
+	s.l.throw(SyntaxError)
+}
+
+func (s *scanner) syntaxError(message string) {
+	s.scanError(message, s.t)
+}
+
+func (s *scanner) incrementLineNumber() {
+	old := s.current
+	s.assert(isNewLine(old))
+	if s.advance(); isNewLine(s.current) && s.current != old {
+		s.advance()
+	}
+	if s.lineNumber++; s.lineNumber >= maxInt {
+		s.syntaxError("chunk has too many lines")
+	}
+}
+
+func (s *scanner) advance() {
+	var err error
+	if s.current, _, err = s.r.ReadRune(); err != nil {
+		s.current = endOfStream
+	}
+}
+
+func (s *scanner) saveAndAdvance() {
+	s.save(s.current)
+	s.advance()
+}
+
+func (s *scanner) advanceAndSave(c rune) {
+	s.advance()
+	s.save(c)
+}
+
+func (s *scanner) save(c rune) {
+	if _, err := s.buffer.WriteRune(c); err != nil {
+		s.scanError("lexical element too long", 0)
+	}
+}
+
+func isNewLine(c rune) bool {
+	return c == '\n' || c == '\r'
+}
+
+func (s *scanner) checkNext(str string) bool {
+	if s.current == 0 || !strings.ContainsRune(str, s.current) {
+		return false
+	}
+	s.saveAndAdvance()
+	return true
+}
+
+func (s *scanner) skipSeparator() int { // TODO is this the right name?
+	i, c := 0, s.current
+	s.assert(c == '[' || c == ']')
+	for s.saveAndAdvance(); s.current == '='; i++ {
+		s.saveAndAdvance()
+	}
+	if s.current == c {
+		return i
+	}
+	return -i - 1
+}
+
+func (s *scanner) readMultiLine(comment bool, sep int) (str string) {
+	if s.saveAndAdvance(); isNewLine(s.current) {
+		s.incrementLineNumber()
+	}
+	for {
+		switch s.current {
+		case endOfStream:
+			if comment {
+				s.scanError("unfinished long comment", tkEOS)
+			} else {
+				s.scanError("unfinished long string", tkEOS)
+			}
+		case ']':
+			if s.skipSeparator() == sep {
+				s.saveAndAdvance()
+				if !comment {
+					str = s.buffer.String()
+					str = str[2+sep : len(str)-2*(2+sep)]
+				}
+				s.buffer.Reset()
+				return
+			}
+		case '\r':
+			s.current = '\n'
+			fallthrough
+		case '\n':
+			s.save(s.current)
+			s.incrementLineNumber()
+		default:
+			if !comment {
+				s.save(s.current)
+			}
+			s.advance()
+		}
+	}
+}
+
+func (s *scanner) readDigits() (c rune) {
+	for c = s.current; isDecimal(c); c = s.current {
+		s.saveAndAdvance()
+	}
+	return
+}
+
+func (s *scanner) numberError() {
+	s.scanError("malformed number", tkNumber)
+}
+
+func isHexadecimal(c rune) bool {
+	return '0' <= c && c <= '9' || 'a' <= c && c <= 'f' || 'A' <= c && c <= 'F'
+}
+
+func (s *scanner) readHexNumber(x uint64) (n uint64, c rune, i int) {
+	if c, n = s.current, x; !isHexadecimal(c) {
+		s.numberError()
+	}
+	for {
+		switch {
+		case '0' <= c && c <= '9':
+			c = c - '0'
+		case 'a' <= c && c <= 'f':
+			c = c - 'a' + 10
+		case 'A' <= c && c <= 'F':
+			c = c - 'A' + 10
+		default:
+			return
+		}
+		s.advance()
+		c, n, i = s.current, n<<4+uint64(c), i+1
+	}
+}
+
+func (s *scanner) readNumber() token {
+	const bits64, base10 = 64, 10
+	c := s.current
+	s.assert(isDecimal(c))
+	s.saveAndAdvance()
+	if c == '0' && s.checkNext("Xx") { // hexadecimal
+		prefix := s.buffer.String()
+		s.assert(prefix == "0x" || prefix == "0X")
+		s.buffer.Reset()
+		var exponent int
+		fraction, c, _ := s.readHexNumber(0)
+		if c == '.' {
+			s.advance()
+			fraction, c, exponent = s.readHexNumber(fraction)
+			exponent *= -4
+		}
+		if c == 'p' || c == 'P' {
+			s.advance()
+			var negativeExponent bool
+			if c = s.current; c == '+' || c == '-' {
+				negativeExponent = c == '-'
+				s.advance()
+			}
+			if !isDecimal(s.current) {
+				s.numberError()
+			}
+			_ = s.readDigits()
+			if e, err := strconv.ParseInt(s.buffer.String(), base10, bits64); err != nil {
+				s.numberError()
+			} else if negativeExponent {
+				exponent += int(-e)
+			} else {
+				exponent += int(e)
+			}
+			s.buffer.Reset()
+		}
+		return token{t: tkNumber, n: math.Ldexp(float64(fraction), exponent)}
+	}
+	c = s.readDigits()
+	if c == '.' {
+		s.saveAndAdvance()
+		c = s.readDigits()
+	}
+	if c == 'e' || c == 'E' {
+		s.saveAndAdvance()
+		if c = s.current; c == '+' || c == '-' {
+			s.saveAndAdvance()
+		}
+		_ = s.readDigits()
+	}
+	f, err := strconv.ParseFloat(s.buffer.String(), bits64)
+	if err != nil {
+		s.numberError()
+	}
+	return token{t: tkNumber, n: f}
+}
+
+var escapes map[rune]rune = map[rune]rune{
+	'a': '\a', 'b': '\b', 'f': '\f', 'n': '\n', 'r': '\r', 't': '\t', 'v': '\v', '\\': '\\', '"': '"', '\'': '\'',
+}
+
+func (s *scanner) escapeError(c []rune, message string) {
+	s.buffer.Reset()
+	s.save('\\')
+	for _, r := range c {
+		if r == endOfStream {
+			break
+		}
+		s.save(r)
+	}
+	s.scanError(message, tkString)
+}
+
+func (s *scanner) readHexEscape() (r rune) {
+	s.advance()
+	for i, c, b := 1, s.current, [3]rune{'x'}; i < len(b); i, c, r = i+1, s.current, r<<4+c {
+		switch b[i] = c; {
+		case '0' <= c && c <= '9':
+			c = c - '0'
+		case 'a' <= c && c <= 'f':
+			c = c - 'a' + 10
+		case 'A' <= c && c <= 'F':
+			c = c - 'A' + 10
+		default:
+			s.escapeError(b[:i+1], "hexadecimal digit expected")
+		}
+		s.advance()
+	}
+	return
+}
+
+func (s *scanner) readDecimalEscape() (r rune) {
+	b := [3]rune{}
+	for c, i := s.current, 0; i < len(b) && isDecimal(c); i, c = i+1, s.current {
+		b[i], r = c, 10*r+c-'0'
+		s.advance()
+	}
+	if r > math.MaxUint8 {
+		s.escapeError(b[:], "decimal escape too large")
+	}
+	return
+}
+
+func isDecimal(c rune) bool { return '0' <= c && c <= '9' }
+
+func (s *scanner) readString() token {
+	delimiter := s.current
+	for s.saveAndAdvance(); s.current != delimiter; {
+		switch s.current {
+		case endOfStream:
+			s.scanError("unfinished string", tkEOS)
+		case '\n', '\r':
+			s.scanError("unfinished string", tkString)
+		case '\\':
+			s.advance()
+			c := s.current
+			switch esc, ok := escapes[c]; {
+			case ok:
+				s.advanceAndSave(esc)
+			case isNewLine(c):
+				s.incrementLineNumber()
+				s.save('\n')
+			case c == endOfStream: // do nothing
+			case c == 'x':
+				s.advanceAndSave(s.readHexEscape())
+			case c == 'z':
+				for s.advance(); unicode.IsSpace(s.current); {
+					if isNewLine(s.current) {
+						s.incrementLineNumber()
+					} else {
+						s.advance()
+					}
+				}
+			default:
+				if !isDecimal(c) {
+					s.escapeError([]rune{c}, "invalid escape sequence")
+				}
+				s.save(s.readDecimalEscape())
+			}
+		default:
+			s.saveAndAdvance()
+		}
+	}
+	s.saveAndAdvance()
+	str := s.buffer.String()
+	s.buffer.Reset()
+	return token{t: tkString, s: str[1 : len(str)-2]}
+}
+
+func (s *scanner) reservedOrName() token {
+	str := s.buffer.String()
+	s.buffer.Reset()
+	for i, reserved := range tokens[:reservedCount] {
+		if str == reserved {
+			return token{t: rune(i + firstReserved), s: reserved}
+		}
+	}
+	return token{t: tkString, s: str}
+}
+
+func (s *scanner) scan() token {
+	const comment, str = true, false
+	for {
+		switch c := s.current; c {
+		case '\n', '\r':
+			s.incrementLineNumber()
+		case ' ', '\f', '\t', '\v':
+			s.advance()
+		case '-':
+			if s.advance(); s.current != '-' {
+				return token{t: '-'}
+			}
+			if s.advance(); s.current == '[' {
+				if sep := s.skipSeparator(); sep >= 0 {
+					_ = s.readMultiLine(comment, sep)
+					break
+				}
+			}
+			for !isNewLine(s.current) && s.current != endOfStream {
+				s.advance()
+			}
+		case '[':
+			if sep := s.skipSeparator(); sep >= 0 {
+				return token{t: tkString, s: s.readMultiLine(str, sep)}
+			} else if sep == -1 {
+				return token{t: '['}
+			}
+			s.scanError("invalid long string delimiter", tkString)
+		case '=':
+			if s.advance(); s.current != '=' {
+				return token{t: '='}
+			}
+			s.advance()
+			return token{t: tkEq}
+		case '<':
+			if s.advance(); s.current != '=' {
+				return token{t: '<'}
+			}
+			s.advance()
+			return token{t: tkLE}
+		case '>':
+			if s.advance(); s.current != '=' {
+				return token{t: '>'}
+			}
+			s.advance()
+			return token{t: tkGE}
+		case '~':
+			if s.advance(); s.current != '=' {
+				return token{t: '~'}
+			}
+			s.advance()
+			return token{t: tkNE}
+		case ':':
+			if s.advance(); s.current != ':' {
+				return token{t: ':'}
+			}
+			s.advance()
+			return token{t: tkDoubleColon}
+		case '"', '\'':
+			return s.readString()
+		case endOfStream:
+			return token{t: tkEOS}
+		case '.':
+			if s.saveAndAdvance(); s.checkNext(".") {
+				if s.checkNext(".") {
+					return token{t: tkDots}
+				} else {
+					return token{t: tkConcat}
+				}
+			} else if !unicode.IsDigit(s.current) {
+				return token{t: '.'}
+			} else {
+				return s.readNumber()
+			}
+		default:
+			if unicode.IsDigit(c) {
+				return s.readNumber()
+			} else if c == '_' || unicode.IsLetter(c) {
+				for ; c == '_' || unicode.IsLetter(c) || unicode.IsDigit(c); c = s.current {
+					s.saveAndAdvance()
+				}
+				return s.reservedOrName()
+			}
+			s.next()
+			return token{t: c}
+		}
+	}
+	panic("unreachable")
 }
 
 func (l *scanner) next() {
@@ -68,32 +477,31 @@ func (l *scanner) next() {
 	}
 }
 
-func (l *scanner) lookAhead() int {
+func (l *scanner) lookAhead() rune {
 	l.l.assert(l.lookAheadToken.t == tkEOS)
 	l.lookAheadToken = l.scan()
 	return l.lookAheadToken.t
 }
 
-func (l *scanner) testNext(t int) bool {
-	if l.t == t {
+func (l *scanner) testNext(t rune) (r bool) {
+	if r = l.t == t; r {
 		l.next()
-		return true
 	}
-	return false
+	return
 }
 
-func (l *scanner) errorExpected(t int) {
+func (l *scanner) errorExpected(t rune) {
 	// TODO
 	panic("unreachable")
 }
 
-func (l *scanner) check(t int) {
+func (l *scanner) check(t rune) {
 	if l.t != t {
 		l.errorExpected(t)
 	}
 }
 
-func (l *scanner) checkMatch(what, who, where int) {
+func (l *scanner) checkMatch(what rune, who, where int) {
 	if !l.testNext(what) {
 		if where == l.lineNumber {
 			l.errorExpected(what)

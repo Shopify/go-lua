@@ -69,7 +69,7 @@ const (
 	VersionMinor  = 2
 	VersionNumber = 502
 	MinStack      = 20 // minimum Lua stack available to a Go function
-	Version       = "Lua " + string(VersionMajor) + "." + string(VersionMinor)
+	Version       = "Lua " + string('0'+VersionMajor) + "." + string('0'+VersionMinor)
 	RegistryIndex = firstPseudoIndex
 )
 

@@ -112,7 +112,7 @@ func toNumber(r value) (float64, bool) {
 		return v, true
 	}
 	if s, ok := r.(string); ok {
-		if v, err := strconv.ParseFloat(s, 64); err == nil {
+		if v, err := strconv.ParseFloat(s, 64); err == nil { // TODO handle hexadecimal floats
 			return v, true
 		}
 	}
