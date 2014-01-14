@@ -162,7 +162,7 @@ func (s *scanner) readMultiLine(comment bool, sep int) (str string) {
 				s.saveAndAdvance()
 				if !comment {
 					str = s.buffer.String()
-					str = str[2+sep : len(str)-2*(2+sep)]
+					str = str[2+sep : len(str)-(2+sep)]
 				}
 				s.buffer.Reset()
 				return
@@ -363,7 +363,7 @@ func (s *scanner) readString() token {
 	s.saveAndAdvance()
 	str := s.buffer.String()
 	s.buffer.Reset()
-	return token{t: tkString, s: str[1 : len(str)-2]}
+	return token{t: tkString, s: str[1 : len(str)-1]}
 }
 
 func (s *scanner) reservedOrName() token {
@@ -374,7 +374,7 @@ func (s *scanner) reservedOrName() token {
 			return token{t: rune(i + firstReserved), s: reserved}
 		}
 	}
-	return token{t: tkString, s: str}
+	return token{t: tkName, s: str}
 }
 
 func (s *scanner) scan() token {
@@ -451,6 +451,8 @@ func (s *scanner) scan() token {
 			} else {
 				return s.readNumber()
 			}
+		case 0:
+			s.advance()
 		default:
 			if unicode.IsDigit(c) {
 				return s.readNumber()
@@ -460,7 +462,7 @@ func (s *scanner) scan() token {
 				}
 				return s.reservedOrName()
 			}
-			s.next()
+			s.advance()
 			return token{t: c}
 		}
 	}
