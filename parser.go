@@ -2,33 +2,6 @@ package lua
 
 import "io"
 
-const (
-	kindVoid = iota // no value
-	kindNil
-	kindTrue
-	kindFalse
-	kindConstant       // info = index of constant
-	kindNumber         // value = numerical value
-	kindNonRelocatable // info = result register
-	kindLocal          // info = local register
-	kindUpValue        // info = index of upvalue
-	kindIndexed        // table = table register/upvalue, index = register/constant index
-	kindJump           // info = instruction pc
-	kindRelocatable    // info = instruction pc
-	kindCall           // info = instruction pc
-	kindVarArg         // info = instruction pc
-)
-
-type exprDesc struct {
-	kind      int
-	index     int // register/constant index
-	table     int // register or upvalue
-	tableType int // whether 'table' is register (kindLocal) or upvalue (kindUpValue)
-	info      int
-	t, f      int // patch lists for 'exit when true/false'
-	value     float64
-}
-
 type parser struct {
 	scanner
 	function function
@@ -39,16 +12,6 @@ type parser struct {
 	decimalPoint        rune
 }
 
-func (e exprDesc) hasJumps() bool {
-	return e.t != e.f
-}
-
-// func (f *function) enterBlock(isLoop bool) *block {
-//   f.block = &block{isLoop: isLoop, activeVariableCount: f.activeVariableCount, firstLabel: f.p.dynamicData.label, firstGoto: f.p.dynamicData.goto, previous: f.block}
-//   f.p.state.assert(f.freeRegisters == f.activeVariableCount)
-//   return f.block
-// }
-
 func (p *parser) syntaxError(message string) {
 	p.scanError(message, p.t)
 }
@@ -57,12 +20,6 @@ func (p *parser) checkCondition(c bool, message string) {
 	if !c {
 		p.syntaxError(message)
 	}
-}
-
-func makeExpression(kind, info int) (e exprDesc) {
-	e.f, e.t = -1, -1 // TODO noJump
-	e.kind, e.info = kind, info
-	return
 }
 
 func (p *parser) checkName() string {
@@ -137,7 +94,7 @@ func (p *parser) simpleExpression() (e exprDesc) {
 		e = makeExpression(kindFalse, 0)
 	case tkDots:
 		p.checkCondition(p.function.isVarArg, "cannot use '...' outside a vararg function")
-		e = makeExpression(kindVarArg, p.function.codeABC(opVarArg, 0, 1, 0))
+		e = makeExpression(kindVarArg, p.function.EncodeABC(opVarArg, 0, 1, 0))
 	case '{':
 		// e = p.constructor()
 		return

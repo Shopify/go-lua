@@ -109,6 +109,8 @@ const (
 	posBx             = posC
 	posAx             = posA
 	bitRK             = 1 << (sizeB - 1)
+	maxIndexRK        = bitRK - 1
+	maxArgAx          = 1<<sizeAx - 1
 	maxArgBx          = 1<<sizeBx - 1
 	maxArgSBx         = maxArgBx >> 1 // sBx is signed
 	maxArgA           = 1<<sizeA - 1
@@ -121,6 +123,7 @@ type instruction uint32
 
 func isConstant(x int) bool   { return 0 != x&bitRK }
 func constantIndex(r int) int { return r & ^bitRK }
+func asConstant(r int) int    { return r | bitRK }
 
 // creates a mask with 'n' 1 bits at position 'p'
 func mask1(n, p uint) instruction { return ^(^instruction(0) << n) << p }
