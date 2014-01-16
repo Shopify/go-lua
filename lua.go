@@ -236,8 +236,8 @@ type state struct {
 	oldPC                 pc       // last pC traced
 	stackLast             int      // last free slot in the stack
 	stack                 []value
-	nonYieldableCallCount uint
-	nestedGoCallCount     uint
+	nonYieldableCallCount int
+	nestedGoCallCount     int
 	hookMask              byte
 	allowHook             bool
 	baseHookCount         int

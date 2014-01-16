@@ -1,15 +1,25 @@
 package lua
 
-import "io"
+import (
+	"fmt"
+	"io"
+)
+
+type label struct {
+	name                string
+	pc, line            int
+	activeVariableCount int
+}
 
 type parser struct {
 	scanner
-	function function
-	r        io.Reader
+	function                   *function
+	r                          io.Reader
+	activeVariables            []int
+	pendingGotos, activeLabels []label
+	source, environment        string
+	decimalPoint               rune
 	// TODO buffer for tokens
-	// TODO dynamicData
-	source, environment string
-	decimalPoint        rune
 }
 
 func (p *parser) syntaxError(message string) {
@@ -29,13 +39,69 @@ func (p *parser) checkName() string {
 	return s
 }
 
-// func (p *parser) codeString(s string) exprDesc {
-// 	return makeExpression(kindConstant, p.function.stringConstant(s))
-// }
+func (p *parser) checkLimit(val, limit int, what string) {
+	if val > limit {
+		where := "main function"
+		if line := p.function.f.lineDefined; line != 0 {
+			where = fmt.Sprintf("function at line %d", line)
+		}
+		p.syntaxError(fmt.Sprintf("too many %s (limit is %d) in %s", what, limit, where))
+	}
+}
 
-// func (p *parser) checkNameAsExpression() exprDesc {
-// 	return p.codeString(p.checkName())
-// }
+func (p *parser) checkNameAsExpression() exprDesc {
+	return p.function.EncodeString(p.checkName())
+}
+
+func (p *parser) enterLevel() {
+	p.l.nestedGoCallCount++
+	p.checkLimit(p.l.nestedGoCallCount, maxCallCount, "Go levels")
+}
+
+func (p *parser) leaveLevel() {
+	p.l.nestedGoCallCount--
+}
+
+func (p *parser) expressionList() (e exprDesc, n int) {
+	for n, e = 1, p.expression(); p.testNext(','); n, e = n+1, p.expression() {
+		_ = p.function.ExpressionToNextRegister(e)
+	}
+	return
+}
+
+func (p *parser) functionArguments(f exprDesc, line int) exprDesc {
+	var args exprDesc
+	switch p.t {
+	case '(':
+		p.next()
+		if p.t == ')' {
+			args.kind = kindVoid
+		} else {
+			var resultCount int
+			args, resultCount = p.expressionList()
+			p.function.SetReturns(args, resultCount)
+		}
+		p.checkMatch(')', '(', line)
+	case '{':
+		// args = p.constructor()
+	case tkString:
+		args = p.function.EncodeString(p.s)
+		p.next()
+	default:
+		p.syntaxError("function arguments expected")
+	}
+	base, parameterCount := f.info, MultipleReturns
+	if !args.hasMultipleReturns() {
+		if args.kind != kindVoid {
+			args = p.function.ExpressionToNextRegister(args)
+		}
+		parameterCount = p.function.freeRegisterCount - (base + 1)
+	}
+	e := makeExpression(kindCall, p.function.EncodeABC(opCall, base, parameterCount+1, 2))
+	p.function.FixLine(line)
+	p.function.freeRegisterCount = base + 1 // call removed function and args & leaves (unless changed) one result
+	return e
+}
 
 func (p *parser) primaryExpression() (e exprDesc) {
 	switch p.t {
@@ -44,7 +110,7 @@ func (p *parser) primaryExpression() (e exprDesc) {
 		p.next()
 		e = p.expression()
 		p.checkMatch(')', '(', line)
-		// p.function.dischargeVariables(v)
+		e = p.function.DischargeVariables(e)
 	case tkName:
 		// e = p.singleVariable()
 	default:
@@ -54,24 +120,19 @@ func (p *parser) primaryExpression() (e exprDesc) {
 }
 
 func (p *parser) suffixedExpression() (e exprDesc) {
-	// line := p.lineNumber
+	line := p.lineNumber
 	e = p.primaryExpression()
 	for {
 		switch p.t {
 		case '.':
 			e = p.fieldSelector(e)
 		case '[':
-			// p.function.expressionToAnyRegisterUpValue(e)
-			// k := p.index()
-			// p.function.indexed(e, k)
+			e = p.function.Indexed(p.function.ExpressionToAnyRegisterOrUpValue(e), p.index())
 		case ':':
 			p.next()
-			// k := p.checkNameAsExpression()
-			// p.function.self(e, k)
-			// p.functionArguments(e, line)
+			e = p.functionArguments(p.function.Self(e, p.checkNameAsExpression()), line)
 		case '(', tkString, '{':
-			// p.function.expressionToNextRegister(e)
-			// p.functionArguments(e, line)
+			e = p.functionArguments(p.function.ExpressionToNextRegister(e), line)
 		default:
 			return
 		}
@@ -169,25 +230,25 @@ var priority []struct{ left, right int } = []struct{ left, right int }{
 const unaryPriority = 8
 
 func (p *parser) subExpression(limit int) (e exprDesc, op int) {
-	// p.enterLevel()
+	p.enterLevel()
 	if u := unaryOp(p.t); u != oprNoUnary {
-		// line := p.lineNumber
+		line := p.lineNumber
 		p.next()
 		e, _ = p.subExpression(unaryPriority)
-		// p.function.prefix(u, line)
+		e = p.function.Prefix(u, e, line)
 	} else {
 		e = p.simpleExpression()
 	}
 	op = binaryOp(p.t)
 	for op != oprNoBinary && priority[op].left > limit {
-		// line := p.lineNumber
+		line := p.lineNumber
 		p.next()
-		// p.function.infix(op)
-		// e2, next := p.subExpression(priority[op].right)
-		// p.function.postfix(op, e, e2, line)
-		// op = next
+		e = p.function.Infix(op, e)
+		e2, next := p.subExpression(priority[op].right)
+		p.function.Postfix(op, e, e2, line)
+		op = next
 	}
-	// p.leaveLevel()
+	p.leaveLevel()
 	return
 }
 
@@ -217,19 +278,38 @@ func (p *parser) statementList() {
 }
 
 func (p *parser) fieldSelector(e exprDesc) exprDesc {
-	// p.function.expressionToAnyRegisterOrUpValue(e)
+	e = p.function.ExpressionToAnyRegisterOrUpValue(e)
 	p.next() // skip dot or colon
-	// k := p.checkNameAsExpression()
-	// e = p.function.indexed(e, k)
-	return e
+	return p.function.Indexed(e, p.checkNameAsExpression())
 }
 
 func (p *parser) index() exprDesc {
 	p.next() // skip '['
-	e := p.expression()
-	// p.function.expressionToValue(e)
+	e := p.function.ExpressionToValue(p.expression())
 	p.checkNext("]")
 	return e
+}
+
+func (p *parser) assignment(t *assignmentTarget, variableCount int) {
+	if p.checkCondition(t.isVariable(), "syntax error"); p.testNext(',') {
+		e := p.suffixedExpression()
+		if e.kind != kindIndexed {
+			p.function.CheckConflict(t, e)
+		}
+		p.checkLimit(variableCount+p.l.nestedGoCallCount, maxCallCount, "Go levels")
+		p.assignment(&assignmentTarget{previous: t, exprDesc: e}, variableCount+1)
+	} else {
+		p.checkNext("=")
+		if e, n := p.expressionList(); n != variableCount {
+			if p.function.AdjustAssignment(variableCount, n, e); n > variableCount {
+				p.function.freeRegisterCount -= n - variableCount // remove extra values
+			}
+		} else {
+			p.function.StoreVariable(t.exprDesc, p.function.SetReturn(e))
+			return // avoid default
+		}
+	}
+	p.function.StoreVariable(t.exprDesc, makeExpression(kindNonRelocatable, p.function.freeRegisterCount-1))
 }
 
 // func (p *parser) testThenBlock(escapes int) int {
@@ -254,9 +334,47 @@ func (p *parser) index() exprDesc {
 // 	p.function.patchToHere(escapes)
 // }
 
+func (p *parser) whileStatement(line int) {
+	p.next()
+	top, conditionExit := p.function.Label(), p.condition()
+	p.function.EnterBlock(true)
+	p.checkNext(string(tkDo))
+	// p.block()
+	p.function.JumpTo(top)
+	p.checkMatch(tkEnd, tkWhile, line)
+	p.function.LeaveBlock()
+	p.function.PatchToHere(conditionExit) // false conditions finish the loop
+}
+
+func (p *parser) condition() int {
+	e := p.expression()
+	if e.kind == kindNil {
+		e.kind = kindFalse
+	}
+	return p.function.GoIfTrue(e).f
+}
+
+func (p *parser) expressionStatement() {
+	if e := p.suffixedExpression(); p.t == '=' || p.t == ',' {
+		p.assignment(&assignmentTarget{exprDesc: e}, 1)
+	} else {
+		p.checkCondition(e.kind == kindCall, "syntax error")
+		p.function.Instruction(e).setC(1) // call statement uses no results
+	}
+}
+
+func (p *parser) returnStatement() {
+	if f := p.function; p.blockFollow(true) || p.t == ';' {
+		f.ReturnNone()
+	} else {
+		f.Return(p.expressionList())
+	}
+	p.testNext(';')
+}
+
 func (p *parser) statement() {
 	line := p.lineNumber
-	// p.enterLevel()
+	p.enterLevel()
 	switch p.t {
 	case ';':
 		p.next()
@@ -286,13 +404,13 @@ func (p *parser) statement() {
 		// p.labelStatement(p.checkName(), line)
 	case tkReturn:
 		p.next()
-		// p.returnStatement()
+		p.returnStatement()
 	case tkBreak, tkGoto:
-		// p.gotoStatement(p.f.jump())
+		// p.gotoStatement(p.function.Jump())
 	default:
-		// p.expressionStatement()
+		p.expressionStatement()
 	}
-	// p.l.assert(...)
-	// p.f.freeRegisters = p.f.activeVariableCount
-	// p.leaveLevel()
+	p.assert(p.function.f.maxStackSize >= p.function.freeRegisterCount && p.function.freeRegisterCount >= p.function.activeVariableCount)
+	p.function.freeRegisterCount = p.function.activeVariableCount
+	p.leaveLevel()
 }

@@ -60,20 +60,57 @@ type exprDesc struct {
 	value     float64
 }
 
+type assignmentTarget struct {
+	previous *assignmentTarget
+	exprDesc
+}
+
+type block struct {
+	previous              *block
+	firstLabel, firstGoto int
+	activeVariableCount   int
+	hasUpValue, isLoop    bool
+}
+
 type function struct {
 	f                      *prototype
 	h                      *table
 	previous               *function
 	p                      *parser
+	block                  *block
 	pc, jumpPC, lastTarget int
 	isVarArg               bool
-	code                   []instruction
 	constants              []value
-	lines                  []int
 	freeRegisterCount      int
 	activeVariableCount    int
-	maxStackSize           int
-	// TODO ...
+}
+
+func (f *function) EnterBlock(isLoop bool) {
+	// TODO www.lua.org uses a trick here to stack allocate the block, and chain blocks in the stack
+	f.block = &block{previous: f.block, firstLabel: len(f.p.activeLabels), firstGoto: len(f.p.pendingGotos), activeVariableCount: f.activeVariableCount, isLoop: isLoop}
+	f.assert(f.freeRegisterCount == f.activeVariableCount)
+}
+
+func (f *function) LeaveBlock() {
+	b := f.block
+	if b.previous != nil && b.hasUpValue { // create a 'jump to here' to close upvalues
+		j := f.Jump()
+		f.PatchClose(j, b.activeVariableCount)
+		f.PatchToHere(j)
+	}
+	if b.isLoop {
+		// f.breakLabel() // close pending breaks
+	}
+	f.block = b.previous
+	// f.removeVariables(b.activeVariableCount)
+	f.assert(b.activeVariableCount == f.activeVariableCount)
+	f.freeRegisterCount = f.activeVariableCount
+	f.p.activeLabels = f.p.activeLabels[:b.firstLabel]
+	if b.previous != nil { // inner block
+		// f.moveGotosOut(b) // update pending gotos to outer block
+	} else if b.firstGoto < len(f.p.pendingGotos) { // pending gotos in outer block
+		// f.undefinedGoto(f.p.pendingGotos[b.firstGoto]) // error
+	}
 }
 
 func abs(i int) int {
@@ -114,11 +151,13 @@ func makeExpression(kind, info int) exprDesc {
 	return exprDesc{f: noJump, t: noJump, kind: kind, info: info}
 }
 
-func (f *function) unreachable()                        { f.p.l.assert(false) }
+func (f *function) unreachable()                        { f.assert(false) }
 func (f *function) assert(cond bool)                    { f.p.l.assert(cond) }
-func (f *function) instruction(e exprDesc) *instruction { return &f.code[e.info] }
+func (f *function) Instruction(e exprDesc) *instruction { return &f.f.code[e.info] }
 func (e exprDesc) hasJumps() bool                       { return e.t != e.f }
 func (e exprDesc) isNumeral() bool                      { return e.kind == kindNumber && e.t == noJump && e.f == noJump }
+func (e exprDesc) isVariable() bool                     { return kindLocal <= e.kind && e.kind <= kindIndexed }
+func (e exprDesc) hasMultipleReturns() bool             { return e.kind == kindCall || e.kind == kindVarArg }
 
 func (f *function) Encode(i instruction) int {
 	f.dischargeJumpPC()
@@ -161,9 +200,13 @@ func (f *function) EncodeConstant(r, constant int) int {
 	return pc
 }
 
+func (f *function) EncodeString(s string) exprDesc {
+	return makeExpression(kindConstant, f.StringConstant(s))
+}
+
 func (f *function) LoadNil(from, n int) {
 	if f.pc > f.lastTarget { // no jumps to current position
-		if previous := &f.code[f.pc-1]; previous.opCode() == opLoadNil {
+		if previous := &f.f.code[f.pc-1]; previous.opCode() == opLoadNil {
 			if pf, pl, l := previous.a(), previous.a()+previous.b(), from+n-1; pf <= from && from < pl || from <= pf && pf < l { // can connect both
 				from, l = min(from, pf), max(l, pl)
 				previous.setA(from)
@@ -185,8 +228,24 @@ func (f *function) JumpTo(target int) {
 	f.PatchList(f.Jump(), target)
 }
 
-func (f *function) Return(first, count int) {
-	f.EncodeABC(opReturn, first, count+1, 0)
+func (f *function) ReturnNone() {
+	f.EncodeABC(opReturn, 0, 1, 0)
+}
+
+func (f *function) Return(e exprDesc, resultCount int) {
+	if e.hasMultipleReturns() {
+		if f.SetReturns(e, resultCount); e.kind == kindCall && resultCount == 1 {
+			f.Instruction(e).setOpCode(opTailCall)
+			f.assert(f.Instruction(e).a() == f.activeVariableCount)
+		}
+		f.EncodeABC(opReturn, f.activeVariableCount, MultipleReturns+1, 0)
+	} else if resultCount == 1 {
+		f.EncodeABC(opReturn, f.ExpressionToAnyRegister(e).info, 1+1, 0)
+	} else {
+		_ = f.ExpressionToNextRegister(e)
+		f.assert(resultCount == f.freeRegisterCount-f.activeVariableCount)
+		f.EncodeABC(opReturn, f.activeVariableCount, resultCount+1, 0)
+	}
 }
 
 func (f *function) conditionalJump(op opCode, a, b, c int) int {
@@ -200,7 +259,7 @@ func (f *function) fixJump(pc, dest int) {
 	if abs(offset) > maxArgSBx {
 		f.p.syntaxError("control structure too long")
 	}
-	f.code[pc].setSBx(offset)
+	f.f.code[pc].setSBx(offset)
 }
 
 func (f *function) Label() int {
@@ -209,17 +268,17 @@ func (f *function) Label() int {
 }
 
 func (f *function) jump(pc int) int {
-	if offset := f.code[pc].sbx(); offset != noJump {
+	if offset := f.f.code[pc].sbx(); offset != noJump {
 		return pc + 1 + offset
 	}
 	return noJump
 }
 
 func (f *function) jumpControl(pc int) *instruction {
-	if pc >= 1 && testTMode(f.code[pc-1].opCode()) {
-		return &f.code[pc-1]
+	if pc >= 1 && testTMode(f.f.code[pc-1].opCode()) {
+		return &f.f.code[pc-1]
 	}
-	return &f.code[pc]
+	return &f.f.code[pc]
 }
 
 func (f *function) needValue(list int) bool {
@@ -277,8 +336,8 @@ func (f *function) PatchList(list, target int) {
 func (f *function) PatchClose(list, level int) {
 	for level, next := level+1, 0; list != noJump; list = next {
 		next = f.jump(list)
-		f.assert(f.code[list].opCode() == opJump && f.code[list].a() == 0 || f.code[list].a() >= level)
-		f.code[list].setA(level)
+		f.assert(f.f.code[list].opCode() == opJump && f.f.code[list].a() == 0 || f.f.code[list].a() >= level)
+		f.f.code[list].setA(level)
 	}
 }
 
@@ -327,8 +386,8 @@ func (f *function) NumberConstant(n float64) int {
 func (f *function) CheckStack(n int) {
 	if n += f.freeRegisterCount; n >= maxStack {
 		f.p.syntaxError("function or expression too complex")
-	} else if n > f.maxStackSize {
-		f.maxStackSize = n
+	} else if n > f.f.maxStackSize {
+		f.f.maxStackSize = n
 	}
 }
 
@@ -356,19 +415,19 @@ func (f *function) nilConstant() int            { return f.addConstant(f.h, nil)
 
 func (f *function) SetReturns(e exprDesc, resultCount int) {
 	if e.kind == kindCall {
-		f.instruction(e).setC(resultCount + 1)
+		f.Instruction(e).setC(resultCount + 1)
 	} else if e.kind == kindVarArg {
-		f.instruction(e).setB(resultCount + 1)
-		f.instruction(e).setA(f.freeRegisterCount)
+		f.Instruction(e).setB(resultCount + 1)
+		f.Instruction(e).setA(f.freeRegisterCount)
 		f.ReserveRegisters(1)
 	}
 }
 
 func (f *function) SetReturn(e exprDesc) exprDesc {
 	if e.kind == kindCall {
-		e.kind, e.info = kindNonRelocatable, f.instruction(e).a()
+		e.kind, e.info = kindNonRelocatable, f.Instruction(e).a()
 	} else if e.kind == kindVarArg {
-		f.instruction(e).setB(2)
+		f.Instruction(e).setB(2)
 		e.kind = kindRelocatable
 	}
 	return e
@@ -406,7 +465,7 @@ func (f *function) dischargeToRegister(e exprDesc, r int) exprDesc {
 	case kindNumber:
 		f.EncodeConstant(r, f.NumberConstant(e.value))
 	case kindRelocatable:
-		f.instruction(e).setA(r)
+		f.Instruction(e).setA(r)
 	case kindNonRelocatable:
 		if r != e.info {
 			f.EncodeABC(opMove, r, e.info, 0)
@@ -471,6 +530,13 @@ func (f *function) ExpressionToAnyRegister(e exprDesc) exprDesc {
 		}
 	}
 	return f.ExpressionToNextRegister(e)
+}
+
+func (f *function) ExpressionToAnyRegisterOrUpValue(e exprDesc) exprDesc {
+	if e.kind != kindUpValue || e.hasJumps() {
+		e = f.ExpressionToAnyRegister(e)
+	}
+	return e
 }
 
 func (f *function) ExpressionToValue(e exprDesc) exprDesc {
@@ -547,7 +613,7 @@ func (f *function) invertJump(pc int) {
 
 func (f *function) jumpOnCondition(e exprDesc, cond int) int {
 	if e.kind == kindRelocatable {
-		if i := f.instruction(e); i.opCode() == opNot {
+		if i := f.Instruction(e); i.opCode() == opNot {
 			f.pc-- // remove previous opNot
 			return f.conditionalJump(opTest, i.b(), 0, not(cond))
 		}
@@ -724,7 +790,7 @@ func (f *function) Postfix(op int, e1, e2 exprDesc, line int) exprDesc {
 }
 
 func (f *function) FixLine(line int) {
-	f.lines[f.pc-1] = line
+	f.f.lineInfo[f.pc-1] = int32(line)
 }
 
 func (f *function) SetList(base, elementCount, storeCount int) {
@@ -740,4 +806,48 @@ func (f *function) SetList(base, elementCount, storeCount int) {
 		f.p.syntaxError("constructor too long")
 	}
 	f.freeRegisterCount = base + 1
+}
+
+func (f *function) CheckConflict(t *assignmentTarget, e exprDesc) {
+	extra, conflict := f.freeRegisterCount, false
+	for ; t != nil; t = t.previous {
+		if t.kind == kindIndexed {
+			if t.tableType == e.kind && t.table == e.info {
+				conflict = true
+				t.table, t.tableType = extra, kindLocal
+			}
+			if e.kind == kindLocal && t.index == e.info {
+				conflict = true
+				t.index = extra
+			}
+		}
+	}
+	if conflict {
+		if e.kind == kindLocal {
+			f.EncodeABC(opMove, extra, e.info, 0)
+		} else {
+			f.EncodeABC(opGetUpValue, extra, e.info, 0)
+		}
+		f.ReserveRegisters(1)
+	}
+}
+
+func (f *function) AdjustAssignment(variableCount, expressionCount int, e exprDesc) {
+	if extra := variableCount - expressionCount; e.hasMultipleReturns() {
+		if extra++; extra < 0 {
+			extra = 0
+		}
+		if f.SetReturns(e, extra); extra > 1 {
+			f.ReserveRegisters(extra - 1)
+		}
+	} else {
+		if e.kind != kindVoid {
+			_ = f.ExpressionToNextRegister(e)
+		}
+		if extra > 0 {
+			r := f.freeRegisterCount
+			f.ReserveRegisters(extra)
+			f.LoadNil(r, extra)
+		}
+	}
 }

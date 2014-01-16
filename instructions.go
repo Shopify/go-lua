@@ -133,7 +133,7 @@ func mask0(n, p uint) instruction { return ^mask1(n, p) }
 
 func (i instruction) opCode() opCode         { return opCode(i >> posOp & mask1(sizeOp, 0)) }
 func (i instruction) arg(pos, size uint) int { return int(i >> pos & mask1(size, 0)) }
-
+func (i *instruction) setOpCode(op opCode)   { i.setArg(posOp, sizeOp, int(op)) }
 func (i *instruction) setArg(pos, size uint, arg int) {
 	*i = *i&mask0(size, pos) | instruction(arg)<<pos&mask1(size, pos)
 }
