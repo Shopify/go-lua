@@ -366,6 +366,15 @@ func (s *scanner) readString() token {
 	return token{t: tkString, s: str[1 : len(str)-1]}
 }
 
+func isReserved(s string) bool {
+	for _, reserved := range tokens[:reservedCount] {
+		if s == reserved {
+			return true
+		}
+	}
+	return false
+}
+
 func (s *scanner) reservedOrName() token {
 	str := s.buffer.String()
 	s.buffer.Reset()

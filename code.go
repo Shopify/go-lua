@@ -1,6 +1,9 @@
 package lua
 
-import "math"
+import (
+	"fmt"
+	"math"
+)
 
 const (
 	oprMinus = iota
@@ -83,12 +86,63 @@ type function struct {
 	constants              []value
 	freeRegisterCount      int
 	activeVariableCount    int
+	localVariableCount     int
+	firstLocal             int
 }
 
 func (f *function) EnterBlock(isLoop bool) {
 	// TODO www.lua.org uses a trick here to stack allocate the block, and chain blocks in the stack
 	f.block = &block{previous: f.block, firstLabel: len(f.p.activeLabels), firstGoto: len(f.p.pendingGotos), activeVariableCount: f.activeVariableCount, isLoop: isLoop}
 	f.assert(f.freeRegisterCount == f.activeVariableCount)
+}
+
+func (f *function) undefinedGotoError(g label) {
+	if isReserved(g.name) {
+		f.semanticError(fmt.Sprintf("<%s> at line %d not inside a loop", g.name, g.line))
+	} else {
+		f.semanticError(fmt.Sprintf("no visible label '%s' for <goto> at line %d", g.name, g.line))
+	}
+}
+
+func (f *function) localVariable(i int) localVariable {
+	index := f.p.activeVariables[f.firstLocal+i]
+	f.assert(index < f.localVariableCount)
+	return f.f.localVariables[index]
+}
+
+func (f *function) closeGoto(i int, l label) {
+	g := f.p.activeLabels[i]
+	if f.assert(g.name == l.name); g.activeVariableCount < l.activeVariableCount {
+		f.semanticError(fmt.Sprintf("<goto %s> at line %d jumps into the scope of local '%s'", g.name, g.line, f.localVariable(g.activeVariableCount).name))
+	}
+	f.PatchList(g.pc, l.pc)
+	copy(f.p.pendingGotos[i:], f.p.pendingGotos[i+1:])
+	f.p.pendingGotos = f.p.pendingGotos[:len(f.p.pendingGotos)-1]
+}
+
+func (f *function) findLabel(i int) int {
+	g, b := f.p.pendingGotos[i], f.block
+	for _, l := range f.p.activeLabels[b.firstLabel:] {
+		if l.name == g.name {
+			if g.activeVariableCount > l.activeVariableCount && (b.hasUpValue || len(f.p.activeLabels) > b.firstLabel) {
+				f.PatchClose(g.pc, l.activeVariableCount)
+			}
+			f.closeGoto(i, l)
+			return 0
+		}
+	}
+	return 1
+}
+
+func (f *function) moveGotosOut(b block) {
+	for i := b.firstGoto; i < len(f.p.pendingGotos); i += f.findLabel(i) {
+		if f.p.pendingGotos[i].activeVariableCount > b.activeVariableCount {
+			if b.hasUpValue {
+				f.PatchClose(f.p.pendingGotos[i].pc, b.activeVariableCount)
+			}
+			f.p.pendingGotos[i].activeVariableCount = b.activeVariableCount
+		}
+	}
 }
 
 func (f *function) LeaveBlock() {
@@ -107,9 +161,9 @@ func (f *function) LeaveBlock() {
 	f.freeRegisterCount = f.activeVariableCount
 	f.p.activeLabels = f.p.activeLabels[:b.firstLabel]
 	if b.previous != nil { // inner block
-		// f.moveGotosOut(b) // update pending gotos to outer block
+		f.moveGotosOut(*b) // update pending gotos to outer block
 	} else if b.firstGoto < len(f.p.pendingGotos) { // pending gotos in outer block
-		// f.undefinedGoto(f.p.pendingGotos[b.firstGoto]) // error
+		f.undefinedGotoError(f.p.pendingGotos[b.firstGoto])
 	}
 }
 
@@ -141,14 +195,13 @@ func not(b int) int {
 	return 0
 }
 
-// func (f *function) enterBlock(isLoop bool) *block {
-//   f.block = &block{isLoop: isLoop, activeVariableCount: f.activeVariableCount, firstLabel: f.p.dynamicData.label, firstGoto: f.p.dynamicData.goto, previous: f.block}
-//   f.p.state.assert(f.freeRegisters == f.activeVariableCount)
-//   return f.block
-// }
-
 func makeExpression(kind, info int) exprDesc {
 	return exprDesc{f: noJump, t: noJump, kind: kind, info: info}
+}
+
+func (f *function) semanticError(message string) {
+	f.p.t = 0 // remove "near to" from final message
+	f.p.syntaxError(message)
 }
 
 func (f *function) unreachable()                        { f.assert(false) }
