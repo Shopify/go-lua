@@ -155,7 +155,7 @@ func (p *parser) simpleExpression() (e exprDesc) {
 		return
 	case tkFunction:
 		p.next()
-		// TODO
+		// TODO e = p.body(false, p.lineNumber)
 		return
 	default:
 		e = p.suffixedExpression()
@@ -306,27 +306,46 @@ func (p *parser) assignment(t *assignmentTarget, variableCount int) {
 	p.function.StoreVariable(t.exprDesc, makeExpression(kindNonRelocatable, p.function.freeRegisterCount-1))
 }
 
-// func (p *parser) testThenBlock(escapes int) int {
-//   p.next()
-//   v := p.expression()
-//   p.checkNext(tkThen)
-//   if p.t == tkGoto || p.t == tkBreak {
-//     p.function.goIfFalse(v)
-//     b
-//   }
-// }
+func (p *parser) testThenBlock(escapes int) int {
+	var jumpFalse int
+	p.next()
+	e := p.expression()
+	p.checkNext(string(tkThen))
+	if p.t == tkGoto || p.t == tkBreak {
+		e = p.function.GoIfFalse(e)
+		p.function.EnterBlock(false)
+		p.gotoStatement(e.t)
+		p.skipEmptyStatements()
+		if p.blockFollow(false) {
+			p.function.LeaveBlock()
+			return escapes
+		}
+		jumpFalse = p.function.Jump()
+	} else {
+		e = p.function.GoIfTrue(e)
+		p.function.EnterBlock(false)
+		jumpFalse = e.f
+	}
+	p.statementList()
+	p.function.LeaveBlock()
+	if p.t == tkElse || p.t == tkElseif {
+		escapes = p.function.Concatenate(escapes, p.function.Jump())
+	}
+	p.function.PatchToHere(jumpFalse)
+	return escapes
+}
 
-// func (p *parser) ifStatement(line int) {
-// 	escapes := p.testThenBlock(noJump)
-// 	for p.t == tkElseif {
-// 		escapes = p.testThenBlock(escapes)
-// 	}
-// 	if p.testNext(tkElse) {
-// 		p.block()
-// 	}
-// 	p.checkMatch(tkEnd, tkIf, line)
-// 	p.function.patchToHere(escapes)
-// }
+func (p *parser) ifStatement(line int) {
+	escapes := p.testThenBlock(noJump)
+	for p.t == tkElseif {
+		escapes = p.testThenBlock(escapes)
+	}
+	if p.testNext(tkElse) {
+		p.block()
+	}
+	p.checkMatch(tkEnd, tkIf, line)
+	p.function.PatchToHere(escapes)
+}
 
 func (p *parser) block() {
 	p.function.EnterBlock(false)
@@ -421,12 +440,12 @@ func (p *parser) statement() {
 	case ';':
 		p.next()
 	case tkIf:
-		// p.ifStatement(line)
+		p.ifStatement(line)
 	case tkWhile:
 		p.whileStatement(line)
 	case tkDo:
 		p.next()
-		// p.block()
+		p.block()
 		p.checkMatch(tkEnd, tkDo, line)
 	case tkFor:
 		// p.forStatement(line)
