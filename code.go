@@ -938,3 +938,60 @@ func (f *function) AdjustAssignment(variableCount, expressionCount int, e exprDe
 		}
 	}
 }
+
+func (f *function) makeUpValue(name string, e exprDesc) int {
+	f.p.checkLimit(len(f.f.upValues)+1, maxUpValue, "upvalues")
+	f.f.upValues = append(f.f.upValues, upValueDesc{name: name, isLocal: e.kind == kindLocal, index: e.info})
+	return len(f.f.upValues) - 1
+}
+
+func singleVariableHelper(f *function, name string, base bool) (e exprDesc, found bool) {
+	owningBlock := func(b *block, level int) *block {
+		for b.activeVariableCount > level {
+			b = b.previous
+		}
+		return b
+	}
+	find := func() (int, bool) {
+		for i := f.activeVariableCount - 1; i >= 0; i-- {
+			if name == f.localVariable(i).name {
+				return i, true
+			}
+		}
+		return 0, false
+	}
+	findUpValue := func() (int, bool) {
+		for i, u := range f.f.upValues {
+			if u.name == name {
+				return i, true
+			}
+		}
+		return 0, false
+	}
+	if f == nil {
+		return
+	}
+	var v int
+	if v, found = find(); found {
+		if e = makeExpression(kindLocal, v); !base {
+			owningBlock(f.block, v).hasUpValue = true
+		}
+		return
+	}
+	if v, found = findUpValue(); found {
+		return makeExpression(kindUpValue, v), true
+	}
+	if e, found = singleVariableHelper(f.previous, name, false); !found {
+		return
+	}
+	return makeExpression(kindUpValue, f.makeUpValue(name, e)), true
+}
+
+func (f *function) SingleVariable(name string) (e exprDesc) {
+	if e, found := singleVariableHelper(f, name, true); !found {
+		e, _ = singleVariableHelper(f, f.p.environment, true)
+		f.assert(e.kind == kindLocal || e.kind == kindUpValue)
+		e = f.Indexed(e, f.EncodeString(name))
+	}
+	return
+}

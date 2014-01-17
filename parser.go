@@ -16,9 +16,7 @@ type parser struct {
 	// TODO buffer for tokens
 }
 
-func (p *parser) syntaxError(message string) {
-	p.scanError(message, p.t)
-}
+func (p *parser) syntaxError(message string) { p.scanError(message, p.t) }
 
 func (p *parser) checkCondition(c bool, message string) {
 	if !c {
@@ -43,9 +41,9 @@ func (p *parser) checkLimit(val, limit int, what string) {
 	}
 }
 
-func (p *parser) checkNameAsExpression() exprDesc {
-	return p.function.EncodeString(p.checkName())
-}
+func (p *parser) checkNameAsExpression() exprDesc { return p.function.EncodeString(p.checkName()) }
+
+func (p *parser) singleVariable() exprDesc { return p.function.SingleVariable(p.checkName()) }
 
 func (p *parser) enterLevel() {
 	p.l.nestedGoCallCount++
@@ -106,7 +104,7 @@ func (p *parser) primaryExpression() (e exprDesc) {
 		p.checkMatch(')', '(', line)
 		e = p.function.DischargeVariables(e)
 	case tkName:
-		// e = p.singleVariable()
+		e = p.singleVariable()
 	default:
 		p.syntaxError("unexpected symbol")
 	}
