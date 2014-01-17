@@ -5,12 +5,6 @@ import (
 	"io"
 )
 
-type label struct {
-	name                string
-	pc, line            int
-	activeVariableCount int
-}
-
 type parser struct {
 	scanner
 	function                   *function
@@ -146,7 +140,7 @@ func (p *parser) simpleExpression() (e exprDesc) {
 		e = makeExpression(kindNumber, 0)
 		e.value = p.n
 	case tkString:
-		// TODO
+		e = p.function.EncodeString(p.s)
 	case tkNil:
 		e = makeExpression(kindNil, 0)
 	case tkTrue:
@@ -334,16 +328,38 @@ func (p *parser) assignment(t *assignmentTarget, variableCount int) {
 // 	p.function.patchToHere(escapes)
 // }
 
+func (p *parser) block() {
+	p.function.EnterBlock(false)
+	p.statementList()
+	p.function.LeaveBlock()
+}
+
 func (p *parser) whileStatement(line int) {
 	p.next()
 	top, conditionExit := p.function.Label(), p.condition()
 	p.function.EnterBlock(true)
 	p.checkNext(string(tkDo))
-	// p.block()
+	p.block()
 	p.function.JumpTo(top)
 	p.checkMatch(tkEnd, tkWhile, line)
 	p.function.LeaveBlock()
 	p.function.PatchToHere(conditionExit) // false conditions finish the loop
+}
+
+func (p *parser) repeatStatement(line int) {
+	top := p.function.Label()
+	p.function.EnterBlock(true)  // loop block
+	p.function.EnterBlock(false) // scope block
+	p.next()
+	p.statementList()
+	p.checkMatch(tkUntil, tkRepeat, line)
+	conditionExit := p.condition()
+	if p.function.block.hasUpValue {
+		p.function.PatchClose(conditionExit, p.function.block.activeVariableCount)
+	}
+	p.function.LeaveBlock()                  // finish scope
+	p.function.PatchList(conditionExit, top) // close loop
+	p.function.LeaveBlock()                  // finish loop
 }
 
 func (p *parser) condition() int {
@@ -352,6 +368,32 @@ func (p *parser) condition() int {
 		e.kind = kindFalse
 	}
 	return p.function.GoIfTrue(e).f
+}
+
+func (p *parser) gotoStatement(pc int) {
+	if line := p.lineNumber; p.testNext(tkGoto) {
+		p.function.MakeGoto(p.checkName(), line, pc)
+	} else {
+		p.next()
+		p.function.MakeGoto("break", line, pc)
+	}
+}
+
+func (p *parser) skipEmptyStatements() {
+	for p.t == ';' || p.t == tkDoubleColon {
+		p.statement()
+	}
+}
+
+func (p *parser) labelStatement(label string, line int) {
+	p.function.CheckRepeatedLabel(label)
+	p.checkNext(string(tkDoubleColon))
+	l := p.function.MakeLabel(label, line)
+	p.skipEmptyStatements()
+	if p.blockFollow(false) {
+		p.activeLabels[l].activeVariableCount = p.function.block.activeVariableCount
+	}
+	p.function.FindGotos(l)
 }
 
 func (p *parser) expressionStatement() {
@@ -381,7 +423,7 @@ func (p *parser) statement() {
 	case tkIf:
 		// p.ifStatement(line)
 	case tkWhile:
-		// p.whileStatement(line)
+		p.whileStatement(line)
 	case tkDo:
 		p.next()
 		// p.block()
@@ -389,7 +431,7 @@ func (p *parser) statement() {
 	case tkFor:
 		// p.forStatement(line)
 	case tkRepeat:
-		// p.repeatStatement(line)
+		p.repeatStatement(line)
 	case tkFunction:
 		// p.functionStatement(line)
 	case tkLocal:
@@ -401,12 +443,12 @@ func (p *parser) statement() {
 		}
 	case tkDoubleColon:
 		p.next()
-		// p.labelStatement(p.checkName(), line)
+		p.labelStatement(p.checkName(), line)
 	case tkReturn:
 		p.next()
 		p.returnStatement()
 	case tkBreak, tkGoto:
-		// p.gotoStatement(p.function.Jump())
+		p.gotoStatement(p.function.Jump())
 	default:
 		p.expressionStatement()
 	}

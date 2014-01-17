@@ -68,6 +68,12 @@ type assignmentTarget struct {
 	exprDesc
 }
 
+type label struct {
+	name                string
+	pc, line            int
+	activeVariableCount int
+}
+
 type block struct {
 	previous              *block
 	firstLabel, firstGoto int
@@ -110,6 +116,16 @@ func (f *function) localVariable(i int) localVariable {
 	return f.f.localVariables[index]
 }
 
+func (f *function) MakeGoto(name string, line, pc int) {
+	f.p.pendingGotos = append(f.p.pendingGotos, label{name: name, line: line, pc: pc, activeVariableCount: f.activeVariableCount})
+	f.findLabel(len(f.p.pendingGotos) - 1)
+}
+
+func (f *function) MakeLabel(name string, line int) int {
+	f.p.activeLabels = append(f.p.activeLabels, label{name: name, line: line, pc: f.pc, activeVariableCount: f.activeVariableCount})
+	return len(f.p.activeLabels) - 1
+}
+
 func (f *function) closeGoto(i int, l label) {
 	g := f.p.activeLabels[i]
 	if f.assert(g.name == l.name); g.activeVariableCount < l.activeVariableCount {
@@ -132,6 +148,24 @@ func (f *function) findLabel(i int) int {
 		}
 	}
 	return 1
+}
+
+func (f *function) CheckRepeatedLabel(name string) {
+	for _, l := range f.p.activeLabels[f.block.firstLabel:] {
+		if l.name == name {
+			f.semanticError(fmt.Sprintf("label '%s' already defined on line %d", name, l.line))
+		}
+	}
+}
+
+func (f *function) FindGotos(label int) {
+	for i, l := f.block.firstGoto, f.p.activeLabels[label]; i < len(f.p.pendingGotos); {
+		if f.p.pendingGotos[i].name == l.name {
+			f.closeGoto(i, l)
+		} else {
+			i++
+		}
+	}
 }
 
 func (f *function) moveGotosOut(b block) {
