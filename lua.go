@@ -69,7 +69,7 @@ const (
 	VersionMinor  = 2
 	VersionNumber = 502
 	MinStack      = 20 // minimum Lua stack available to a Go function
-	Version       = "Lua " + string('0'+VersionMajor) + "." + string('0'+VersionMinor)
+	VersionString = "Lua " + string('0'+VersionMajor) + "." + string('0'+VersionMinor)
 	RegistryIndex = firstPseudoIndex
 )
 
@@ -90,127 +90,45 @@ type Debug struct {
 	callInfo                                  callInfo // active function
 }
 
-type Hook func(state State, activationRecord *Debug)
-type Function func(state State) int
+type Hook func(state *State, activationRecord *Debug)
+type Function func(state *State) int
 
-type State interface {
-	Version() *float64
+// type State interface {
+// basic stack manipulation
+// TODO XMove(from, to State, n int)
 
-	// basic stack manipulation
-	AbsIndex(index int) int
-	Top() int
-	SetTop(index int)
-	PushValue(index int)
-	Remove(index int)
-	Insert(index int)
-	Replace(index int)
-	Copy(from, to int)
-	CheckStack(size int) bool
-	// TODO XMove(from, to State, n int)
+// Access functions (stack -> Go)
+// Comparison and arithmetic functions
+// Push functions (Go -> stack)
 
-	// Access functions (stack -> Go)
-	IsNumber(index int) bool
-	IsString(index int) bool
-	IsGoFunction(index int) bool
-	IsUserData(index int) bool
-	Type(index int) int
-	TypeName(t int) string
+// Get functions (Lua -> stack)
+// TODO NewUserData(?) interface{}
 
-	ToNumber(index int) (float64, bool)
-	ToInteger(index int) (int, bool)
-	ToUnsigned(index int) (uint, bool)
-	ToBoolean(index int) bool
-	ToString(index int) (string, bool)
-	RawLength(index int) int
-	ToGoFunction(index int) Function
-	ToUserData(index int) interface{}
-	ToThread(index int) State
-	ToValue(index int) interface{}
+// Set functions (stack -> Lua)
+// SetTable(index int)
+// SetField(index int, name string)
+// RawSetInt(index, n int)
+// RawSetValue(index int, p interface{})
+// SetUserValue(index int)
 
-	// Comparison and arithmetic functions
-	Arith(op int)
-	RawEqual(index1, index2 int) bool
-	Compare(index1, index2, op int) bool
+// Miscellaneous functions
+// TODO AllocateFunction() (f Alloc, userData interface{})
+// TODO SetAllocateFunction(f Alloc, userData interface{})
 
-	// Push functions (Go -> stack)
-	PushNil()
-	PushNumber(n float64)
-	PushInteger(n int)
-	PushUnsigned(n uint)
-	PushString(s string) string
-	PushFString(format string, args ...interface{}) string
-	PushGoClosure(function Function, n int)
-	PushBoolean(b bool)
-	PushLightUserData(d interface{})
-	PushThread() (isMainThread bool)
+// Useful functions
 
-	// Get functions (Lua -> stack)
-	Global(name string)
-	Table(index int)
-	Field(index int, name string)
-	RawGet(index int)
-	RawGetInt(index, key int)
-	RawGetValue(index int, p interface{})
-	CreateTable(arrayCount, recordCount int)
-	// TODO NewUserData(?) interface{}
-	MetaTable(index int) bool
-	UserValue(index int)
-
-	// Set functions (stack -> Lua)
-	SetGlobal(name string)
-	// SetTable(index int)
-	// SetField(index int, name string)
-	RawSet(index int)
-	// RawSetInt(index, n int)
-	// RawSetValue(index int, p interface{})
-	SetMetaTable(index int)
-	// SetUserValue(index int)
-
-	Context() (Status, int)
-	CallWithContinuation(argCount, resultCount, context int, continuation Function)
-	Call(argCount, resultCount int)
-	ProtectedCallWithContinuation(argCount, resultCount, errorFunction, context int, continuation Function) Status
-
-	SetField(index int, key string)
-	ApiCheckStackSpace(n int)
-
-	// Miscellaneous functions
-	Error()
-	Next(index int) bool
-	Concat(n int)
-	Length(index int)
-	// TODO AllocateFunction() (f Alloc, userData interface{})
-	// TODO SetAllocateFunction(f Alloc, userData interface{})
-
-	// Useful functions
-	Pop(n int)
-	NewTable()
-	Register(name string, f Function)
-	PushGoFunction(f Function)
-	IsFunction(index int) bool
-	IsTable(index int) bool
-	IsLightUserData(index int) bool
-	IsNil(index int) bool
-	IsBoolean(index int) bool
-	IsThread(index int) bool
-	IsNone(index int) bool
-	IsNoneOrNil(index int) bool
-	PushGlobalTable()
-
-	// Debug API
-	Stack(level int, activationRecord *Debug) bool
-	Info(what string, activationRecord *Debug) bool
-	// Local(activationRecord *Debug, index int) string
-	// SetLocal(activationRecord *Debug, index int) string
-	// UpValue(function, index int) string
-	// SetUpValue(function, index int) string
-	// UpValueId(function, index int) interface{}
-	// UpValueJoin(function1, index1, function2, index2 int)
-	// SetHook(function Hook, mask, count int) int // TODO bool?
-	// Hook() Hook
-	// HookMask() int
-	// HookCount() int
-}
+// Debug API
+// Local(activationRecord *Debug, index int) string
+// SetLocal(activationRecord *Debug, index int) string
+// UpValue(function, index int) string
+// SetUpValue(function, index int) string
+// UpValueId(function, index int) interface{}
+// UpValueJoin(function1, index1, function2, index2 int)
+// SetHook(function Hook, mask, count int) int // TODO bool?
+// Hook() Hook
+// HookMask() int
+// HookCount() int
+// }
 
 type pc int
 type callStatus byte
@@ -227,7 +145,7 @@ const (
 )
 
 // per thread state
-type state struct {
+type State struct {
 	// TODO necessary? errorJmp *longjmp // current error recover point
 	status                Status
 	top                   int // first free slot in the stack
@@ -249,7 +167,7 @@ type state struct {
 }
 
 type globalState struct {
-	mainThread     *state
+	mainThread     *State
 	tagMethodNames [tmCount]string
 	metaTables     [TypeCount]*table // metatables for basic types
 	registry       *table
@@ -278,7 +196,7 @@ func (g *globalState) metaTable(o value) *table {
 		t = TypeFunction
 	case *userData:
 		t = TypeUserData
-	case *state:
+	case *State:
 		t = TypeThread
 	default:
 		return nil
@@ -286,11 +204,9 @@ func (g *globalState) metaTable(o value) *table {
 	return g.metaTables[t]
 }
 
-func (l *state) ApiCheckStackSpace(n int) {
-	l.assert(n < l.top-l.callInfo.function())
-}
+func ApiCheckStackSpace(l *State, n int) { l.assert(n < l.top-l.callInfo.function()) }
 
-func (l *state) adjustResults(resultCount int) {
+func (l *State) adjustResults(resultCount int) {
 	if resultCount == MultipleReturns && l.callInfo.top() < l.top {
 		l.callInfo.setTop(l.top)
 	}
@@ -302,26 +218,26 @@ func apiCheck(condition bool, message string) {
 	}
 }
 
-func (l *state) apiIncrementTop() {
+func (l *State) apiIncrementTop() {
 	l.top++
 	apiCheck(l.top <= l.callInfo.top(), "stack overflow")
 }
 
-func (l *state) apiPush(v value) {
+func (l *State) apiPush(v value) {
 	l.push(v)
 	apiCheck(l.top <= l.callInfo.top(), "stack overflow")
 }
 
-func (l *state) checkElementCount(n int) {
+func (l *State) checkElementCount(n int) {
 	apiCheck(n < l.top-l.callInfo.function(), "not enough elements in the stack")
 }
 
-func (l *state) checkResults(argCount, resultCount int) {
+func (l *State) checkResults(argCount, resultCount int) {
 	apiCheck(resultCount == MultipleReturns || l.callInfo.top()-l.top >= resultCount-argCount,
 		"results from function overflow current stack size")
 }
 
-func (l *state) Context() (Status, int) {
+func Context(l *State) (Status, int) {
 	if l.callInfo.isCallStatus(callStatusYielded) {
 		callInfo := l.callInfo.(*goCallInfo)
 		return callInfo.status, callInfo.context
@@ -329,7 +245,7 @@ func (l *state) Context() (Status, int) {
 	return Ok, 0
 }
 
-func (l *state) CallWithContinuation(argCount, resultCount, context int, continuation Function) {
+func CallWithContinuation(l *State, argCount, resultCount, context int, continuation Function) {
 	apiCheck(continuation == nil || !l.callInfo.isLua(), "cannot use continuations inside hooks")
 	l.checkElementCount(argCount + 1)
 	apiCheck(l.status == Ok, "cannot do calls on non-normal thread")
@@ -346,11 +262,9 @@ func (l *state) CallWithContinuation(argCount, resultCount, context int, continu
 	l.adjustResults(resultCount)
 }
 
-func (l *state) Call(argCount, resultCount int) {
-	l.CallWithContinuation(argCount, resultCount, 0, nil)
-}
+func Call(l *State, argCount, resultCount int) { CallWithContinuation(l, argCount, resultCount, 0, nil) }
 
-func (l *state) ProtectedCallWithContinuation(argCount, resultCount, errorFunction, context int, continuation Function) Status {
+func ProtectedCallWithContinuation(l *State, argCount, resultCount, errorFunction, context int, continuation Function) Status {
 	apiCheck(continuation == nil || !l.callInfo.isLua(), "cannot use continuations inside hooks")
 	l.checkElementCount(argCount + 1)
 	apiCheck(l.status == Ok, "cannot do calls on non-normal thread")
@@ -359,13 +273,11 @@ func (l *state) ProtectedCallWithContinuation(argCount, resultCount, errorFuncti
 	return Ok
 }
 
-func (l *state) Version() *float64 {
-	return l.global.version
-}
+func Version(l *State) *float64 { return l.global.version }
 
-func NewState() State {
+func NewState() *State {
 	v := float64(VersionNumber)
-	l := &state{allowHook: true, status: Ok, nonYieldableCallCount: 1}
+	l := &State{allowHook: true, status: Ok, nonYieldableCallCount: 1}
 	g := &globalState{mainThread: l, registry: newTable(), version: &v, memoryErrorMessage: "not enough memory"}
 	l.global = g
 	l.initializeStack()
@@ -375,19 +287,14 @@ func NewState() State {
 	return l
 }
 
-func UpValueIndex(i int) int {
-	return RegistryIndex - i
-}
-
-func isPseudoIndex(i int) bool {
-	return i <= RegistryIndex
-}
+func UpValueIndex(i int) int   { return RegistryIndex - i }
+func isPseudoIndex(i int) bool { return i <= RegistryIndex }
 
 func apiCheckStackIndex(index int, v value) {
 	apiCheck(v != nil && !isPseudoIndex(index), "index not in the stack")
 }
 
-func (l *state) SetField(index int, key string) {
+func SetField(l *State, index int, key string) {
 	l.checkElementCount(1)
 	t := l.indexToValue(index)
 	l.stack[l.top] = key
@@ -396,7 +303,7 @@ func (l *state) SetField(index int, key string) {
 	l.top -= 2 // pop value and key
 }
 
-func (l *state) indexToValue(index int) value {
+func (l *State) indexToValue(index int) value {
 	switch callInfo := l.callInfo; {
 	case index > 0:
 		// TODO are these checks necessary? Can we just return l.callInfo[index]?
@@ -423,7 +330,7 @@ func (l *state) indexToValue(index int) value {
 	}
 }
 
-func (l *state) setIndexToValue(index int, v value) {
+func (l *State) setIndexToValue(index int, v value) {
 	switch callInfo := l.callInfo; {
 	case index > 0:
 		// TODO are these checks necessary? Can we just return l.callInfo[index]?
@@ -450,18 +357,16 @@ func (l *state) setIndexToValue(index int, v value) {
 	}
 }
 
-func (l *state) AbsIndex(index int) int {
+func AbsIndex(l *State, index int) int {
 	if index > 0 || isPseudoIndex(index) {
 		return index
 	}
 	return l.top - l.callInfo.function() + index
 }
 
-func (l *state) Top() int {
-	return l.top - (l.callInfo.function() + 1)
-}
+func Top(l *State) int { return l.top - (l.callInfo.function() + 1) }
 
-func (l *state) SetTop(index int) {
+func SetTop(l *State, index int) {
 	f := l.callInfo.function()
 	if index >= 0 {
 		apiCheck(index <= l.stackLast-(f+1), "new top too large")
@@ -475,40 +380,36 @@ func (l *state) SetTop(index int) {
 	}
 }
 
-func (l *state) PushValue(index int) {
-	l.apiPush(l.indexToValue(index))
-}
+func PushValue(l *State, index int) { l.apiPush(l.indexToValue(index)) }
 
-func (l *state) Remove(index int) {
+func Remove(l *State, index int) {
 	apiCheckStackIndex(index, l.indexToValue(index))
-	i := l.AbsIndex(index)
+	i := AbsIndex(l, index)
 	copy(l.stack[i:l.top-1], l.stack[i+1:l.top])
 	l.top--
 }
 
-func (l *state) Insert(index int) {
+func Insert(l *State, index int) {
 	apiCheckStackIndex(index, l.indexToValue(index))
-	i := l.AbsIndex(index)
+	i := AbsIndex(l, index)
 	copy(l.stack[i+1:l.top+1], l.stack[i:l.top])
 	l.stack[i] = l.stack[l.top]
 }
 
-func (l *state) move(dest int, src value) {
+func (l *State) move(dest int, src value) {
 	apiCheck(src != nil, "invalid index")
 	l.setIndexToValue(dest, src)
 }
 
-func (l *state) Replace(index int) {
+func Replace(l *State, index int) {
 	l.checkElementCount(1)
 	l.move(index, l.stack[l.top-1])
 	l.top--
 }
 
-func (l *state) Copy(from, to int) {
-	l.move(to, l.indexToValue(from))
-}
+func Copy(l *State, from, to int) { l.move(to, l.indexToValue(from)) }
 
-func (l *state) CheckStack(size int) bool {
+func CheckStack(l *State, size int) bool {
 	callInfo := l.callInfo
 	ok := l.stackLast-l.top > size
 	if !ok && l.top+extraStack <= maxStack-size {
@@ -521,7 +422,7 @@ func (l *state) CheckStack(size int) bool {
 	return ok
 }
 
-func (l *state) Type(index int) int {
+func Type(l *State, index int) int {
 	switch l.indexToValue(index).(type) {
 	case nil:
 		return TypeNil
@@ -539,17 +440,15 @@ func (l *state) Type(index int) int {
 		return TypeFunction
 	case *userData:
 		return TypeUserData
-	case *state:
+	case *State:
 		return TypeThread
 	}
 	return TypeNone
 }
 
-func (l *state) TypeName(t int) string {
-	return typeNames[t+1]
-}
+func TypeName(l *State, t int) string { return typeNames[t+1] }
 
-func (l *state) IsGoFunction(index int) bool {
+func IsGoFunction(l *State, index int) bool {
 	if _, ok := l.indexToValue(index).(Function); ok {
 		return true
 	}
@@ -557,12 +456,12 @@ func (l *state) IsGoFunction(index int) bool {
 	return ok
 }
 
-func (l *state) IsNumber(index int) bool {
+func IsNumber(l *State, index int) bool {
 	_, ok := toNumber(l.indexToValue(index))
 	return ok
 }
 
-func (l *state) IsString(index int) bool {
+func IsString(l *State, index int) bool {
 	if _, ok := l.indexToValue(index).(string); ok {
 		return true
 	}
@@ -570,12 +469,12 @@ func (l *state) IsString(index int) bool {
 	return ok
 }
 
-func (l *state) IsUserData(index int) bool {
+func IsUserData(l *State, index int) bool {
 	_, ok := l.indexToValue(index).(*userData)
 	return ok
 }
 
-func (l *state) Arith(op int) {
+func Arith(l *State, op int) {
 	if op != OpUnaryMinus {
 		l.checkElementCount(2)
 	} else {
@@ -591,14 +490,14 @@ func (l *state) Arith(op int) {
 	l.top--
 }
 
-func (l *state) RawEqual(index1, index2 int) bool {
+func RawEqual(l *State, index1, index2 int) bool {
 	if o1, o2 := l.indexToValue(index1), l.indexToValue(index2); o1 != nil && o2 != nil {
 		return o1 == o2
 	}
 	return false
 }
 
-func (l *state) Compare(index1, index2, op int) bool {
+func Compare(l *State, index1, index2, op int) bool {
 	if o1, o2 := l.indexToValue(index1), l.indexToValue(index2); o1 != nil && o2 != nil {
 		switch op {
 		case OpEq:
@@ -614,18 +513,17 @@ func (l *state) Compare(index1, index2, op int) bool {
 	return false
 }
 
-func (l *state) ToNumber(index int) (float64, bool) {
-	return toNumber(l.indexToValue(index))
-}
+func ToNumber(l *State, index int) (float64, bool) { return toNumber(l.indexToValue(index)) }
+func ToBoolean(l *State, index int) bool           { return !isFalse(l.indexToValue(index)) }
 
-func (l *state) ToInteger(index int) (int, bool) {
+func ToInteger(l *State, index int) (int, bool) {
 	if n, ok := toNumber(l.indexToValue(index)); ok {
 		return int(n), true
 	}
 	return 0, false
 }
 
-func (l *state) ToUnsigned(index int) (uint, bool) {
+func ToUnsigned(l *State, index int) (uint, bool) {
 	if n, ok := toNumber(l.indexToValue(index)); ok {
 		const supUnsigned = float64(^uint(0)) + 1
 		return uint(n - math.Floor(n/supUnsigned)*supUnsigned), true
@@ -633,11 +531,7 @@ func (l *state) ToUnsigned(index int) (uint, bool) {
 	return 0, false
 }
 
-func (l *state) ToBoolean(index int) bool {
-	return !isFalse(l.indexToValue(index))
-}
-
-func (l *state) ToString(index int) (string, bool) {
+func ToString(l *State, index int) (string, bool) {
 	v := l.indexToValue(index)
 	if s, ok := v.(string); ok {
 		return s, true
@@ -645,7 +539,7 @@ func (l *state) ToString(index int) (string, bool) {
 	return toString(v)
 }
 
-func (l *state) RawLength(index int) int {
+func RawLength(l *State, index int) int {
 	switch v := l.indexToValue(index).(type) {
 	case string:
 		return len(v)
@@ -657,7 +551,7 @@ func (l *state) RawLength(index int) int {
 	return 0
 }
 
-func (l *state) ToGoFunction(index int) Function {
+func ToGoFunction(l *State, index int) Function {
 	switch v := l.indexToValue(index).(type) {
 	case Function:
 		return v
@@ -667,28 +561,28 @@ func (l *state) ToGoFunction(index int) Function {
 	return nil
 }
 
-func (l *state) ToUserData(index int) interface{} {
+func ToUserData(l *State, index int) interface{} {
 	if d, ok := l.indexToValue(index).(*userData); ok {
 		return d.data
 	}
 	return nil
 }
 
-func (l *state) ToThread(index int) State {
-	if t, ok := l.indexToValue(index).(*state); ok {
+func ToThread(l *State, index int) *State {
+	if t, ok := l.indexToValue(index).(*State); ok {
 		return t
 	}
 	return nil
 }
 
-func (l *state) ToValue(index int) interface{} {
+func ToValue(l *State, index int) interface{} {
 	v := l.indexToValue(index)
 	switch v := v.(type) {
 	case *table:
 	case *luaClosure:
 	case *goClosure:
 	case Function:
-	case *state:
+	case *State:
 	case *userData:
 		return v.data
 	default:
@@ -697,29 +591,18 @@ func (l *state) ToValue(index int) interface{} {
 	return v
 }
 
-func (l *state) PushNil() {
-	l.apiPush(nil)
-}
+func PushNil(l *State)               { l.apiPush(nil) }
+func PushNumber(l *State, n float64) { l.apiPush(n) }
+func PushInteger(l *State, n int)    { l.apiPush(float64(n)) }
+func PushUnsigned(l *State, n uint)  { l.apiPush(float64(n)) }
 
-func (l *state) PushNumber(n float64) {
-	l.apiPush(n)
-}
-
-func (l *state) PushInteger(n int) {
-	l.apiPush(float64(n))
-}
-
-func (l *state) PushUnsigned(n uint) {
-	l.apiPush(float64(n))
-}
-
-func (l *state) PushString(s string) string { // TODO is it useful to return the argument?
+func PushString(l *State, s string) string { // TODO is it useful to return the argument?
 	l.apiPush(s)
 	return s
 }
 
 // this function handles only %d, %c, %f, %p, and %s formats
-func (l *state) PushFString(format string, args ...interface{}) string {
+func PushFString(l *State, format string, args ...interface{}) string {
 	n, i := 0, 0
 	for {
 		e := strings.IndexRune(format, '%')
@@ -763,7 +646,7 @@ func (l *state) PushFString(format string, args ...interface{}) string {
 	return l.stack[l.top-1].(string)
 }
 
-func (l *state) PushGoClosure(function Function, n int) {
+func PushGoClosure(l *State, function Function, n int) {
 	if n == 0 {
 		l.apiPush(function)
 	} else {
@@ -776,58 +659,53 @@ func (l *state) PushGoClosure(function Function, n int) {
 	}
 }
 
-func (l *state) PushBoolean(b bool) {
-	l.apiPush(b)
-}
+func PushBoolean(l *State, b bool)              { l.apiPush(b) }
+func PushLightUserData(l *State, d interface{}) { l.apiPush(d) }
 
-func (l *state) PushLightUserData(d interface{}) {
-	l.apiPush(d)
-}
-
-func (l *state) PushThread() bool {
+func PushThread(l *State) bool {
 	l.apiPush(l)
 	return l.global.mainThread == l
 }
 
-func (l *state) Global(name string) {
+func Global(l *State, name string) {
 	g := l.global.registry.atInt(RegistryIndexGlobals)
 	l.push(name)
 	l.stack[l.top-1] = l.tableAt(g, l.stack[l.top-1])
 }
 
-func (l *state) Table(index int) {
+func Table(l *State, index int) {
 	l.stack[l.top-1] = l.tableAt(l.indexToValue(index), l.stack[l.top-1])
 }
 
-func (l *state) Field(index int, name string) {
+func Field(l *State, index int, name string) {
 	t := l.indexToValue(index)
 	l.apiPush(name)
 	l.stack[l.top-1] = l.tableAt(t, l.stack[l.top-1])
 }
 
-func (l *state) RawGet(index int) {
+func RawGet(l *State, index int) {
 	t, ok := l.indexToValue(index).(*table)
 	apiCheck(ok, "table expected")
 	l.stack[l.top-1] = t.at(l.stack[l.top-1])
 }
 
-func (l *state) RawGetInt(index, key int) {
+func RawGetInt(l *State, index, key int) {
 	t, ok := l.indexToValue(index).(*table)
 	apiCheck(ok, "table expected")
 	l.apiPush(t.atInt(key))
 }
 
-func (l *state) RawGetValue(index int, p interface{}) {
+func RawGetValue(l *State, index int, p interface{}) {
 	t, ok := l.indexToValue(index).(*table)
 	apiCheck(ok, "table expected")
 	l.apiPush(t.at(p))
 }
 
-func (l *state) CreateTable(arrayCount, recordCount int) {
+func CreateTable(l *State, arrayCount, recordCount int) {
 	l.apiPush(newTableWithSize(arrayCount, recordCount))
 }
 
-func (l *state) MetaTable(index int) bool {
+func MetaTable(l *State, index int) bool {
 	var mt *table
 	switch v := l.indexToValue(index).(type) {
 	case *table:
@@ -844,13 +722,13 @@ func (l *state) MetaTable(index int) bool {
 	return true
 }
 
-func (l *state) UserValue(index int) {
+func UserValue(l *State, index int) {
 	d, ok := l.indexToValue(index).(*userData)
 	apiCheck(ok, "userdata expected")
 	l.apiPush(d.env)
 }
 
-func (l *state) SetGlobal(name string) {
+func SetGlobal(l *State, name string) {
 	l.checkElementCount(1)
 	g := l.global.registry.atInt(RegistryIndexGlobals)
 	l.push(name)
@@ -858,7 +736,7 @@ func (l *state) SetGlobal(name string) {
 	l.top -= 2 // pop value and key
 }
 
-func (l *state) RawSet(index int) {
+func RawSet(l *State, index int) {
 	l.checkElementCount(2)
 	t, ok := l.stack[index].(*table)
 	apiCheck(ok, "table expected")
@@ -867,7 +745,7 @@ func (l *state) RawSet(index int) {
 	l.top -= 2
 }
 
-func (l *state) SetMetaTable(index int) {
+func SetMetaTable(l *State, index int) {
 	l.checkElementCount(1)
 	mt, ok := l.stack[l.top-1].(*table)
 	apiCheck(ok || l.stack[l.top-1] == nil, "table expected")
@@ -877,17 +755,17 @@ func (l *state) SetMetaTable(index int) {
 	case *userData:
 		v.metaTable = mt
 	default:
-		l.global.metaTables[l.Type(index)] = mt
+		l.global.metaTables[Type(l, index)] = mt
 	}
 	l.top--
 }
 
-func (l *state) Error() {
+func Error(l *State) {
 	l.checkElementCount(1)
 	l.errorMessage()
 }
 
-func (l *state) Next(index int) bool {
+func Next(l *State, index int) bool {
 	t, ok := l.indexToValue(index).(*table)
 	apiCheck(ok, "table expected")
 	if l.next(t, l.top-1) {
@@ -899,7 +777,7 @@ func (l *state) Next(index int) bool {
 	return false
 }
 
-func (l *state) Concat(n int) {
+func Concat(l *State, n int) {
 	l.checkElementCount(n)
 	if n >= 2 {
 		l.concat(n)
@@ -908,59 +786,25 @@ func (l *state) Concat(n int) {
 	} // else n == 1; nothing to do
 }
 
-func (l *state) Length(index int) {
+func Length(l *State, index int) {
 	l.apiPush(l.objectLength(l.indexToValue(index)))
 }
 
-func (l *state) Pop(n int) {
-	l.SetTop(-n - 1)
+func Pop(l *State, n int) { SetTop(l, -n-1) }
+func NewTable(l *State)   { CreateTable(l, 0, 0) }
+
+func Register(l *State, name string, f Function) {
+	PushGoFunction(l, f)
+	SetGlobal(l, name)
 }
 
-func (l *state) NewTable() {
-	l.CreateTable(0, 0)
-}
-
-func (l *state) Register(name string, f Function) {
-	l.PushGoFunction(f)
-	l.SetGlobal(name)
-}
-
-func (l *state) PushGoFunction(f Function) {
-	l.PushGoClosure(f, 0)
-}
-
-func (l *state) IsFunction(index int) bool {
-	return l.Type(index) == TypeFunction
-}
-
-func (l *state) IsTable(index int) bool {
-	return l.Type(index) == TypeTable
-}
-
-func (l *state) IsLightUserData(index int) bool {
-	return l.Type(index) == TypeLightUserData
-}
-
-func (l *state) IsNil(index int) bool {
-	return l.Type(index) == TypeNil
-}
-
-func (l *state) IsBoolean(index int) bool {
-	return l.Type(index) == TypeBoolean
-}
-
-func (l *state) IsThread(index int) bool {
-	return l.Type(index) == TypeThread
-}
-
-func (l *state) IsNone(index int) bool {
-	return l.Type(index) == TypeNone
-}
-
-func (l *state) IsNoneOrNil(index int) bool {
-	return l.Type(index) <= TypeNil
-}
-
-func (l *state) PushGlobalTable() {
-	l.RawGetInt(RegistryIndex, RegistryIndexGlobals)
-}
+func PushGoFunction(l *State, f Function)      { PushGoClosure(l, f, 0) }
+func IsFunction(l *State, index int) bool      { return Type(l, index) == TypeFunction }
+func IsTable(l *State, index int) bool         { return Type(l, index) == TypeTable }
+func IsLightUserData(l *State, index int) bool { return Type(l, index) == TypeLightUserData }
+func IsNil(l *State, index int) bool           { return Type(l, index) == TypeNil }
+func IsBoolean(l *State, index int) bool       { return Type(l, index) == TypeBoolean }
+func IsThread(l *State, index int) bool        { return Type(l, index) == TypeThread }
+func IsNone(l *State, index int) bool          { return Type(l, index) == TypeNone }
+func IsNoneOrNil(l *State, index int) bool     { return Type(l, index) <= TypeNil }
+func PushGlobalTable(l *State)                 { RawGetInt(l, RegistryIndex, RegistryIndexGlobals) }

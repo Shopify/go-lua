@@ -6,15 +6,15 @@ import (
 )
 
 // This is a temporary helper API until the Lua compiler is complete
-func BinaryTest(t *testing.T, fileName string, libs ...RegistryFunction) State {
+func BinaryTest(t *testing.T, fileName string, libs ...RegistryFunction) *State {
 	file, err := os.Open(fileName)
 	if err != nil {
 		t.Fatal("couldn't open " + fileName)
 	}
-	l := NewState().(*state)
+	l := NewState()
 	for _, lib := range libs {
 		Require(l, lib.Name, lib.Function, true)
-		l.Pop(1)
+		Pop(l, 1)
 	}
 	closure, err := l.undump(file, "test")
 	if err != nil {

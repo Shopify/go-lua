@@ -46,7 +46,7 @@ func TestUndump(t *testing.T) {
 	if err != nil {
 		t.Fatal("couldn't open checktable.bin")
 	}
-	l := NewState().(*state)
+	l := NewState()
 	closure, err := l.undump(file, "test")
 	if err != nil {
 		offset, _ := file.Seek(0, 1)
@@ -79,7 +79,7 @@ func validate(expected, actual interface{}, description string, t *testing.T) {
 }
 
 func expectErrorFromUndump(expected error, data interface{}, t *testing.T) {
-	l := NewState().(*state)
+	l := NewState()
 	_, err := l.undump(readerOn(data, t), "test")
 	if err != expected {
 		t.Error("expected", expected, "but got", err)

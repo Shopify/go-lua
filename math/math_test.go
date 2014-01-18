@@ -7,5 +7,5 @@ import (
 )
 
 func TestMath(t *testing.T) {
-	lua.BinaryTest(t, "math.bin", lua.RegistryFunction{"_G", base.Open}, lua.RegistryFunction{"math", Open}).Call(0, 0)
+	lua.Call(lua.BinaryTest(t, "math.bin", lua.RegistryFunction{"_G", base.Open}, lua.RegistryFunction{"math", Open}), 0, 0)
 }

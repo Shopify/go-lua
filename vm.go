@@ -6,7 +6,7 @@ import (
 	"strings"
 )
 
-func (l *state) arith(rb, rc value, op tm) value {
+func (l *State) arith(rb, rc value, op tm) value {
 	b, bok := toNumber(rb)
 	c, cok := toNumber(rc)
 	if bok && cok {
@@ -18,7 +18,7 @@ func (l *state) arith(rb, rc value, op tm) value {
 	return nil
 }
 
-func (l *state) tableAt(t value, key value) value {
+func (l *State) tableAt(t value, key value) value {
 	for loop := 0; loop < maxTagLoop; loop++ {
 		var tm value
 		if table, ok := t.(*table); ok {
@@ -39,7 +39,7 @@ func (l *state) tableAt(t value, key value) value {
 	return nil
 }
 
-func (l *state) setTableAt(t value, key value, val value) {
+func (l *State) setTableAt(t value, key value, val value) {
 	for loop := 0; loop < maxTagLoop; loop++ {
 		var tm value
 		if table, ok := t.(*table); ok {
@@ -67,7 +67,7 @@ func (l *state) setTableAt(t value, key value, val value) {
 	l.runtimeError("loop in setTable")
 }
 
-func (l *state) objectLength(v value) value {
+func (l *State) objectLength(v value) value {
 	var tm value
 	switch v := v.(type) {
 	case *table:
@@ -84,7 +84,7 @@ func (l *state) objectLength(v value) value {
 	return l.callTagMethod(tm.(*luaClosure), v, v)
 }
 
-func (l *state) equalTagMethod(mt1, mt2 *table, event tm) (c *luaClosure) {
+func (l *State) equalTagMethod(mt1, mt2 *table, event tm) (c *luaClosure) {
 	if tm1 := l.fastTagMethod(mt1, event); tm1 == nil { // no metamethod
 	} else if mt1 == mt2 { // same metatables => same metamethods
 		c = tm1.(*luaClosure)
@@ -95,7 +95,7 @@ func (l *state) equalTagMethod(mt1, mt2 *table, event tm) (c *luaClosure) {
 	return
 }
 
-func (l *state) equalObjects(t1, t2 value) bool {
+func (l *State) equalObjects(t1, t2 value) bool {
 	var tm *luaClosure
 	switch t1 := t1.(type) {
 	case *userData:
@@ -114,7 +114,7 @@ func (l *state) equalObjects(t1, t2 value) bool {
 	return tm != nil && !isFalse(l.callTagMethod(tm, t1, t2))
 }
 
-func (l *state) callBinaryTagMethod(p1, p2 value, event tm) (value, bool) {
+func (l *State) callBinaryTagMethod(p1, p2 value, event tm) (value, bool) {
 	tm := l.tagMethodByObject(p1, event)
 	if tm == nil {
 		tm = l.tagMethodByObject(p2, event)
@@ -125,12 +125,12 @@ func (l *state) callBinaryTagMethod(p1, p2 value, event tm) (value, bool) {
 	return l.callTagMethod(tm.(*luaClosure), p1, p2), true
 }
 
-func (l *state) callOrderTagMethod(left, right value, event tm) (bool, bool) {
+func (l *State) callOrderTagMethod(left, right value, event tm) (bool, bool) {
 	result, ok := l.callBinaryTagMethod(left, right, event)
 	return !isFalse(result), ok
 }
 
-func (l *state) lessThan(left, right value) bool {
+func (l *State) lessThan(left, right value) bool {
 	if lf, rf, ok := pairAsNumbers(left, right); ok {
 		return lf < rf
 	} else if ls, rs, ok := pairAsStrings(left, right); ok {
@@ -142,7 +142,7 @@ func (l *state) lessThan(left, right value) bool {
 	return false
 }
 
-func (l *state) lessOrEqual(left, right value) bool {
+func (l *State) lessOrEqual(left, right value) bool {
 	if lf, rf, ok := pairAsNumbers(left, right); ok {
 		return lf <= rf
 	} else if ls, rs, ok := pairAsStrings(left, right); ok {
@@ -156,7 +156,7 @@ func (l *state) lessOrEqual(left, right value) bool {
 	return false
 }
 
-func (l *state) concat(total int) {
+func (l *State) concat(total int) {
 	t := func(i int) value { return l.stack[l.top-i] }
 	put := func(i int, v value) { l.stack[l.top-i] = v }
 	concatTagMethod := func() {
@@ -198,10 +198,10 @@ func (l *state) concat(total int) {
 	}
 }
 
-func (l *state) traceExecution() { // TODO
+func (l *State) traceExecution() { // TODO
 }
 
-func (l *state) execute() {
+func (l *State) execute() {
 	var frame []value
 	var closure *luaClosure
 	var constants []value

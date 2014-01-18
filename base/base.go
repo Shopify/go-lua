@@ -7,33 +7,33 @@ import (
 	"strconv"
 )
 
-func print(l lua.State) int {
-	n := l.Top()
-	l.Global("tostring")
+func print(l *lua.State) int {
+	n := lua.Top(l)
+	lua.Global(l, "tostring")
 	for i := 1; i <= n; i++ {
-		l.PushValue(-1) // function to be called
-		l.PushValue(i)  // value to print
-		l.Call(1, 1)
-		s, ok := l.ToString(-1)
+		lua.PushValue(l, -1) // function to be called
+		lua.PushValue(l, i)  // value to print
+		lua.Call(l, 1, 1)
+		s, ok := lua.ToString(l, -1)
 		if !ok {
-			lua.Error(l, "'tostring' must return a string to 'print'")
+			lua.Errorf(l, "'tostring' must return a string to 'print'")
 			panic("unreachable")
 		}
 		if i > 1 {
 			os.Stdout.WriteString("\t")
 		}
 		os.Stdout.WriteString(s)
-		l.Pop(1) // pop result
+		lua.Pop(l, 1) // pop result
 	}
 	os.Stdout.WriteString("\n")
 	os.Stdout.Sync()
 	return 0
 }
 
-func toNumber(l lua.State) int {
-	if l.IsNoneOrNil(2) { // standard conversion
-		if n, ok := l.ToNumber(1); ok {
-			l.PushNumber(n)
+func toNumber(l *lua.State) int {
+	if lua.IsNoneOrNil(l, 2) { // standard conversion
+		if n, ok := lua.ToNumber(l, 1); ok {
+			lua.PushNumber(l, n)
 			return 1
 		}
 		lua.CheckAny(l, 1)
@@ -42,159 +42,159 @@ func toNumber(l lua.State) int {
 		base := lua.CheckInteger(l, 2)
 		lua.ArgumentCheck(l, 2 <= base && base <= 36, 2, "base out of range")
 		if i, err := strconv.ParseInt(s, base, 64); err == nil { // TODO strings.TrimSpace(s)?
-			l.PushNumber(float64(i))
+			lua.PushNumber(l, float64(i))
 			return 1
 		}
 	}
-	l.PushNil()
+	lua.PushNil(l)
 	return 1
 }
 
-func error(l lua.State) int {
+func error(l *lua.State) int {
 	level := lua.OptInteger(l, 2, 1)
-	l.SetTop(1)
-	if l.IsString(1) && level > 0 {
+	lua.SetTop(l, 1)
+	if lua.IsString(l, 1) && level > 0 {
 		lua.Where(l, level)
-		l.PushValue(1)
-		l.Concat(2)
+		lua.PushValue(l, 1)
+		lua.Concat(l, 2)
 	}
-	l.Error()
+	lua.Error(l)
 	panic("unreachable")
 }
 
-func collectGarbage(l lua.State) int {
+func collectGarbage(l *lua.State) int {
 	switch opt, _ := lua.OptString(l, 1, "collect"), lua.OptInteger(l, 2, 0); opt {
 	case "collect":
 		runtime.GC()
-		l.PushInteger(0)
+		lua.PushInteger(l, 0)
 	case "step":
 		runtime.GC()
-		l.PushBoolean(true)
+		lua.PushBoolean(l, true)
 	case "count":
 		var stats runtime.MemStats
 		runtime.ReadMemStats(&stats)
-		l.PushNumber(float64(stats.HeapAlloc >> 10))
-		l.PushInteger(int(stats.HeapAlloc & 0x3ff))
+		lua.PushNumber(l, float64(stats.HeapAlloc>>10))
+		lua.PushInteger(l, int(stats.HeapAlloc&0x3ff))
 		return 2
 	default:
-		l.PushInteger(-1)
+		lua.PushInteger(l, -1)
 	}
 	return 1
 }
 
-func metaTable(l lua.State) int {
+func metaTable(l *lua.State) int {
 	lua.CheckAny(l, 1)
-	if !l.MetaTable(1) {
-		l.PushNil()
+	if !lua.MetaTable(l, 1) {
+		lua.PushNil(l)
 		return 1
 	}
 	lua.MetaField(l, 1, "__metatable")
 	return 1
 }
 
-func setMetaTable(l lua.State) int {
-	t := l.Type(2)
+func setMetaTable(l *lua.State) int {
+	t := lua.Type(l, 2)
 	lua.CheckType(l, 1, lua.TypeTable)
 	lua.ArgumentCheck(l, t == lua.TypeNil || t == lua.TypeTable, 2, "nil or table expected")
 	if lua.MetaField(l, 1, "__metatable") {
-		lua.Error(l, "cannot change a protected metatable")
+		lua.Errorf(l, "cannot change a protected metatable")
 	}
-	l.SetTop(2)
-	l.SetMetaTable(1)
+	lua.SetTop(l, 2)
+	lua.SetMetaTable(l, 1)
 	return 1
 }
 
-func rawEqual(l lua.State) int {
+func rawEqual(l *lua.State) int {
 	lua.CheckAny(l, 1)
 	lua.CheckAny(l, 2)
-	l.PushBoolean(l.RawEqual(1, 2))
+	lua.PushBoolean(l, lua.RawEqual(l, 1, 2))
 	return 1
 }
 
-func rawLength(l lua.State) int {
-	t := l.Type(1)
+func rawLength(l *lua.State) int {
+	t := lua.Type(l, 1)
 	lua.ArgumentCheck(l, t == lua.TypeTable || t == lua.TypeString, 1, "table or string expected")
-	l.PushInteger(l.RawLength(1))
+	lua.PushInteger(l, lua.RawLength(l, 1))
 	return 1
 }
 
-func rawGet(l lua.State) int {
+func rawGet(l *lua.State) int {
 	lua.CheckType(l, 1, lua.TypeTable)
 	lua.CheckAny(l, 2)
-	l.SetTop(2)
-	l.RawGet(1)
+	lua.SetTop(l, 2)
+	lua.RawGet(l, 1)
 	return 1
 }
 
-func rawSet(l lua.State) int {
+func rawSet(l *lua.State) int {
 	lua.CheckType(l, 1, lua.TypeTable)
 	lua.CheckAny(l, 2)
 	lua.CheckAny(l, 3)
-	l.SetTop(3)
-	l.RawSet(1)
+	lua.SetTop(l, 3)
+	lua.RawSet(l, 1)
 	return 1
 }
 
-func _type(l lua.State) int {
+func _type(l *lua.State) int {
 	lua.CheckAny(l, 1)
-	l.PushString(l.TypeName(1))
+	lua.PushString(l, lua.TypeName(l, 1))
 	return 1
 }
 
-func next(l lua.State) int {
+func next(l *lua.State) int {
 	lua.CheckType(l, 1, lua.TypeTable)
-	l.SetTop(2)
-	if l.Next(1) {
+	lua.SetTop(l, 2)
+	if lua.Next(l, 1) {
 		return 2
 	}
-	l.PushNil()
+	lua.PushNil(l)
 	return 1
 }
 
 func pairs(method string, isZero bool, iter lua.Function) lua.Function {
-	return func(l lua.State) int {
+	return func(l *lua.State) int {
 		if !lua.MetaField(l, 1, method) { // no metamethod?
 			lua.CheckType(l, 1, lua.TypeTable) // argument must be a table
-			l.PushGoFunction(iter)             // will return generator,
-			l.PushValue(1)                     // state,
+			lua.PushGoFunction(l, iter)        // will return generator,
+			lua.PushValue(l, 1)                // state,
 			if isZero {                        // and initial value
-				l.PushInteger(0)
+				lua.PushInteger(l, 0)
 			} else {
-				l.PushNil()
+				lua.PushNil(l)
 			}
 		} else {
-			l.PushValue(1) // argument 'self' to metamethod
-			l.Call(1, 3)   // get 3 values from metamethod
+			lua.PushValue(l, 1) // argument 'self' to metamethod
+			lua.Call(l, 1, 3)   // get 3 values from metamethod
 		}
 		return 3
 	}
 }
 
-func intPairs(l lua.State) int {
+func intPairs(l *lua.State) int {
 	i := lua.CheckInteger(l, 2)
 	lua.CheckType(l, 1, lua.TypeTable)
 	i++ // next value
-	l.PushInteger(i)
-	l.RawGetInt(1, i)
-	if l.IsNil(-1) {
+	lua.PushInteger(l, i)
+	lua.RawGetInt(l, 1, i)
+	if lua.IsNil(l, -1) {
 		return 1
 	}
 	return 2
 }
 
-func assert(l lua.State) int {
-	if !l.ToBoolean(1) {
-		lua.Error(l, "%s", lua.OptString(l, 2, "assertion failed!"))
+func assert(l *lua.State) int {
+	if !lua.ToBoolean(l, 1) {
+		lua.Errorf(l, "%s", lua.OptString(l, 2, "assertion failed!"))
 		panic("unreachable")
 	}
-	return l.Top()
+	return lua.Top(l)
 }
 
-func _select(l lua.State) int {
-	n := l.Top()
-	if l.Type(1) == lua.TypeString {
-		if s, _ := l.ToString(1); s[0] == '#' {
-			l.PushInteger(n - 1)
+func _select(l *lua.State) int {
+	n := lua.Top(l)
+	if lua.Type(l, 1) == lua.TypeString {
+		if s, _ := lua.ToString(l, 1); s[0] == '#' {
+			lua.PushInteger(l, n-1)
 			return 1
 		}
 	}
@@ -208,40 +208,40 @@ func _select(l lua.State) int {
 	return n - i
 }
 
-func finishProtectedCall(l lua.State, status bool) int {
-	if !l.CheckStack(1) {
-		l.SetTop(0) // create space for return values
-		l.PushBoolean(false)
-		l.PushString("stack overflow")
+func finishProtectedCall(l *lua.State, status bool) int {
+	if !lua.CheckStack(l, 1) {
+		lua.SetTop(l, 0) // create space for return values
+		lua.PushBoolean(l, false)
+		lua.PushString(l, "stack overflow")
 		return 2 // return false, message
 	}
-	l.PushBoolean(status) // first result (status)
-	l.Replace(1)          // put first result in the first slot
-	return l.Top()
+	lua.PushBoolean(l, status) // first result (status)
+	lua.Replace(l, 1)          // put first result in the first slot
+	return lua.Top(l)
 }
 
-func protectedCallContinuation(l lua.State) int {
-	s, _ := l.Context()
+func protectedCallContinuation(l *lua.State) int {
+	s, _ := lua.Context(l)
 	return finishProtectedCall(l, s == lua.Yield)
 }
 
-func protectedCall(l lua.State) int {
+func protectedCall(l *lua.State) int {
 	lua.CheckAny(l, 1)
-	l.PushNil()
-	l.Insert(1) // create space for status result
-	return finishProtectedCall(l, lua.Ok == l.ProtectedCallWithContinuation(l.Top()-2, lua.MultipleReturns, 0, 0, protectedCallContinuation))
+	lua.PushNil(l)
+	lua.Insert(l, 1) // create space for status result
+	return finishProtectedCall(l, lua.Ok == lua.ProtectedCallWithContinuation(l, lua.Top(l)-2, lua.MultipleReturns, 0, 0, protectedCallContinuation))
 }
 
-func protectedCallX(l lua.State) int {
-	n := l.Top()
+func protectedCallX(l *lua.State) int {
+	n := lua.Top(l)
 	lua.ArgumentCheck(l, n >= 2, 2, "value expected")
-	l.PushValue(1) // exchange function and error handler
-	l.Copy(2, 1)
-	l.Replace(2)
-	return finishProtectedCall(l, lua.Ok == l.ProtectedCallWithContinuation(n-2, lua.MultipleReturns, 1, 0, protectedCallContinuation))
+	lua.PushValue(l, 1) // exchange function and error handler
+	lua.Copy(l, 2, 1)
+	lua.Replace(l, 2)
+	return finishProtectedCall(l, lua.Ok == lua.ProtectedCallWithContinuation(l, n-2, lua.MultipleReturns, 1, 0, protectedCallContinuation))
 }
 
-func toString(l lua.State) int {
+func toString(l *lua.State) int {
 	lua.CheckAny(l, 1)
 	lua.ToString(l, 1)
 	return 1
@@ -272,12 +272,12 @@ var baseFunctions = []lua.RegistryFunction{
 	{"xpcall", protectedCallX},
 }
 
-func Open(l lua.State) int {
-	l.PushGlobalTable()
-	l.PushGlobalTable()
-	l.SetField(-2, "_G")
+func Open(l *lua.State) int {
+	lua.PushGlobalTable(l)
+	lua.PushGlobalTable(l)
+	lua.SetField(l, -2, "_G")
 	lua.SetFunctions(l, baseFunctions, 0)
-	l.PushString(lua.Version)
-	l.SetField(-2, "_VERSION")
+	lua.PushString(l, lua.VersionString)
+	lua.SetField(l, -2, "_VERSION")
 	return 1
 }

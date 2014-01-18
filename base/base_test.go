@@ -6,5 +6,5 @@ import (
 )
 
 func TestBase(t *testing.T) {
-	lua.BinaryTest(t, "base.bin", lua.RegistryFunction{"_G", Open}).Call(0, 0)
+	lua.Call(lua.BinaryTest(t, "base.bin", lua.RegistryFunction{"_G", Open}), 0, 0)
 }

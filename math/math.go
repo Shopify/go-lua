@@ -9,83 +9,83 @@ import (
 const radiansPerDegree = math.Pi / 180.0
 
 func unaryOp(f func(float64) float64) lua.Function {
-	return func(l lua.State) int {
-		l.PushNumber(f(lua.CheckNumber(l, 1)))
+	return func(l *lua.State) int {
+		lua.PushNumber(l, f(lua.CheckNumber(l, 1)))
 		return 1
 	}
 }
 
 func binaryOp(f func(float64, float64) float64) lua.Function {
-	return func(l lua.State) int {
-		l.PushNumber(f(lua.CheckNumber(l, 1), lua.CheckNumber(l, 2)))
+	return func(l *lua.State) int {
+		lua.PushNumber(l, f(lua.CheckNumber(l, 1), lua.CheckNumber(l, 2)))
 		return 1
 	}
 }
 
-func modf(l lua.State) int {
+func modf(l *lua.State) int {
 	i, f := math.Modf(lua.CheckNumber(l, 1))
-	l.PushNumber(i)
-	l.PushNumber(f)
+	lua.PushNumber(l, i)
+	lua.PushNumber(l, f)
 	return 2
 }
 
-func log(l lua.State) int {
+func log(l *lua.State) int {
 	x := lua.CheckNumber(l, 1)
-	if l.IsNoneOrNil(2) {
-		l.PushNumber(math.Log(x))
+	if lua.IsNoneOrNil(l, 2) {
+		lua.PushNumber(l, math.Log(x))
 	} else if base := lua.CheckNumber(l, 2); base == 10.0 {
-		l.PushNumber(math.Log10(x))
+		lua.PushNumber(l, math.Log10(x))
 	} else {
-		l.PushNumber(math.Log(x) / math.Log(base))
+		lua.PushNumber(l, math.Log(x)/math.Log(base))
 	}
 	return 1
 }
 
-func frexp(l lua.State) int {
+func frexp(l *lua.State) int {
 	f, e := math.Frexp(lua.CheckNumber(l, 1))
-	l.PushNumber(f)
-	l.PushInteger(e)
+	lua.PushNumber(l, f)
+	lua.PushInteger(l, e)
 	return 2
 }
 
-func ldexp(l lua.State) int {
+func ldexp(l *lua.State) int {
 	x, e := lua.CheckNumber(l, 1), lua.CheckInteger(l, 2)
-	l.PushNumber(math.Ldexp(x, e))
+	lua.PushNumber(l, math.Ldexp(x, e))
 	return 1
 }
 
 func reduce(f func(float64, float64) float64) lua.Function {
-	return func(l lua.State) int {
-		n := l.Top() // number of arguments
+	return func(l *lua.State) int {
+		n := lua.Top(l) // number of arguments
 		v := lua.CheckNumber(l, 1)
 		for i := 2; i <= n; i++ {
 			v = f(v, lua.CheckNumber(l, i))
 		}
-		l.PushNumber(v)
+		lua.PushNumber(l, v)
 		return 1
 	}
 }
 
-func random(l lua.State) int {
+func random(l *lua.State) int {
 	r := rand.Float64()
-	switch l.Top() {
+	switch lua.Top(l) {
 	case 0: // no arguments
-		l.PushNumber(r)
+		lua.PushNumber(l, r)
 	case 1: // upper limit only
 		u := lua.CheckNumber(l, 1)
 		lua.ArgumentCheck(l, 1.0 <= u, 1, "interval is empty")
-		l.PushNumber(math.Floor(r*u) + 1.0) // [1, u]
+		lua.PushNumber(l, math.Floor(r*u)+1.0) // [1, u]
 	case 2: // lower and upper limits
 		lo, u := lua.CheckNumber(l, 1), lua.CheckNumber(l, 2)
 		lua.ArgumentCheck(l, lo <= u, 2, "interval is empty")
-		l.PushNumber(math.Floor(r*(u-lo+1)) + lo) // [lo, u]
+		lua.PushNumber(l, math.Floor(r*(u-lo+1))+lo) // [lo, u]
 	default:
-		lua.Error(l, "wrong number of arguments")
+		lua.Errorf(l, "wrong number of arguments")
 	}
 	return 1
 }
 
-func randomseed(l lua.State) int {
+func randomseed(l *lua.State) int {
 	rand.Seed(int64(lua.CheckUnsigned(l, 1)))
 	rand.Float64() // discard first value to avoid undesirable correlations
 	return 0
@@ -121,11 +121,11 @@ var mathLibrary = []lua.RegistryFunction{
 	{"tan", unaryOp(math.Tan)},
 }
 
-func Open(l lua.State) int {
+func Open(l *lua.State) int {
 	lua.NewLibrary(l, mathLibrary)
-	l.PushNumber(3.1415926535897932384626433832795) // TODO use math.Pi instead? Values differ.
-	l.SetField(-2, "pi")
-	l.PushNumber(math.MaxFloat64)
-	l.SetField(-2, "huge")
+	lua.PushNumber(l, 3.1415926535897932384626433832795) // TODO use math.Pi instead? Values differ.
+	lua.SetField(l, -2, "pi")
+	lua.PushNumber(l, math.MaxFloat64)
+	lua.SetField(l, -2, "huge")
 	return 1
 }

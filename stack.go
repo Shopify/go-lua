@@ -1,11 +1,11 @@
 package lua
 
-func (l *state) push(v value) {
+func (l *State) push(v value) {
 	l.stack[l.top] = v
 	l.top++
 }
 
-func (l *state) pop() value {
+func (l *State) pop() value {
 	l.top--
 	return l.stack[l.top]
 }
@@ -54,7 +54,7 @@ func (c *goClosure) upValueCount() int {
 	return len(c.upValues)
 }
 
-func (l *state) newUpValue() *upValue {
+func (l *State) newUpValue() *upValue {
 	return &upValue{home: nil}
 }
 
@@ -100,13 +100,13 @@ type openUpValue struct {
 	next    *openUpValue
 }
 
-func (l *state) newUpValueAt(level int) *upValue {
+func (l *State) newUpValueAt(level int) *upValue {
 	uv := &upValue{home: stackLocation{state: l, index: level}}
 	l.upValues = &openUpValue{upValue: uv, next: l.upValues}
 	return uv
 }
 
-func (l *state) close(level int) {
+func (l *State) close(level int) {
 	for e := l.upValues; e != nil; e = e.next {
 		if e.upValue.isInStackBelow(level) {
 			l.upValues = e
@@ -186,7 +186,7 @@ func (ci *commonCallInfo) isCallStatus(flag callStatus) bool {
 	return ci.callStatus_&flag != 0
 }
 
-func (ci *commonCallInfo) initialize(l *state, function, top, resultCount int, callStatus callStatus) {
+func (ci *commonCallInfo) initialize(l *State, function, top, resultCount int, callStatus callStatus) {
 	ci.function_ = function
 	ci.top_ = top
 	l.assert(ci.top() <= l.stackLast)
@@ -242,7 +242,7 @@ func (ci *goCallInfo) isLua() bool {
 	return false
 }
 
-func (l *state) pushLuaFrame(function, base, resultCount int, p *prototype) *luaCallInfo {
+func (l *State) pushLuaFrame(function, base, resultCount int, p *prototype) *luaCallInfo {
 	ci, _ := l.callInfo.next().(*luaCallInfo)
 	if ci == nil {
 		ci = &luaCallInfo{}
@@ -259,7 +259,7 @@ func (l *state) pushLuaFrame(function, base, resultCount int, p *prototype) *lua
 	return ci
 }
 
-func (l *state) pushGoFrame(function, resultCount int) {
+func (l *State) pushGoFrame(function, resultCount int) {
 	ci, _ := l.callInfo.next().(*goCallInfo)
 	if ci == nil {
 		ci = &goCallInfo{}
@@ -285,11 +285,11 @@ func (ci *luaCallInfo) jump(offset int) {
 	ci.savedPC += pc(offset)
 }
 
-func (l *state) newLuaClosure(p *prototype) *luaClosure {
+func (l *State) newLuaClosure(p *prototype) *luaClosure {
 	return &luaClosure{prototype: p, upValues: make([]*upValue, len(p.upValues))}
 }
 
-func (l *state) findUpValue(level int) *upValue {
+func (l *State) findUpValue(level int) *upValue {
 	for e := l.upValues; e != nil; e = e.next {
 		if e.upValue.isInStackAt(level) {
 			return e.upValue
@@ -298,7 +298,7 @@ func (l *state) findUpValue(level int) *upValue {
 	return l.newUpValueAt(level)
 }
 
-func (l *state) newClosure(p *prototype, upValues []*upValue, base int) value {
+func (l *State) newClosure(p *prototype, upValues []*upValue, base int) value {
 	c := l.newLuaClosure(p)
 	p.cache = c
 	for i, uv := range p.upValues {
@@ -325,7 +325,7 @@ func cached(p *prototype, upValues []*upValue, base int) *luaClosure {
 	return c
 }
 
-func (l *state) callGo(f value, function int, resultCount int) {
+func (l *State) callGo(f value, function int, resultCount int) {
 	l.checkStack(MinStack)
 	l.pushGoFrame(function, resultCount)
 	if l.hookMask&MaskCall != 0 {
@@ -338,11 +338,11 @@ func (l *state) callGo(f value, function int, resultCount int) {
 	case Function:
 		n = f(l)
 	}
-	l.ApiCheckStackSpace(n)
+	ApiCheckStackSpace(l, n)
 	l.postCall(l.top - n)
 }
 
-func (l *state) preCall(function int, resultCount int) bool {
+func (l *State) preCall(function int, resultCount int) bool {
 	for {
 		switch f := l.stack[function].(type) {
 		case *goClosure:
@@ -387,7 +387,7 @@ func (l *state) preCall(function int, resultCount int) bool {
 	panic("unreachable")
 }
 
-func (l *state) callHook(ci *luaCallInfo) {
+func (l *State) callHook(ci *luaCallInfo) {
 	ci.savedPC++ // hooks assume 'pc' is already incremented
 	if pci, ok := ci.previous().(*luaCallInfo); ok && pci.code[pci.savedPC-1].opCode() == opTailCall {
 		ci.setCallStatus(callStatusTail)
@@ -398,7 +398,7 @@ func (l *state) callHook(ci *luaCallInfo) {
 	ci.savedPC-- // correct 'pc'
 }
 
-func (l *state) adjustVarArgs(p *prototype, argCount int) int {
+func (l *State) adjustVarArgs(p *prototype, argCount int) int {
 	fixedArgCount := p.parameterCount
 	l.assert(argCount >= fixedArgCount)
 	// move fixed parameters to final position
@@ -412,7 +412,7 @@ func (l *state) adjustVarArgs(p *prototype, argCount int) int {
 	return base
 }
 
-func (l *state) postCall(firstResult int) bool {
+func (l *State) postCall(firstResult int) bool {
 	ci := l.callInfo.(callInfo)
 	if l.hookMask&MaskReturn != 0 {
 		l.hook(HookReturn, -1)
@@ -438,7 +438,7 @@ func (l *state) postCall(firstResult int) bool {
 // Call a Go or Lua function. The function to be called is at function.
 // The arguments are on the stack, right after the function. On return, all the
 // results are on the stack, starting at the original function position.
-func (l *state) call(function int, resultCount int, allowYield bool) {
+func (l *State) call(function int, resultCount int, allowYield bool) {
 	if l.nestedGoCallCount++; l.nestedGoCallCount == maxCallCount {
 		l.runtimeError("Go stack overflow")
 	} else if l.nestedGoCallCount >= maxCallCount+maxCallCount>>3 {
@@ -456,12 +456,12 @@ func (l *state) call(function int, resultCount int, allowYield bool) {
 	l.nestedGoCallCount--
 }
 
-func (l *state) throw(errorCode Status) {
+func (l *State) throw(errorCode Status) {
 	// TODO
 	panic(errorCode)
 }
 
-func (l *state) hook(event, line int) {
+func (l *State) hook(event, line int) {
 	if l.hooker == nil || !l.allowHook {
 		return
 	}
@@ -482,7 +482,7 @@ func (l *state) hook(event, line int) {
 	ci.clearCallStatus(callStatusHooked)
 }
 
-func (l *state) initializeStack() {
+func (l *State) initializeStack() {
 	l.stack = make([]value, basicStackSize)
 	l.stackLast = basicStackSize - extraStack
 	l.top++
@@ -492,13 +492,13 @@ func (l *state) initializeStack() {
 	l.callInfo = ci
 }
 
-func (l *state) checkStack(n int) {
+func (l *State) checkStack(n int) {
 	if l.stackLast-l.top <= n {
 		l.growStack(n)
 	}
 }
 
-func (l *state) reallocStack(newSize int) {
+func (l *State) reallocStack(newSize int) {
 	l.assert(newSize <= maxStack || newSize == errorStackSize)
 	l.assert(l.stackLast == len(l.stack)-extraStack)
 	l.stack = append(l.stack, make([]value, newSize-len(l.stack))...)
@@ -512,7 +512,7 @@ func (l *state) reallocStack(newSize int) {
 	}
 }
 
-func (l *state) growStack(n int) {
+func (l *State) growStack(n int) {
 	if len(l.stack) > maxStack { // error after extra size?
 		l.throw(ErrorError)
 	} else {

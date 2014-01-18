@@ -67,7 +67,7 @@ func (events *table) tagMethod(event tm, name string) value {
 	return tm
 }
 
-func (l *state) tagMethodByObject(o value, event tm) value {
+func (l *State) tagMethodByObject(o value, event tm) value {
 	var mt *table
 	switch o := o.(type) {
 	case table:
@@ -83,7 +83,7 @@ func (l *state) tagMethodByObject(o value, event tm) value {
 	return mt.atString(l.global.tagMethodNames[event])
 }
 
-func (l *state) callTagMethod(f *luaClosure, p1, p2 value) value {
+func (l *State) callTagMethod(f *luaClosure, p1, p2 value) value {
 	l.push(f)
 	l.push(p1)
 	l.push(p2)
@@ -91,7 +91,7 @@ func (l *state) callTagMethod(f *luaClosure, p1, p2 value) value {
 	return l.pop()
 }
 
-func (l *state) callTagMethodV(f *luaClosure, p1, p2, p3 value) {
+func (l *State) callTagMethodV(f *luaClosure, p1, p2, p3 value) {
 	l.push(f)
 	l.push(p1)
 	l.push(p2)

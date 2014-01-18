@@ -61,7 +61,7 @@ type upValueDesc struct {
 }
 
 type stackLocation struct {
-	state *state
+	state *State
 	index int
 }
 

@@ -1,32 +1,32 @@
 package lua
 
-func (l *state) runtimeError(message string) { // TODO
+func (l *State) runtimeError(message string) { // TODO
 	panic("runtimeError")
 }
 
-func (l *state) typeError(v value, message string) { // TODO
+func (l *State) typeError(v value, message string) { // TODO
 	panic("typeError")
 }
 
-func (l *state) orderError(left, right value) { // TODO
+func (l *State) orderError(left, right value) { // TODO
 	panic("orderError")
 }
 
-func (l *state) arithError(v1, v2 value) { // TODO
+func (l *State) arithError(v1, v2 value) { // TODO
 	panic("arithError")
 }
 
-func (l *state) concatError(v1, v2 value) { // TODO
+func (l *State) concatError(v1, v2 value) { // TODO
 	panic("concatError")
 }
 
-func (l *state) assert(cond bool) {
+func (l *State) assert(cond bool) {
 	if !cond {
 		l.runtimeError("assertion failure")
 	}
 }
 
-func (l *state) errorMessage() {
+func (l *State) errorMessage() {
 	if l.errorFunction != 0 { // is there an error handling function?
 		if errorFunction, ok := l.stack[l.errorFunction].(*luaClosure); ok {
 			l.stack[l.top] = l.stack[l.top-1] // move argument
@@ -40,7 +40,7 @@ func (l *state) errorMessage() {
 	l.throw(RuntimeError)
 }
 
-func (l *state) Stack(level int, activationRecord *Debug) (ok bool) {
+func Stack(l *State, level int, activationRecord *Debug) (ok bool) {
 	if level < 0 {
 		return // invalid (negative) level
 	}
@@ -53,7 +53,7 @@ func (l *state) Stack(level int, activationRecord *Debug) (ok bool) {
 	return
 }
 
-func (l *state) Info(what string, activationRecord *Debug) bool {
+func Info(l *State, what string, activationRecord *Debug) bool {
 	var f closure
 	var callInfo callInfo
 	if what[0] == '>' {

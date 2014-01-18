@@ -32,7 +32,7 @@ func (t *table) invalidateTagMethodCache() {
 	t.flags = 0
 }
 
-func (l *state) fastTagMethod(table *table, event tm) value {
+func (l *State) fastTagMethod(table *table, event tm) value {
 	if table == nil || table.flags&1<<event != 0 {
 		return nil
 	}
@@ -144,7 +144,7 @@ func arrayIndex(k value) int {
 	return -1
 }
 
-func (l *state) next(t *table, key int) bool {
+func (l *State) next(t *table, key int) bool {
 	i, k := 0, l.stack[key]
 	if k == nil { // first iteration
 	} else if i = arrayIndex(k); 0 < i && i <= len(t.array) {

@@ -65,7 +65,7 @@ type token struct {
 }
 
 type scanner struct {
-	l                    *state
+	l                    *State
 	buffer               bytes.Buffer
 	r                    *strings.Reader
 	current              rune

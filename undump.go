@@ -282,7 +282,7 @@ func (state *loadState) checkHeader() error {
 	return errIncompatible
 }
 
-func (l *state) undump(in io.Reader, name string) (c *luaClosure, err error) {
+func (l *State) undump(in io.Reader, name string) (c *luaClosure, err error) {
 	if name[0] == '@' || name[0] == '=' {
 		name = name[1:]
 	} else if name[0] == Signature[0] {
