@@ -336,6 +336,87 @@ func (p *parser) assignment(t *assignmentTarget, variableCount int) {
 	p.function.StoreVariable(t.exprDesc, makeExpression(kindNonRelocatable, p.function.freeRegisterCount-1))
 }
 
+func (p *parser) forBody(base, line, n int, isNumeric bool) {
+	p.function.AdjustLocalVariables(3)
+	p.checkNext(string(tkDo))
+	// TODO following down to p.block() belongs in a *function method
+	var prep int
+	if isNumeric {
+		prep = p.function.EncodeAsBx(opForPrep, base, noJump)
+	} else {
+		prep = p.function.Jump()
+	}
+	p.function.EnterBlock(false)
+	p.function.AdjustLocalVariables(n)
+	p.function.ReserveRegisters(n)
+	p.block()
+	// TODO following belongs in a *function method
+	p.function.LeaveBlock()
+	p.function.PatchToHere(prep)
+	var end int
+	if isNumeric {
+		end = p.function.EncodeAsBx(opForLoop, base, noJump)
+	} else {
+		p.function.EncodeABC(opTForCall, base, 0, n)
+		p.function.FixLine(line)
+		end = p.function.EncodeAsBx(opTForLoop, base+2, noJump)
+	}
+	p.function.PatchList(end, prep+1)
+	p.function.FixLine(line)
+}
+
+func (p *parser) forNumeric(name string, line int) {
+	expr := func() { p.assert(p.function.ExpressionToNextRegister(p.expression()).kind == kindNonRelocatable) }
+	base := p.function.freeRegisterCount
+	p.function.MakeLocalVariable("(for index)")
+	p.function.MakeLocalVariable("(for limit)")
+	p.function.MakeLocalVariable("(for step)")
+	p.function.MakeLocalVariable(name)
+	p.checkNext("=")
+	expr()
+	p.checkNext(",")
+	expr()
+	if p.testNext(',') {
+		expr()
+	} else {
+		p.function.EncodeConstant(p.function.freeRegisterCount, p.function.NumberConstant(1))
+		p.function.ReserveRegisters(1)
+	}
+	p.forBody(base, line, 1, true)
+}
+
+func (p *parser) forList(name string) {
+	n, base := 4, p.function.freeRegisterCount
+	p.function.MakeLocalVariable("(for generator)")
+	p.function.MakeLocalVariable("(for state)")
+	p.function.MakeLocalVariable("(for control)")
+	p.function.MakeLocalVariable(name)
+	for ; p.testNext(','); n++ {
+		p.function.MakeLocalVariable(p.checkName())
+	}
+	p.checkNext(string(tkIn))
+	line := p.lineNumber
+	e, c := p.expressionList()
+	p.function.AdjustAssignment(3, c, e)
+	p.function.CheckStack(3)
+	p.forBody(base, line, n-3, false)
+}
+
+func (p *parser) forStatement(line int) {
+	p.function.EnterBlock(true)
+	p.next()
+	switch name := p.checkName(); p.t {
+	case '=':
+		p.forNumeric(name, line)
+	case ',':
+		p.forList(name)
+	default:
+		p.syntaxError("'=' or 'in' expected")
+	}
+	p.checkMatch(tkEnd, tkFor, line)
+	p.function.LeaveBlock()
+}
+
 func (p *parser) testThenBlock(escapes int) int {
 	var jumpFalse int
 	p.next()
@@ -553,7 +634,7 @@ func (p *parser) statement() {
 		p.block()
 		p.checkMatch(tkEnd, tkDo, line)
 	case tkFor:
-		// p.forStatement(line)
+		p.forStatement(line)
 	case tkRepeat:
 		p.repeatStatement(line)
 	case tkFunction:
