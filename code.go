@@ -13,8 +13,9 @@ const (
 )
 
 const (
-	noJump     = -1
-	noRegister = maxArgA
+	noJump            = -1
+	noRegister        = maxArgA
+	maxLocalVariables = 200
 )
 
 const (
@@ -96,6 +97,21 @@ type function struct {
 	firstLocal             int
 }
 
+func (f *function) OpenFunction(line int) {
+	f.f.prototypes = append(f.f.prototypes, prototype{source: f.p.source, maxStackSize: 2, lineDefined: line})
+	f.p.function = &function{f: &f.f.prototypes[len(f.f.prototypes)-1], h: newTable(), previous: f, p: f.p, jumpPC: noJump, firstLocal: len(f.p.activeVariables)}
+	f.p.function.EnterBlock(false)
+}
+
+func (f *function) CloseFunction() exprDesc {
+	e := f.previous.ExpressionToNextRegister(makeExpression(kindRelocatable, f.previous.EncodeABx(opClosure, 0, len(f.previous.f.prototypes)-1)))
+	f.ReturnNone()
+	f.LeaveBlock()
+	f.assert(f.block == nil)
+	f.p.function = f.previous
+	return e
+}
+
 func (f *function) EnterBlock(isLoop bool) {
 	// TODO www.lua.org uses a trick here to stack allocate the block, and chain blocks in the stack
 	f.block = &block{previous: f.block, firstLabel: len(f.p.activeLabels), firstGoto: len(f.p.pendingGotos), activeVariableCount: f.activeVariableCount, isLoop: isLoop}
@@ -110,10 +126,30 @@ func (f *function) undefinedGotoError(g label) {
 	}
 }
 
-func (f *function) localVariable(i int) localVariable {
+func (f *function) localVariable(i int) *localVariable {
 	index := f.p.activeVariables[f.firstLocal+i]
 	f.assert(index < f.localVariableCount)
-	return f.f.localVariables[index]
+	return &f.f.localVariables[index]
+}
+
+func (f *function) AdjustLocalVariables(n int) {
+	for f.activeVariableCount += n; n != 0; n-- {
+		f.localVariable(f.activeVariableCount - n).startPC = pc(f.pc)
+	}
+}
+
+func (f *function) removeLocalVariables(level int) {
+	for i := level; i < f.activeVariableCount; i++ {
+		f.localVariable(i).endPC = pc(f.pc)
+	}
+	f.p.activeVariables = f.p.activeVariables[:len(f.p.activeVariables)-(f.activeVariableCount-level)]
+}
+
+func (f *function) MakeLocalVariable(name string) {
+	r := len(f.f.localVariables)
+	f.f.localVariables = append(f.f.localVariables, localVariable{name: name})
+	f.p.checkLimit(len(f.p.activeVariables)+1-f.firstLocal, maxLocalVariables, "local variables")
+	f.p.activeVariables = append(f.p.activeVariables, r)
 }
 
 func (f *function) MakeGoto(name string, line, pc int) {
@@ -179,6 +215,10 @@ func (f *function) moveGotosOut(b block) {
 	}
 }
 
+func (f *function) breakLabel() {
+	f.FindGotos(f.MakeLabel("break", 0))
+}
+
 func (f *function) LeaveBlock() {
 	b := f.block
 	if b.previous != nil && b.hasUpValue { // create a 'jump to here' to close upvalues
@@ -187,10 +227,10 @@ func (f *function) LeaveBlock() {
 		f.PatchToHere(j)
 	}
 	if b.isLoop {
-		// f.breakLabel() // close pending breaks
+		f.breakLabel() // close pending breaks
 	}
 	f.block = b.previous
-	// f.removeVariables(b.activeVariableCount)
+	f.removeLocalVariables(b.activeVariableCount)
 	f.assert(b.activeVariableCount == f.activeVariableCount)
 	f.freeRegisterCount = f.activeVariableCount
 	f.p.activeLabels = f.p.activeLabels[:b.firstLabel]
@@ -928,7 +968,7 @@ func (f *function) AdjustAssignment(variableCount, expressionCount int, e exprDe
 			f.ReserveRegisters(extra - 1)
 		}
 	} else {
-		if e.kind != kindVoid {
+		if expressionCount > 0 {
 			_ = f.ExpressionToNextRegister(e)
 		}
 		if extra > 0 {

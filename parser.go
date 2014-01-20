@@ -13,7 +13,6 @@ type parser struct {
 	pendingGotos, activeLabels []label
 	source, environment        string
 	decimalPoint               rune
-	// TODO buffer for tokens
 }
 
 func (p *parser) checkCondition(c bool, message string) {
@@ -109,7 +108,7 @@ func (p *parser) functionArguments(f exprDesc, line int) exprDesc {
 		}
 		p.checkMatch(')', '(', line)
 	case '{':
-		// args = p.constructor()
+		args = p.constructor()
 	case tkString:
 		args = p.function.EncodeString(p.s)
 		p.next()
@@ -182,11 +181,11 @@ func (p *parser) simpleExpression() (e exprDesc) {
 		p.checkCondition(p.function.isVarArg, "cannot use '...' outside a vararg function")
 		e = makeExpression(kindVarArg, p.function.EncodeABC(opVarArg, 0, 1, 0))
 	case '{':
-		// e = p.constructor()
+		e = p.constructor()
 		return
 	case tkFunction:
 		p.next()
-		// TODO e = p.body(false, p.lineNumber)
+		e = p.body(false, p.lineNumber)
 		return
 	default:
 		e = p.suffixedExpression()
@@ -446,6 +445,81 @@ func (p *parser) labelStatement(label string, line int) {
 	p.function.FindGotos(l)
 }
 
+func (p *parser) parameterList() {
+	n, varArg := 0, false
+	if p.t != ')' {
+		for first := true; first || (!varArg && p.testNext(',')); first = false {
+			switch p.t {
+			case tkName:
+				p.function.MakeLocalVariable(p.checkName())
+				n++
+			case tkDots:
+				p.next()
+				varArg = true
+			default:
+				p.syntaxError("<name> or '...' expected")
+			}
+		}
+	}
+	// TODO the following lines belong in a *function method
+	p.function.AdjustLocalVariables(n)
+	p.function.f.parameterCount = p.function.activeVariableCount
+	p.function.ReserveRegisters(p.function.activeVariableCount)
+}
+
+func (p *parser) body(isMethod bool, line int) exprDesc {
+	p.function.OpenFunction(line)
+	p.checkNext("(")
+	if isMethod {
+		p.function.MakeLocalVariable("self")
+		p.function.AdjustLocalVariables(1)
+	}
+	p.parameterList()
+	p.checkNext(")")
+	p.statementList()
+	p.function.f.lastLineDefined = p.lineNumber
+	p.checkMatch(tkEnd, tkFunction, line)
+	return p.function.CloseFunction()
+}
+
+func (p *parser) functionName() (e exprDesc, isMethod bool) {
+	for e = p.singleVariable(); p.t == '.'; e = p.fieldSelector(e) {
+	}
+	if p.t == ':' {
+		e, isMethod = p.fieldSelector(e), true
+	}
+	return
+}
+
+func (p *parser) functionStatement(line int) {
+	p.next()
+	v, m := p.functionName()
+	p.function.StoreVariable(v, p.body(m, line))
+	p.function.FixLine(line)
+}
+
+func (p *parser) localFunction() {
+	p.function.MakeLocalVariable(p.checkName())
+	p.function.AdjustLocalVariables(1)
+	p.function.localVariable(p.body(false, p.lineNumber).info).startPC = pc(p.function.pc)
+}
+
+func (p *parser) localStatement() {
+	v := 0
+	for first := true; first || p.testNext(','); v++ {
+		p.function.MakeLocalVariable(p.checkName())
+		first = false
+	}
+	if p.testNext('=') {
+		e, n := p.expressionList()
+		p.function.AdjustAssignment(v, n, e)
+	} else {
+		var e exprDesc
+		p.function.AdjustAssignment(v, 0, e)
+	}
+	p.function.AdjustLocalVariables(v)
+}
+
 func (p *parser) expressionStatement() {
 	if e := p.suffixedExpression(); p.t == '=' || p.t == ',' {
 		p.assignment(&assignmentTarget{exprDesc: e}, 1)
@@ -483,13 +557,13 @@ func (p *parser) statement() {
 	case tkRepeat:
 		p.repeatStatement(line)
 	case tkFunction:
-		// p.functionStatement(line)
+		p.functionStatement(line)
 	case tkLocal:
 		p.next()
 		if p.testNext(tkFunction) {
-			// p.localFunction()
+			p.localFunction()
 		} else {
-			// p.localStatement()
+			p.localStatement()
 		}
 	case tkDoubleColon:
 		p.next()
