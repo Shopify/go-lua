@@ -16,8 +16,6 @@ type parser struct {
 	// TODO buffer for tokens
 }
 
-func (p *parser) syntaxError(message string) { p.scanError(message, p.t) }
-
 func (p *parser) checkCondition(c bool, message string) {
 	if !c {
 		p.syntaxError(message)
@@ -41,17 +39,13 @@ func (p *parser) checkLimit(val, limit int, what string) {
 	}
 }
 
+func (p *parser) syntaxError(message string)      { p.scanError(message, p.t) }
 func (p *parser) checkNameAsExpression() exprDesc { return p.function.EncodeString(p.checkName()) }
-
-func (p *parser) singleVariable() exprDesc { return p.function.SingleVariable(p.checkName()) }
-
+func (p *parser) singleVariable() exprDesc        { return p.function.SingleVariable(p.checkName()) }
+func (p *parser) leaveLevel()                     { p.l.nestedGoCallCount-- }
 func (p *parser) enterLevel() {
 	p.l.nestedGoCallCount++
 	p.checkLimit(p.l.nestedGoCallCount, maxCallCount, "Go levels")
-}
-
-func (p *parser) leaveLevel() {
-	p.l.nestedGoCallCount--
 }
 
 func (p *parser) expressionList() (e exprDesc, n int) {
@@ -59,6 +53,46 @@ func (p *parser) expressionList() (e exprDesc, n int) {
 		_ = p.function.ExpressionToNextRegister(e)
 	}
 	return
+}
+
+func (p *parser) field(tableRegister, a, h, pending int, e exprDesc) (int, int, int, exprDesc) {
+	freeRegisterCount := p.function.freeRegisterCount
+	hashField := func(k exprDesc) {
+		h++
+		p.checkNext("=")
+		p.function.FlushFieldToConstructor(tableRegister, freeRegisterCount, k, p.expression)
+	}
+	switch {
+	case p.t == tkName && p.lookAhead() == '=':
+		p.checkLimit(h, maxInt, "items in a constructor")
+		hashField(p.checkNameAsExpression())
+	case p.t == '[':
+		hashField(p.index())
+	default:
+		e = p.expression()
+		p.checkLimit(a, maxInt, "items in a constructor")
+		a++
+		pending++
+	}
+	return a, h, pending, e
+}
+
+func (p *parser) constructor() exprDesc {
+	pc, t := p.function.OpenConstructor()
+	line, a, h, pending := p.lineNumber, 0, 0, 0
+	var e exprDesc
+	if p.checkNext("{"); p.t != '}' {
+		for a, h, pending, e = p.field(t.info, a, h, pending, e); (p.testNext(',') || p.testNext(';')) && p.t != '}'; {
+			if e.kind != kindVoid {
+				pending = p.function.FlushToConstructor(t.info, pending, a, e)
+				e.kind = kindVoid
+			}
+			a, h, pending, e = p.field(t.info, a, h, pending, e)
+		}
+	}
+	p.checkMatch('}', '{', line)
+	p.function.CloseConstructor(pc, t.info, pending, a, h, e)
+	return t
 }
 
 func (p *parser) functionArguments(f exprDesc, line int) exprDesc {
@@ -111,9 +145,8 @@ func (p *parser) primaryExpression() (e exprDesc) {
 	return
 }
 
-func (p *parser) suffixedExpression() (e exprDesc) {
-	line := p.lineNumber
-	e = p.primaryExpression()
+func (p *parser) suffixedExpression() exprDesc {
+	line, e := p.lineNumber, p.primaryExpression()
 	for {
 		switch p.t {
 		case '.':
@@ -126,7 +159,7 @@ func (p *parser) suffixedExpression() (e exprDesc) {
 		case '(', tkString, '{':
 			e = p.functionArguments(p.function.ExpressionToNextRegister(e), line)
 		default:
-			return
+			return e
 		}
 	}
 	panic("unreachable")

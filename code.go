@@ -995,3 +995,42 @@ func (f *function) SingleVariable(name string) (e exprDesc) {
 	}
 	return
 }
+
+func (f *function) OpenConstructor() (pc int, t exprDesc) {
+	pc = f.EncodeABC(opNewTable, 0, 0, 0)
+	t = f.ExpressionToNextRegister(makeExpression(kindRelocatable, pc))
+	return
+}
+
+func (f *function) FlushFieldToConstructor(tableRegister, freeRegisterCount int, k exprDesc, v func() exprDesc) {
+	_, rk := f.ExpressionToRegisterOrConstant(k)
+	_, rv := f.ExpressionToRegisterOrConstant(v())
+	f.EncodeABC(opSetTable, tableRegister, rk, rv)
+	f.freeRegisterCount = freeRegisterCount
+}
+
+func (f *function) FlushToConstructor(tableRegister, pending, arrayCount int, e exprDesc) int {
+	f.ExpressionToNextRegister(e)
+	if pending == listItemsPerFlush {
+		f.SetList(tableRegister, arrayCount, listItemsPerFlush)
+		pending = 0
+	}
+	return pending
+}
+
+func (f *function) CloseConstructor(pc, tableRegister, pending, arrayCount, hashCount int, e exprDesc) {
+	if pending != 0 {
+		if e.hasMultipleReturns() {
+			f.SetReturns(e, MultipleReturns)
+			f.SetList(tableRegister, arrayCount, MultipleReturns)
+			arrayCount--
+		} else {
+			if e.kind != kindVoid {
+				f.ExpressionToNextRegister(e)
+			}
+			f.SetList(tableRegister, arrayCount, pending)
+		}
+	}
+	f.f.code[pc].setB(int(float8FromInt(arrayCount)))
+	f.f.code[pc].setC(int(float8FromInt(hashCount)))
+}
