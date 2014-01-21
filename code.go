@@ -54,6 +54,23 @@ const (
 	kindVarArg         // info = instruction pc
 )
 
+// var kinds []string = []string{
+// 	"void",
+// 	"nil",
+// 	"true",
+// 	"false",
+// 	"constant",
+// 	"number",
+// 	"nonrelocatable",
+// 	"local",
+// 	"upvalue",
+// 	"indexed",
+// 	"jump",
+// 	"relocatable",
+// 	"call",
+// 	"vararg",
+// }
+
 type exprDesc struct {
 	kind      int
 	index     int // register/constant index
@@ -89,11 +106,9 @@ type function struct {
 	p                      *parser
 	block                  *block
 	pc, jumpPC, lastTarget int
-	isVarArg               bool
 	constants              []value
 	freeRegisterCount      int
 	activeVariableCount    int
-	localVariableCount     int
 	firstLocal             int
 }
 
@@ -128,7 +143,6 @@ func (f *function) undefinedGotoError(g label) {
 
 func (f *function) localVariable(i int) *localVariable {
 	index := f.p.activeVariables[f.firstLocal+i]
-	f.assert(index < f.localVariableCount)
 	return &f.f.localVariables[index]
 }
 
@@ -143,6 +157,7 @@ func (f *function) removeLocalVariables(level int) {
 		f.localVariable(i).endPC = pc(f.pc)
 	}
 	f.p.activeVariables = f.p.activeVariables[:len(f.p.activeVariables)-(f.activeVariableCount-level)]
+	f.activeVariableCount = level
 }
 
 func (f *function) MakeLocalVariable(name string) {
@@ -291,7 +306,7 @@ func (f *function) Encode(i instruction) int {
 	f.f.code = append(f.f.code, i) // TODO check that we always only append
 	f.f.lineInfo = append(f.f.lineInfo, int32(f.p.lastLine))
 	f.pc++
-	return f.pc
+	return f.pc - 1
 }
 
 func (f *function) EncodeABC(op opCode, a, b, c int) int {
@@ -745,7 +760,7 @@ func (f *function) jumpOnCondition(e exprDesc, cond int) int {
 			return f.conditionalJump(opTest, i.b(), 0, not(cond))
 		}
 	}
-	f.dischargeToAnyRegister(e)
+	e = f.dischargeToAnyRegister(e)
 	f.freeExpression(e)
 	return f.conditionalJump(opTestSet, noRegister, e.info, cond)
 }
@@ -1028,9 +1043,10 @@ func singleVariableHelper(f *function, name string, base bool) (e exprDesc, foun
 }
 
 func (f *function) SingleVariable(name string) (e exprDesc) {
-	if e, found := singleVariableHelper(f, name, true); !found {
-		e, _ = singleVariableHelper(f, f.p.environment, true)
-		f.assert(e.kind == kindLocal || e.kind == kindUpValue)
+	var found bool
+	if e, found = singleVariableHelper(f, name, true); !found {
+		e, found = singleVariableHelper(f, "_ENV", true)
+		f.assert(found && (e.kind == kindLocal || e.kind == kindUpValue))
 		e = f.Indexed(e, f.EncodeString(name))
 	}
 	return

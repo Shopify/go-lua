@@ -8,11 +8,8 @@ import (
 type parser struct {
 	scanner
 	function                   *function
-	r                          io.Reader
 	activeVariables            []int
 	pendingGotos, activeLabels []label
-	source, environment        string
-	decimalPoint               rune
 }
 
 func (p *parser) checkCondition(c bool, message string) {
@@ -38,7 +35,11 @@ func (p *parser) checkLimit(val, limit int, what string) {
 	}
 }
 
-func (p *parser) syntaxError(message string)      { p.scanError(message, p.t) }
+func (p *parser) checkNext(t rune) {
+	p.check(t)
+	p.next()
+}
+
 func (p *parser) checkNameAsExpression() exprDesc { return p.function.EncodeString(p.checkName()) }
 func (p *parser) singleVariable() exprDesc        { return p.function.SingleVariable(p.checkName()) }
 func (p *parser) leaveLevel()                     { p.l.nestedGoCallCount-- }
@@ -58,7 +59,7 @@ func (p *parser) field(tableRegister, a, h, pending int, e exprDesc) (int, int, 
 	freeRegisterCount := p.function.freeRegisterCount
 	hashField := func(k exprDesc) {
 		h++
-		p.checkNext("=")
+		p.checkNext('=')
 		p.function.FlushFieldToConstructor(tableRegister, freeRegisterCount, k, p.expression)
 	}
 	switch {
@@ -80,7 +81,7 @@ func (p *parser) constructor() exprDesc {
 	pc, t := p.function.OpenConstructor()
 	line, a, h, pending := p.lineNumber, 0, 0, 0
 	var e exprDesc
-	if p.checkNext("{"); p.t != '}' {
+	if p.checkNext('{'); p.t != '}' {
 		for a, h, pending, e = p.field(t.info, a, h, pending, e); (p.testNext(',') || p.testNext(';')) && p.t != '}'; {
 			if e.kind != kindVoid {
 				pending = p.function.FlushToConstructor(t.info, pending, a, e)
@@ -178,7 +179,7 @@ func (p *parser) simpleExpression() (e exprDesc) {
 	case tkFalse:
 		e = makeExpression(kindFalse, 0)
 	case tkDots:
-		p.checkCondition(p.function.isVarArg, "cannot use '...' outside a vararg function")
+		p.checkCondition(p.function.f.isVarArg, "cannot use '...' outside a vararg function")
 		e = makeExpression(kindVarArg, p.function.EncodeABC(opVarArg, 0, 1, 0))
 	case '{':
 		e = p.constructor()
@@ -269,7 +270,7 @@ func (p *parser) subExpression(limit int) (e exprDesc, op int) {
 		p.next()
 		e = p.function.Infix(op, e)
 		e2, next := p.subExpression(priority[op].right)
-		p.function.Postfix(op, e, e2, line)
+		e = p.function.Postfix(op, e, e2, line)
 		op = next
 	}
 	p.leaveLevel()
@@ -310,7 +311,7 @@ func (p *parser) fieldSelector(e exprDesc) exprDesc {
 func (p *parser) index() exprDesc {
 	p.next() // skip '['
 	e := p.function.ExpressionToValue(p.expression())
-	p.checkNext("]")
+	p.checkNext(']')
 	return e
 }
 
@@ -323,7 +324,7 @@ func (p *parser) assignment(t *assignmentTarget, variableCount int) {
 		p.checkLimit(variableCount+p.l.nestedGoCallCount, maxCallCount, "Go levels")
 		p.assignment(&assignmentTarget{previous: t, exprDesc: e}, variableCount+1)
 	} else {
-		p.checkNext("=")
+		p.checkNext('=')
 		if e, n := p.expressionList(); n != variableCount {
 			if p.function.AdjustAssignment(variableCount, n, e); n > variableCount {
 				p.function.freeRegisterCount -= n - variableCount // remove extra values
@@ -338,7 +339,7 @@ func (p *parser) assignment(t *assignmentTarget, variableCount int) {
 
 func (p *parser) forBody(base, line, n int, isNumeric bool) {
 	p.function.AdjustLocalVariables(3)
-	p.checkNext(string(tkDo))
+	p.checkNext(tkDo)
 	// TODO following down to p.block() belongs in a *function method
 	var prep int
 	if isNumeric {
@@ -372,9 +373,9 @@ func (p *parser) forNumeric(name string, line int) {
 	p.function.MakeLocalVariable("(for limit)")
 	p.function.MakeLocalVariable("(for step)")
 	p.function.MakeLocalVariable(name)
-	p.checkNext("=")
+	p.checkNext('=')
 	expr()
-	p.checkNext(",")
+	p.checkNext(',')
 	expr()
 	if p.testNext(',') {
 		expr()
@@ -394,7 +395,7 @@ func (p *parser) forList(name string) {
 	for ; p.testNext(','); n++ {
 		p.function.MakeLocalVariable(p.checkName())
 	}
-	p.checkNext(string(tkIn))
+	p.checkNext(tkIn)
 	line := p.lineNumber
 	e, c := p.expressionList()
 	p.function.AdjustAssignment(3, c, e)
@@ -421,7 +422,7 @@ func (p *parser) testThenBlock(escapes int) int {
 	var jumpFalse int
 	p.next()
 	e := p.expression()
-	p.checkNext(string(tkThen))
+	p.checkNext(tkThen)
 	if p.t == tkGoto || p.t == tkBreak {
 		e = p.function.GoIfFalse(e)
 		p.function.EnterBlock(false)
@@ -468,7 +469,7 @@ func (p *parser) whileStatement(line int) {
 	p.next()
 	top, conditionExit := p.function.Label(), p.condition()
 	p.function.EnterBlock(true)
-	p.checkNext(string(tkDo))
+	p.checkNext(tkDo)
 	p.block()
 	p.function.JumpTo(top)
 	p.checkMatch(tkEnd, tkWhile, line)
@@ -517,7 +518,7 @@ func (p *parser) skipEmptyStatements() {
 
 func (p *parser) labelStatement(label string, line int) {
 	p.function.CheckRepeatedLabel(label)
-	p.checkNext(string(tkDoubleColon))
+	p.checkNext(tkDoubleColon)
 	l := p.function.MakeLabel(label, line)
 	p.skipEmptyStatements()
 	if p.blockFollow(false) {
@@ -527,22 +528,23 @@ func (p *parser) labelStatement(label string, line int) {
 }
 
 func (p *parser) parameterList() {
-	n, varArg := 0, false
+	n, isVarArg := 0, false
 	if p.t != ')' {
-		for first := true; first || (!varArg && p.testNext(',')); first = false {
+		for first := true; first || (!isVarArg && p.testNext(',')); first = false {
 			switch p.t {
 			case tkName:
 				p.function.MakeLocalVariable(p.checkName())
 				n++
 			case tkDots:
 				p.next()
-				varArg = true
+				isVarArg = true
 			default:
 				p.syntaxError("<name> or '...' expected")
 			}
 		}
 	}
 	// TODO the following lines belong in a *function method
+	p.function.f.isVarArg = isVarArg
 	p.function.AdjustLocalVariables(n)
 	p.function.f.parameterCount = p.function.activeVariableCount
 	p.function.ReserveRegisters(p.function.activeVariableCount)
@@ -550,13 +552,13 @@ func (p *parser) parameterList() {
 
 func (p *parser) body(isMethod bool, line int) exprDesc {
 	p.function.OpenFunction(line)
-	p.checkNext("(")
+	p.checkNext('(')
 	if isMethod {
 		p.function.MakeLocalVariable("self")
 		p.function.AdjustLocalVariables(1)
 	}
 	p.parameterList()
-	p.checkNext(")")
+	p.checkNext(')')
 	p.statementList()
 	p.function.f.lastLineDefined = p.lineNumber
 	p.checkMatch(tkEnd, tkFunction, line)
@@ -660,4 +662,33 @@ func (p *parser) statement() {
 	p.assert(p.function.f.maxStackSize >= p.function.freeRegisterCount && p.function.freeRegisterCount >= p.function.activeVariableCount)
 	p.function.freeRegisterCount = p.function.activeVariableCount
 	p.leaveLevel()
+}
+
+func (p *parser) mainFunction() {
+	p.function.EnterBlock(false)
+	p.function.makeUpValue("_ENV", makeExpression(kindLocal, 0))
+	p.next()
+	p.statementList()
+	p.check(tkEOS)
+	p.function.ReturnNone()
+	p.function.LeaveBlock()
+	p.assert(p.function.block == nil)
+	p.function = p.function.previous
+}
+
+func (l *State) parse(r io.RuneReader, name string) *luaClosure {
+	p := &parser{scanner: scanner{r: r, lineNumber: 1, lastLine: 1, lookAheadToken: token{t: tkEOS}, l: l, source: name}}
+	f := &function{f: &prototype{source: name, maxStackSize: 2, isVarArg: true}, h: newTable(), p: p, jumpPC: noJump}
+	p.function = f
+	defer func() {
+		if x := recover(); x != nil {
+			p.syntaxError(fmt.Sprintf("%s", x))
+			panic(x)
+		}
+	}()
+	p.mainFunction()
+	// TODO assertions about parser state
+	c := l.newLuaClosure(f.f)
+	l.push(c)
+	return c
 }

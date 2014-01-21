@@ -2,6 +2,8 @@ package lua
 
 import (
 	"bytes"
+	"fmt"
+	"io"
 	"math"
 	"strconv"
 	"strings"
@@ -67,20 +69,41 @@ type token struct {
 type scanner struct {
 	l                    *State
 	buffer               bytes.Buffer
-	r                    *strings.Reader
+	r                    io.RuneReader
 	current              rune
 	lineNumber, lastLine int
+	source               string
+	lookAheadToken       token
 	token
-	lookAheadToken token
 }
 
 func (s *scanner) assert(cond bool) {
 	s.l.assert(cond)
 }
 
+func (s *scanner) tokenToString(t rune) string {
+	switch {
+	case t == tkName || t == tkString:
+		return s.s
+	case t == tkNumber:
+		return fmt.Sprintf("%f", s.n)
+	case t < firstReserved:
+		return string(t) // TODO check for printable rune
+	case t < tkEOS:
+		return fmt.Sprintf("'%s'", tokens[t-firstReserved])
+	}
+	return tokens[t-firstReserved]
+}
+
 func (s *scanner) scanError(message string, token rune) {
-	// TODO
-	s.l.throw(SyntaxError)
+	if token != 0 {
+		message = fmt.Sprintf("%s:%d: %s near %s", s.source, s.lineNumber, message, s.tokenToString(token))
+	} else {
+		message = fmt.Sprintf("%s:%d: %s", s.source, s.lineNumber, message)
+	}
+	panic(message)
+	// s.l.push(message)
+	// s.l.throw(SyntaxError)
 }
 
 func (s *scanner) syntaxError(message string) {
@@ -268,6 +291,7 @@ func (s *scanner) readNumber() token {
 		_ = s.readDigits()
 	}
 	f, err := strconv.ParseFloat(s.buffer.String(), bits64)
+	s.buffer.Reset()
 	if err != nil {
 		s.numberError()
 	}
@@ -502,8 +526,7 @@ func (l *scanner) testNext(t rune) (r bool) {
 }
 
 func (l *scanner) errorExpected(t rune) {
-	// TODO
-	panic("unreachable")
+	l.syntaxError(l.tokenToString(t) + " expected")
 }
 
 func (l *scanner) check(t rune) {
@@ -512,13 +535,12 @@ func (l *scanner) check(t rune) {
 	}
 }
 
-func (l *scanner) checkMatch(what rune, who, where int) {
+func (l *scanner) checkMatch(what, who rune, where int) {
 	if !l.testNext(what) {
 		if where == l.lineNumber {
 			l.errorExpected(what)
 		} else {
-			// TODO
-			panic("unreachable")
+			l.syntaxError(fmt.Sprintf("%s expected (to close %s at line %d)", l.tokenToString(what), l.tokenToString(who), where))
 		}
 	}
 }

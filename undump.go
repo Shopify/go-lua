@@ -287,9 +287,8 @@ func (l *State) undump(in io.Reader, name string) (c *luaClosure, err error) {
 		name = name[1:]
 	} else if name[0] == Signature[0] {
 		name = "binary string"
-	} else {
-		name = name
 	}
+	// TODO assign name to p.source?
 	s := &loadState{in, endianness()}
 	var p prototype
 	if err = s.checkHeader(); err != nil {
