@@ -131,6 +131,7 @@ func mask1(n, p uint) instruction { return ^(^instruction(0) << n) << p }
 // creates a mask with 'n' 0 bits at position 'p'
 func mask0(n, p uint) instruction { return ^mask1(n, p) }
 
+func (i instruction) String() string         { return opNames[i.opCode()] }
 func (i instruction) opCode() opCode         { return opCode(i >> posOp & mask1(sizeOp, 0)) }
 func (i instruction) arg(pos, size uint) int { return int(i >> pos & mask1(size, 0)) }
 func (i *instruction) setOpCode(op opCode)   { i.setArg(posOp, sizeOp, int(op)) }

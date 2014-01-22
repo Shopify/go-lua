@@ -106,7 +106,6 @@ type function struct {
 	p                      *parser
 	block                  *block
 	pc, jumpPC, lastTarget int
-	constants              []value
 	freeRegisterCount      int
 	activeVariableCount    int
 	firstLocal             int
@@ -504,13 +503,13 @@ func (f *function) Concatenate(l1, l2 int) int {
 
 func (f *function) addConstant(k, v value) (index int) {
 	if old, ok := f.h.at(k).(float64); ok {
-		if index = int(old); f.constants[index] == v {
+		if index = int(old); f.f.constants[index] == v {
 			return
 		}
 	}
-	index = len(f.constants)
+	index = len(f.f.constants)
 	f.h.put(k, float64(index))
-	f.constants = append(f.constants, v)
+	f.f.constants = append(f.f.constants, v)
 	return
 }
 
@@ -664,7 +663,7 @@ func (f *function) ExpressionToNextRegister(e exprDesc) exprDesc {
 
 func (f *function) ExpressionToAnyRegister(e exprDesc) exprDesc {
 	if e = f.DischargeVariables(e); e.kind == kindNonRelocatable {
-		if e.hasJumps() {
+		if !e.hasJumps() {
 			return e
 		}
 		if e.info >= f.activeVariableCount {
@@ -691,12 +690,12 @@ func (f *function) ExpressionToValue(e exprDesc) exprDesc {
 func (f *function) ExpressionToRegisterOrConstant(e exprDesc) (exprDesc, int) {
 	switch e = f.ExpressionToValue(e); e.kind {
 	case kindTrue, kindFalse:
-		if len(f.constants) <= maxIndexRK {
+		if len(f.f.constants) <= maxIndexRK {
 			e.info, e.kind = f.booleanConstant(e.kind == kindTrue), kindConstant
 			return e, asConstant(e.info)
 		}
 	case kindNil:
-		if len(f.constants) <= maxIndexRK {
+		if len(f.f.constants) <= maxIndexRK {
 			e.info, e.kind = f.nilConstant(), kindConstant
 			return e, asConstant(e.info)
 		}
