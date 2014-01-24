@@ -2,9 +2,7 @@ package lua
 
 // Test assumptions about how Go works
 
-import (
-	"testing"
-)
+import "testing"
 
 func TestStringCompare(t *testing.T) {
 	s1 := "hello\x00world"
@@ -32,5 +30,3 @@ func TestReslicing(t *testing.T) {
 		t.Error("cap(s) != len(s)")
 	}
 }
-
-/* go test */

@@ -30,33 +30,13 @@ type goClosure struct {
 	upValues []value
 }
 
-func (c *luaClosure) upValue(i int) value {
-	return c.upValues[i].value()
-}
-
-func (c *luaClosure) setUpValue(i int, v value) {
-	c.upValues[i].setValue(v)
-}
-
-func (c *luaClosure) upValueCount() int {
-	return len(c.upValues)
-}
-
-func (c *goClosure) upValue(i int) value {
-	return c.upValues[i]
-}
-
-func (c *goClosure) setUpValue(i int, v value) {
-	c.upValues[i] = v
-}
-
-func (c *goClosure) upValueCount() int {
-	return len(c.upValues)
-}
-
-func (l *State) newUpValue() *upValue {
-	return &upValue{home: nil}
-}
+func (c *luaClosure) upValue(i int) value       { return c.upValues[i].value() }
+func (c *luaClosure) setUpValue(i int, v value) { c.upValues[i].setValue(v) }
+func (c *luaClosure) upValueCount() int         { return len(c.upValues) }
+func (c *goClosure) upValue(i int) value        { return c.upValues[i] }
+func (c *goClosure) setUpValue(i int, v value)  { c.upValues[i] = v }
+func (c *goClosure) upValueCount() int          { return len(c.upValues) }
+func (l *State) newUpValue() *upValue           { return &upValue{home: nil} }
 
 func (uv *upValue) setValue(v value) {
 	if home, ok := uv.home.(stackLocation); ok {
@@ -141,89 +121,11 @@ type commonCallInfo struct {
 	callStatus_      callStatus
 }
 
-func (ci *commonCallInfo) top() int {
-	return ci.top_
-}
-
-func (ci *commonCallInfo) setTop(top int) {
-	ci.top_ = top
-}
-
-func (ci *commonCallInfo) next() callInfo {
-	return ci.next_
-}
-
-func (ci *commonCallInfo) previous() callInfo {
-	return ci.previous_
-}
-
-func (ci *commonCallInfo) push(nci callInfo) callInfo {
-	ci.next_ = nci
-	return nci
-}
-
-func (ci *commonCallInfo) function() int {
-	return ci.function_
-}
-
-func (ci *commonCallInfo) resultCount() int {
-	return ci.resultCount_
-}
-
-func (ci *commonCallInfo) callStatus() callStatus {
-	return ci.callStatus_
-}
-
-func (ci *commonCallInfo) setCallStatus(flag callStatus) {
-	ci.callStatus_ |= flag
-}
-
-func (ci *commonCallInfo) clearCallStatus(flag callStatus) {
-	ci.callStatus_ &^= flag
-}
-
-func (ci *commonCallInfo) isCallStatus(flag callStatus) bool {
-	return ci.callStatus_&flag != 0
-}
-
-func (ci *commonCallInfo) initialize(l *State, function, top, resultCount int, callStatus callStatus) {
-	ci.function_ = function
-	ci.top_ = top
-	l.assert(ci.top() <= l.stackLast)
-	ci.resultCount_ = resultCount
-	ci.callStatus_ = callStatus
-}
-
 type luaCallInfo struct {
 	commonCallInfo
 	frame   []value
 	savedPC pc
 	code    []instruction
-}
-
-func (ci *luaCallInfo) isLua() bool {
-	return true
-}
-
-func (ci *luaCallInfo) setTop(top int) {
-	diff := top - ci.top()
-	ci.frame = ci.frame[:len(ci.frame)+diff]
-	ci.commonCallInfo.setTop(top)
-}
-
-func (ci *luaCallInfo) stackIndex(slot int) int {
-	return ci.top() - len(ci.frame) + slot
-}
-
-func (ci *luaCallInfo) frameIndex(stackSlot int) int {
-	if stackSlot < ci.top()-len(ci.frame) || ci.top() <= stackSlot {
-		panic("frameIndex called with out-of-range stackSlot")
-	}
-	return stackSlot - ci.top() + len(ci.frame)
-}
-
-func (ci *luaCallInfo) base() int {
-	return ci.stackIndex(0)
 }
 
 type goCallInfo struct {
@@ -238,8 +140,47 @@ type goCallInfo struct {
 	status       Status
 }
 
-func (ci *goCallInfo) isLua() bool {
-	return false
+func (ci *commonCallInfo) top() int                          { return ci.top_ }
+func (ci *commonCallInfo) setTop(top int)                    { ci.top_ = top }
+func (ci *commonCallInfo) next() callInfo                    { return ci.next_ }
+func (ci *commonCallInfo) previous() callInfo                { return ci.previous_ }
+func (ci *commonCallInfo) function() int                     { return ci.function_ }
+func (ci *commonCallInfo) resultCount() int                  { return ci.resultCount_ }
+func (ci *commonCallInfo) callStatus() callStatus            { return ci.callStatus_ }
+func (ci *commonCallInfo) setCallStatus(flag callStatus)     { ci.callStatus_ |= flag }
+func (ci *commonCallInfo) clearCallStatus(flag callStatus)   { ci.callStatus_ &^= flag }
+func (ci *commonCallInfo) isCallStatus(flag callStatus) bool { return ci.callStatus_&flag != 0 }
+func (ci *luaCallInfo) isLua() bool                          { return true }
+func (ci *luaCallInfo) stackIndex(slot int) int              { return ci.top() - len(ci.frame) + slot }
+func (ci *luaCallInfo) base() int                            { return ci.stackIndex(0) }
+func (ci *luaCallInfo) skip()                                { ci.savedPC++ }
+func (ci *luaCallInfo) jump(offset int)                      { ci.savedPC += pc(offset) }
+func (ci *goCallInfo) isLua() bool                           { return false }
+
+func (ci *commonCallInfo) push(nci callInfo) callInfo {
+	ci.next_ = nci
+	return nci
+}
+
+func (ci *commonCallInfo) initialize(l *State, function, top, resultCount int, callStatus callStatus) {
+	ci.function_ = function
+	ci.top_ = top
+	l.assert(ci.top() <= l.stackLast)
+	ci.resultCount_ = resultCount
+	ci.callStatus_ = callStatus
+}
+
+func (ci *luaCallInfo) setTop(top int) {
+	diff := top - ci.top()
+	ci.frame = ci.frame[:len(ci.frame)+diff]
+	ci.commonCallInfo.setTop(top)
+}
+
+func (ci *luaCallInfo) frameIndex(stackSlot int) int {
+	if stackSlot < ci.top()-len(ci.frame) || ci.top() <= stackSlot {
+		panic("frameIndex called with out-of-range stackSlot")
+	}
+	return stackSlot - ci.top() + len(ci.frame)
 }
 
 func (l *State) pushLuaFrame(function, base, resultCount int, p *prototype) *luaCallInfo {
@@ -271,18 +212,10 @@ func (l *State) pushGoFrame(function, resultCount int) {
 	ci.initialize(l, function, l.top+MinStack, resultCount, 0)
 }
 
-func (ci *luaCallInfo) skip() {
-	ci.savedPC++
-}
-
 func (ci *luaCallInfo) step() instruction {
 	i := ci.code[ci.savedPC]
 	ci.savedPC++
 	return i
-}
-
-func (ci *luaCallInfo) jump(offset int) {
-	ci.savedPC += pc(offset)
 }
 
 func (l *State) newLuaClosure(p *prototype) *luaClosure {

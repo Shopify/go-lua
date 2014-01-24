@@ -77,9 +77,12 @@ type scanner struct {
 	token
 }
 
-func (s *scanner) assert(cond bool) {
-	s.l.assert(cond)
-}
+func (s *scanner) assert(cond bool)           { s.l.assert(cond) }
+func (s *scanner) syntaxError(message string) { s.scanError(message, s.t) }
+func (l *scanner) errorExpected(t rune)       { l.syntaxError(l.tokenToString(t) + " expected") }
+func (s *scanner) numberError()               { s.scanError("malformed number", tkNumber) }
+func isNewLine(c rune) bool                   { return c == '\n' || c == '\r' }
+func isDecimal(c rune) bool                   { return '0' <= c && c <= '9' }
 
 func (s *scanner) tokenToString(t rune) string {
 	switch {
@@ -104,10 +107,6 @@ func (s *scanner) scanError(message string, token rune) {
 	panic(message)
 	// s.l.push(message)
 	// s.l.throw(SyntaxError)
-}
-
-func (s *scanner) syntaxError(message string) {
-	s.scanError(message, s.t)
 }
 
 func (s *scanner) incrementLineNumber() {
@@ -142,10 +141,6 @@ func (s *scanner) save(c rune) {
 	if _, err := s.buffer.WriteRune(c); err != nil {
 		s.scanError("lexical element too long", 0)
 	}
-}
-
-func isNewLine(c rune) bool {
-	return c == '\n' || c == '\r'
 }
 
 func (s *scanner) checkNext(str string) bool {
@@ -210,10 +205,6 @@ func (s *scanner) readDigits() (c rune) {
 		s.saveAndAdvance()
 	}
 	return
-}
-
-func (s *scanner) numberError() {
-	s.scanError("malformed number", tkNumber)
 }
 
 func isHexadecimal(c rune) bool {
@@ -343,8 +334,6 @@ func (s *scanner) readDecimalEscape() (r rune) {
 	}
 	return
 }
-
-func isDecimal(c rune) bool { return '0' <= c && c <= '9' }
 
 func (s *scanner) readString() token {
 	delimiter := s.current
@@ -523,10 +512,6 @@ func (l *scanner) testNext(t rune) (r bool) {
 		l.next()
 	}
 	return
-}
-
-func (l *scanner) errorExpected(t rune) {
-	l.syntaxError(l.tokenToString(t) + " expected")
 }
 
 func (l *scanner) check(t rune) {

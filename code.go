@@ -229,10 +229,6 @@ func (f *function) moveGotosOut(b block) {
 	}
 }
 
-func (f *function) breakLabel() {
-	f.FindGotos(f.MakeLabel("break", 0))
-}
-
 func (f *function) LeaveBlock() {
 	b := f.block
 	if b.previous != nil && b.hasUpValue { // create a 'jump to here' to close upvalues
@@ -292,6 +288,7 @@ func (f *function) semanticError(message string) {
 	f.p.syntaxError(message)
 }
 
+func (f *function) breakLabel()                         { f.FindGotos(f.MakeLabel("break", 0)) }
 func (f *function) unreachable()                        { f.assert(false) }
 func (f *function) assert(cond bool)                    { f.p.l.assert(cond) }
 func (f *function) Instruction(e exprDesc) *instruction { return &f.f.code[e.info] }
@@ -323,9 +320,7 @@ func (f *function) EncodeABx(op opCode, a, bx int) int {
 	return f.Encode(createABx(op, a, bx))
 }
 
-func (f *function) EncodeAsBx(op opCode, a, sbx int) int {
-	return f.EncodeABx(op, a, sbx+maxArgSBx)
-}
+func (f *function) EncodeAsBx(op opCode, a, sbx int) int { return f.EncodeABx(op, a, sbx+maxArgSBx) }
 
 func (f *function) encodeExtraArg(a int) int {
 	f.assert(a <= maxArgAx)
@@ -926,9 +921,7 @@ func (f *function) Postfix(op int, e1, e2 exprDesc, line int) exprDesc {
 	panic("unreachable")
 }
 
-func (f *function) FixLine(line int) {
-	f.f.lineInfo[f.pc-1] = int32(line)
-}
+func (f *function) FixLine(line int) { f.f.lineInfo[f.pc-1] = int32(line) }
 
 func (f *function) SetList(base, elementCount, storeCount int) {
 	if f.assert(storeCount != 0); storeCount == MultipleReturns {

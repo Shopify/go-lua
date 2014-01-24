@@ -275,9 +275,7 @@ func Require(l *State, name string, f Function, global bool) {
 	}
 }
 
-func NewLibraryTable(l *State, functions []RegistryFunction) {
-	CreateTable(l, 0, len(functions))
-}
+func NewLibraryTable(l *State, functions []RegistryFunction) { CreateTable(l, 0, len(functions)) }
 
 func NewLibrary(l *State, functions []RegistryFunction) {
 	NewLibraryTable(l, functions)

@@ -11,9 +11,9 @@ type table struct {
 	flags     byte
 }
 
-func newTable() *table {
-	return &table{hash: make(map[value]value)}
-}
+func newTable() *table                     { return &table{hash: make(map[value]value)} }
+func (t *table) invalidateTagMethodCache() { t.flags = 0 }
+func (t *table) atString(k string) value   { return t.hash[k] }
 
 func newTableWithSize(arraySize, hashSize int) *table {
 	t := new(table)
@@ -28,10 +28,6 @@ func newTableWithSize(arraySize, hashSize int) *table {
 	return t
 }
 
-func (t *table) invalidateTagMethodCache() {
-	t.flags = 0
-}
-
 func (l *State) fastTagMethod(table *table, event tm) value {
 	if table == nil || table.flags&1<<event != 0 {
 		return nil
@@ -41,10 +37,6 @@ func (l *State) fastTagMethod(table *table, event tm) value {
 
 func (t *table) extendArray(last int) {
 	t.array = append(t.array, make([]interface{}, last-cap(t.array)))
-}
-
-func (t *table) atString(k string) value {
-	return t.hash[k]
 }
 
 func (t *table) atInt(k int) value {

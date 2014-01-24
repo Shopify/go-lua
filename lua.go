@@ -124,7 +124,6 @@ type Function func(state *State) int
 // SetUpValue(function, index int) string
 // UpValueId(function, index int) interface{}
 // UpValueJoin(function1, index1, function2, index2 int)
-// SetHook(function Hook, mask, count int) int // TODO bool?
 // Hook() Hook
 // HookMask() int
 // HookCount() int
@@ -204,8 +203,6 @@ func (g *globalState) metaTable(o value) *table {
 	return g.metaTables[t]
 }
 
-func ApiCheckStackSpace(l *State, n int) { l.assert(n < l.top-l.callInfo.function()) }
-
 func (l *State) adjustResults(resultCount int) {
 	if resultCount == MultipleReturns && l.callInfo.top() < l.top {
 		l.callInfo.setTop(l.top)
@@ -262,8 +259,6 @@ func CallWithContinuation(l *State, argCount, resultCount, context int, continua
 	l.adjustResults(resultCount)
 }
 
-func Call(l *State, argCount, resultCount int) { CallWithContinuation(l, argCount, resultCount, 0, nil) }
-
 func ProtectedCallWithContinuation(l *State, argCount, resultCount, errorFunction, context int, continuation Function) Status {
 	apiCheck(continuation == nil || !l.callInfo.isLua(), "cannot use continuations inside hooks")
 	l.checkElementCount(argCount + 1)
@@ -272,8 +267,6 @@ func ProtectedCallWithContinuation(l *State, argCount, resultCount, errorFunctio
 	// TODO ...
 	return Ok
 }
-
-func Version(l *State) *float64 { return l.global.version }
 
 func NewState() *State {
 	v := float64(VersionNumber)
@@ -286,9 +279,6 @@ func NewState() *State {
 	copy(g.tagMethodNames[:], eventNames)
 	return l
 }
-
-func UpValueIndex(i int) int   { return RegistryIndex - i }
-func isPseudoIndex(i int) bool { return i <= RegistryIndex }
 
 func apiCheckStackIndex(index int, v value) {
 	apiCheck(v != nil && !isPseudoIndex(index), "index not in the stack")
@@ -364,8 +354,6 @@ func AbsIndex(l *State, index int) int {
 	return l.top - l.callInfo.function() + index
 }
 
-func Top(l *State) int { return l.top - (l.callInfo.function() + 1) }
-
 func SetTop(l *State, index int) {
 	f := l.callInfo.function()
 	if index >= 0 {
@@ -379,8 +367,6 @@ func SetTop(l *State, index int) {
 		l.top += index + 1 // 'subtract' index (index is negative)
 	}
 }
-
-func PushValue(l *State, index int) { l.apiPush(l.indexToValue(index)) }
 
 func Remove(l *State, index int) {
 	apiCheckStackIndex(index, l.indexToValue(index))
@@ -406,8 +392,6 @@ func Replace(l *State, index int) {
 	l.move(index, l.stack[l.top-1])
 	l.top--
 }
-
-func Copy(l *State, from, to int) { l.move(to, l.indexToValue(from)) }
 
 func CheckStack(l *State, size int) bool {
 	callInfo := l.callInfo
@@ -445,8 +429,6 @@ func Type(l *State, index int) int {
 	}
 	return TypeNone
 }
-
-func TypeName(l *State, t int) string { return typeNames[t+1] }
 
 func IsGoFunction(l *State, index int) bool {
 	if _, ok := l.indexToValue(index).(Function); ok {
@@ -512,9 +494,6 @@ func Compare(l *State, index1, index2, op int) bool {
 	}
 	return false
 }
-
-func ToNumber(l *State, index int) (float64, bool) { return toNumber(l.indexToValue(index)) }
-func ToBoolean(l *State, index int) bool           { return !isFalse(l.indexToValue(index)) }
 
 func ToInteger(l *State, index int) (int, bool) {
 	if n, ok := toNumber(l.indexToValue(index)); ok {
@@ -591,11 +570,6 @@ func ToValue(l *State, index int) interface{} {
 	return v
 }
 
-func PushNil(l *State)               { l.apiPush(nil) }
-func PushNumber(l *State, n float64) { l.apiPush(n) }
-func PushInteger(l *State, n int)    { l.apiPush(float64(n)) }
-func PushUnsigned(l *State, n uint)  { l.apiPush(float64(n)) }
-
 func PushString(l *State, s string) string { // TODO is it useful to return the argument?
 	l.apiPush(s)
 	return s
@@ -659,9 +633,6 @@ func PushGoClosure(l *State, function Function, n int) {
 	}
 }
 
-func PushBoolean(l *State, b bool)              { l.apiPush(b) }
-func PushLightUserData(l *State, d interface{}) { l.apiPush(d) }
-
 func PushThread(l *State) bool {
 	l.apiPush(l)
 	return l.global.mainThread == l
@@ -671,10 +642,6 @@ func Global(l *State, name string) {
 	g := l.global.registry.atInt(RegistryIndexGlobals)
 	l.push(name)
 	l.stack[l.top-1] = l.tableAt(g, l.stack[l.top-1])
-}
-
-func Table(l *State, index int) {
-	l.stack[l.top-1] = l.tableAt(l.indexToValue(index), l.stack[l.top-1])
 }
 
 func Field(l *State, index int, name string) {
@@ -786,25 +753,39 @@ func Concat(l *State, n int) {
 	} // else n == 1; nothing to do
 }
 
-func Length(l *State, index int) {
-	l.apiPush(l.objectLength(l.indexToValue(index)))
-}
-
-func Pop(l *State, n int) { SetTop(l, -n-1) }
-func NewTable(l *State)   { CreateTable(l, 0, 0) }
-
 func Register(l *State, name string, f Function) {
 	PushGoFunction(l, f)
 	SetGlobal(l, name)
 }
 
-func PushGoFunction(l *State, f Function)      { PushGoClosure(l, f, 0) }
-func IsFunction(l *State, index int) bool      { return Type(l, index) == TypeFunction }
-func IsTable(l *State, index int) bool         { return Type(l, index) == TypeTable }
-func IsLightUserData(l *State, index int) bool { return Type(l, index) == TypeLightUserData }
-func IsNil(l *State, index int) bool           { return Type(l, index) == TypeNil }
-func IsBoolean(l *State, index int) bool       { return Type(l, index) == TypeBoolean }
-func IsThread(l *State, index int) bool        { return Type(l, index) == TypeThread }
-func IsNone(l *State, index int) bool          { return Type(l, index) == TypeNone }
-func IsNoneOrNil(l *State, index int) bool     { return Type(l, index) <= TypeNil }
-func PushGlobalTable(l *State)                 { RawGetInt(l, RegistryIndex, RegistryIndexGlobals) }
+func Top(l *State) int                             { return l.top - (l.callInfo.function() + 1) }
+func Call(l *State, argCount, resultCount int)     { CallWithContinuation(l, argCount, resultCount, 0, nil) }
+func Copy(l *State, from, to int)                  { l.move(to, l.indexToValue(from)) }
+func Version(l *State) *float64                    { return l.global.version }
+func UpValueIndex(i int) int                       { return RegistryIndex - i }
+func isPseudoIndex(i int) bool                     { return i <= RegistryIndex }
+func ApiCheckStackSpace(l *State, n int)           { l.assert(n < l.top-l.callInfo.function()) }
+func TypeName(l *State, t int) string              { return typeNames[t+1] }
+func ToNumber(l *State, index int) (float64, bool) { return toNumber(l.indexToValue(index)) }
+func ToBoolean(l *State, index int) bool           { return !isFalse(l.indexToValue(index)) }
+func Table(l *State, index int)                    { l.stack[l.top-1] = l.tableAt(l.indexToValue(index), l.stack[l.top-1]) }
+func PushValue(l *State, index int)                { l.apiPush(l.indexToValue(index)) }
+func PushNil(l *State)                             { l.apiPush(nil) }
+func PushNumber(l *State, n float64)               { l.apiPush(n) }
+func PushInteger(l *State, n int)                  { l.apiPush(float64(n)) }
+func PushUnsigned(l *State, n uint)                { l.apiPush(float64(n)) }
+func PushBoolean(l *State, b bool)                 { l.apiPush(b) }
+func PushLightUserData(l *State, d interface{})    { l.apiPush(d) }
+func Length(l *State, index int)                   { l.apiPush(l.objectLength(l.indexToValue(index))) }
+func Pop(l *State, n int)                          { SetTop(l, -n-1) }
+func NewTable(l *State)                            { CreateTable(l, 0, 0) }
+func PushGoFunction(l *State, f Function)          { PushGoClosure(l, f, 0) }
+func IsFunction(l *State, index int) bool          { return Type(l, index) == TypeFunction }
+func IsTable(l *State, index int) bool             { return Type(l, index) == TypeTable }
+func IsLightUserData(l *State, index int) bool     { return Type(l, index) == TypeLightUserData }
+func IsNil(l *State, index int) bool               { return Type(l, index) == TypeNil }
+func IsBoolean(l *State, index int) bool           { return Type(l, index) == TypeBoolean }
+func IsThread(l *State, index int) bool            { return Type(l, index) == TypeThread }
+func IsNone(l *State, index int) bool              { return Type(l, index) == TypeNone }
+func IsNoneOrNil(l *State, index int) bool         { return Type(l, index) <= TypeNil }
+func PushGlobalTable(l *State)                     { RawGetInt(l, RegistryIndex, RegistryIndexGlobals) }
