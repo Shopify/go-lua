@@ -354,11 +354,14 @@ func (l *State) preCall(function int, resultCount int) bool {
 		case *luaClosure:
 			p := f.prototype
 			l.checkStack(p.maxStackSize)
-			argCount := l.top - function - 1
-			args := l.stack[l.top : l.top+argCount]
+			argCount, parameterCount := l.top-function-1, p.parameterCount
+			extra := parameterCount - argCount
+			args := l.stack[l.top : l.top+extra]
 			for i := range args {
 				args[i] = nil
 			}
+			l.top += extra
+			argCount += extra
 			base := function + 1
 			if p.isVarArg {
 				base = l.adjustVarArgs(p, argCount)
@@ -413,22 +416,23 @@ func (l *State) adjustVarArgs(p *prototype, argCount int) int {
 }
 
 func (l *State) postCall(firstResult int) bool {
-	ci := l.callInfo.(callInfo)
+	ci := l.callInfo
 	if l.hookMask&MaskReturn != 0 {
 		l.hook(HookReturn, -1)
 	}
-	result, wanted, available := ci.function(), ci.resultCount(), l.top-firstResult
+	result, wanted, i := ci.function(), ci.resultCount(), 0
 	l.callInfo = ci.previous() // back to caller
-	if available > wanted {
-		available = wanted
+	// TODO this is obscure - I don't fully understand the control flow, but it works
+	for i = wanted; i != 0 && firstResult < l.top; i-- {
+		l.stack[result] = l.stack[firstResult]
+		result++
+		firstResult++
 	}
-	if available > 0 { // copy available results to final position
-		copy(l.stack[result:result+available], l.stack[firstResult:firstResult+available])
+	for ; i > 0; i-- {
+		l.stack[result] = nil
+		result++
 	}
-	for i := result + available; i < result+wanted; i++ { // clear remaining results
-		l.stack[i] = nil
-	}
-	l.top = result + wanted
+	l.top = result
 	if l.hookMask&(MaskReturn|MaskLine) != 0 {
 		l.oldPC = l.callInfo.(*luaCallInfo).savedPC // oldPC for caller function
 	}

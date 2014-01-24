@@ -103,9 +103,8 @@ func (p *parser) functionArguments(f exprDesc, line int) exprDesc {
 		if p.t == ')' {
 			args.kind = kindVoid
 		} else {
-			var resultCount int
-			args, resultCount = p.expressionList()
-			p.function.SetReturns(args, resultCount)
+			args, _ = p.expressionList()
+			p.function.SetMultipleReturns(args)
 		}
 		p.checkMatch(')', '(', line)
 	case '{':

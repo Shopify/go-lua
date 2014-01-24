@@ -18,6 +18,13 @@ func loadFibBinary(l *State, t *testing.T) *luaClosure {
 		offset, _ := file.Seek(0, 1)
 		t.Error("unexpected error", err, "at file offset", offset)
 	}
+	for i := range closure.upValues {
+		closure.upValues[i] = l.newUpValue()
+	}
+	if len(closure.upValues) == 1 {
+		globals := l.global.registry.atInt(RegistryIndexGlobals)
+		closure.upValues[0].setValue(globals)
+	}
 	return closure
 }
 
@@ -31,14 +38,26 @@ func loadFibSource(l *State, t *testing.T) *luaClosure {
 	if closure == nil {
 		t.Error("closure was nil")
 	}
+	for i := range closure.upValues {
+		closure.upValues[i] = l.newUpValue()
+	}
+	if len(closure.upValues) == 1 {
+		globals := l.global.registry.atInt(RegistryIndexGlobals)
+		closure.upValues[0].setValue(globals)
+	}
 	return closure
 }
 
 func TestParser(t *testing.T) {
 	l := NewState()
-	bin := loadFibBinary(l, t)
-	Pop(l, 1)
+	OpenLibraries(l)
+	// SetHook(l, func(state *State, ar *Debug) {
+	// 	printStack(state.stack[state.callInfo.(*luaCallInfo).base():state.top])
+	// 	println(state.callInfo.(*luaCallInfo).code[state.callInfo.(*luaCallInfo).savedPC].String())
+	// }, MaskCount, 1)
 	closure := loadFibSource(l, t)
+	Pop(l, 1)
+	bin := loadFibBinary(l, t)
 	p := closure.prototype
 	if p == nil {
 		t.Fatal("prototype was nil")
@@ -49,13 +68,6 @@ func TestParser(t *testing.T) {
 	}
 	if len(closure.upValues) != len(closure.prototype.upValues) {
 		t.Error("upvalue count doesn't match", len(closure.upValues), "!=", len(closure.prototype.upValues))
-	}
-	for i := range closure.upValues {
-		closure.upValues[i] = l.newUpValue()
-	}
-	if len(closure.upValues) == 1 {
-		globals := l.global.registry.atInt(RegistryIndexGlobals)
-		closure.upValues[0].setValue(globals)
 	}
 	compareClosures(t, bin, closure)
 	Call(l, 0, 0)
@@ -71,7 +83,7 @@ func expectDeepEqual(t *testing.T, x, y interface{}, m string) {
 	if reflect.DeepEqual(x, y) {
 		return
 	}
-	if reflect.TypeOf(x).Kind() == reflect.Slice && reflect.ValueOf(x).Len() == reflect.ValueOf(y).Len() {
+	if reflect.TypeOf(x).Kind() == reflect.Slice && reflect.ValueOf(y).Len() == 0 && reflect.ValueOf(x).Len() == 0 {
 		return
 	}
 	t.Errorf("%s doesn't match: %v, %v\n", m, x, y)

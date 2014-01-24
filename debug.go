@@ -1,5 +1,7 @@
 package lua
 
+func (l *State) resetHookCount() { l.hookCount = l.baseHookCount }
+
 func (l *State) runtimeError(message string) { // TODO
 	panic("runtimeError")
 }
@@ -38,6 +40,18 @@ func (l *State) errorMessage() {
 		}
 	}
 	l.throw(RuntimeError)
+}
+
+func SetHook(l *State, f Hook, mask byte, count int) {
+	if f == nil || mask == 0 {
+		f, mask = nil, 0
+	}
+	if ci, ok := l.callInfo.(*luaCallInfo); ok {
+		l.oldPC = ci.savedPC
+	}
+	l.hooker, l.baseHookCount = f, count
+	l.resetHookCount()
+	l.hookMask = mask
 }
 
 func Stack(l *State, level int, activationRecord *Debug) (ok bool) {

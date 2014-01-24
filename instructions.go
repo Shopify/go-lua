@@ -1,5 +1,7 @@
 package lua
 
+import "fmt"
+
 type opCode uint
 
 const (
@@ -131,7 +133,6 @@ func mask1(n, p uint) instruction { return ^(^instruction(0) << n) << p }
 // creates a mask with 'n' 0 bits at position 'p'
 func mask0(n, p uint) instruction { return ^mask1(n, p) }
 
-func (i instruction) String() string         { return opNames[i.opCode()] }
 func (i instruction) opCode() opCode         { return opCode(i >> posOp & mask1(sizeOp, 0)) }
 func (i instruction) arg(pos, size uint) int { return int(i >> pos & mask1(size, 0)) }
 func (i *instruction) setOpCode(op opCode)   { i.setArg(posOp, sizeOp, int(op)) }
@@ -146,12 +147,12 @@ func (i instruction) bx() int  { return i.arg(posBx, sizeBx) }
 func (i instruction) ax() int  { return i.arg(posAx, sizeAx) }
 func (i instruction) sbx() int { return i.bx() - maxArgSBx }
 
-func (i instruction) setA(arg int)   { i.setArg(posA, sizeA, arg) }
-func (i instruction) setB(arg int)   { i.setArg(posB, sizeB, arg) }
-func (i instruction) setC(arg int)   { i.setArg(posC, sizeC, arg) }
-func (i instruction) setBx(arg int)  { i.setArg(posBx, sizeBx, arg) }
-func (i instruction) setAx(arg int)  { i.setArg(posAx, sizeAx, arg) }
-func (i instruction) setSBx(arg int) { i.setArg(posBx, sizeBx, arg+maxArgSBx) }
+func (i *instruction) setA(arg int)   { i.setArg(posA, sizeA, arg) }
+func (i *instruction) setB(arg int)   { i.setArg(posB, sizeB, arg) }
+func (i *instruction) setC(arg int)   { i.setArg(posC, sizeC, arg) }
+func (i *instruction) setBx(arg int)  { i.setArg(posBx, sizeBx, arg) }
+func (i *instruction) setAx(arg int)  { i.setArg(posAx, sizeAx, arg) }
+func (i *instruction) setSBx(arg int) { i.setArg(posBx, sizeBx, arg+maxArgSBx) }
 
 func createABC(op opCode, a, b, c int) instruction {
 	return instruction(op)<<posOp |
@@ -167,6 +168,38 @@ func createABx(op opCode, a, bx int) instruction {
 }
 
 func createAx(op opCode, a int) instruction { return instruction(op)<<posOp | instruction(a)<<posAx }
+
+func (i instruction) String() string {
+	op := i.opCode()
+	s := opNames[op]
+	switch opMode(op) {
+	case iABC:
+		s = fmt.Sprintf("%s %d", s, i.a())
+		if bMode(op) == opArgK && isConstant(i.b()) {
+			s = fmt.Sprintf("%s constant %d", s, constantIndex(i.b()))
+		} else if bMode(op) != opArgN {
+			s = fmt.Sprintf("%s %d", s, i.b())
+		}
+		if cMode(op) == opArgK && isConstant(i.c()) {
+			s = fmt.Sprintf("%s constant %d", s, constantIndex(i.c()))
+		} else if cMode(op) != opArgN {
+			s = fmt.Sprintf("%s %d", s, i.c())
+		}
+	case iAsBx:
+		s = fmt.Sprintf("%s %d", s, i.a())
+		if bMode(op) != opArgN {
+			s = fmt.Sprintf("%s %d", s, i.sbx())
+		}
+	case iABx:
+		s = fmt.Sprintf("%s %d", s, i.a())
+		if bMode(op) != opArgN {
+			s = fmt.Sprintf("%s %d", s, i.bx())
+		}
+	case iAx:
+		s = fmt.Sprintf("%s %d", s, i.ax())
+	}
+	return s
+}
 
 func opmode(t, a, b, c, m int) byte { return byte(t<<7 | a<<6 | b<<4 | c<<2 | m) }
 

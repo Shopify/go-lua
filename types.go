@@ -3,6 +3,8 @@ package lua
 import (
 	"fmt"
 	"math"
+	"reflect"
+	"runtime"
 	"strconv"
 )
 
@@ -18,11 +20,14 @@ func printValue(v value) {
 	case float64:
 		print(v)
 	case *luaClosure:
-		print("closure ", v)
+		print(fmt.Sprintf("closure %s:%d %v", v.prototype.source, v.prototype.lineDefined, v))
 	case *goClosure:
 		print("go closure ", v)
 	case Function:
-		print("go function ", v)
+		pc := reflect.ValueOf(v).Pointer()
+		f := runtime.FuncForPC(pc)
+		file, line := f.FileLine(pc)
+		print(fmt.Sprintf("go function %s %s:%d", f.Name(), file, line))
 	case nil:
 		print("nil")
 	default:

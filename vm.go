@@ -198,7 +198,38 @@ func (l *State) concat(total int) {
 	}
 }
 
-func (l *State) traceExecution() { // TODO
+func (l *State) traceExecution() {
+	callInfo := l.callInfo.(*luaCallInfo)
+	mask := l.hookMask
+	countHook := mask&MaskCount != 0 && l.hookCount == 0
+	if countHook {
+		l.resetHookCount()
+	}
+	if callInfo.isCallStatus(callStatusHookYielded) {
+		callInfo.clearCallStatus(callStatusHookYielded)
+		return
+	}
+	if countHook {
+		l.hook(HookCount, -1)
+	}
+	if mask&MaskLine != 0 {
+		p := l.stack[callInfo.function()].(*luaClosure).prototype
+		npc := callInfo.savedPC - 1
+		newline := p.lineInfo[npc]
+		if npc == 0 || callInfo.savedPC <= l.oldPC || newline != p.lineInfo[l.oldPC-1] {
+			l.hook(HookLine, int(newline))
+		}
+	}
+	l.oldPC = callInfo.savedPC
+	if l.status == Yield {
+		if countHook {
+			l.hookCount = 1
+		}
+		callInfo.savedPC--
+		callInfo.setCallStatus(callStatusHookYielded)
+		callInfo.function_ = l.top - 1
+		l.throw(Yield)
+	}
 }
 
 func (l *State) execute() {
@@ -491,8 +522,8 @@ func (l *State) execute() {
 				frame[a] = l.newClosure(p, closure.upValues, ci.base()) // create a new one
 			} else {
 				frame[a] = ncl
-				clear(frame[a+1:])
 			}
+			clear(frame[a+1:])
 		case opVarArg:
 			a, b := i.a(), i.b()-1
 			n := ci.base() - ci.function() - closure.prototype.parameterCount - 1

@@ -365,17 +365,13 @@ func (f *function) Jump() int {
 	return f.Concatenate(f.EncodeAsBx(opJump, 0, noJump), jumpPC)
 }
 
-func (f *function) JumpTo(target int) {
-	f.PatchList(f.Jump(), target)
-}
-
-func (f *function) ReturnNone() {
-	f.EncodeABC(opReturn, 0, 1, 0)
-}
+func (f *function) JumpTo(target int)             { f.PatchList(f.Jump(), target) }
+func (f *function) ReturnNone()                   { f.EncodeABC(opReturn, 0, 1, 0) }
+func (f *function) SetMultipleReturns(e exprDesc) { f.SetReturns(e, MultipleReturns) }
 
 func (f *function) Return(e exprDesc, resultCount int) {
 	if e.hasMultipleReturns() {
-		if f.SetReturns(e, resultCount); e.kind == kindCall && resultCount == 1 {
+		if f.SetMultipleReturns(e); e.kind == kindCall && resultCount == 1 {
 			f.Instruction(e).setOpCode(opTailCall)
 			f.assert(f.Instruction(e).a() == f.activeVariableCount)
 		}
@@ -1076,7 +1072,7 @@ func (f *function) FlushToConstructor(tableRegister, pending, arrayCount int, e 
 func (f *function) CloseConstructor(pc, tableRegister, pending, arrayCount, hashCount int, e exprDesc) {
 	if pending != 0 {
 		if e.hasMultipleReturns() {
-			f.SetReturns(e, MultipleReturns)
+			f.SetMultipleReturns(e)
 			f.SetList(tableRegister, arrayCount, MultipleReturns)
 			arrayCount--
 		} else {
