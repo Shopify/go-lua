@@ -160,6 +160,7 @@ func (s *scanner) skipSeparator() int { // TODO is this the right name?
 	if s.current == c {
 		return i
 	}
+	s.buffer.Reset()
 	return -i - 1
 }
 
@@ -213,7 +214,7 @@ func isHexadecimal(c rune) bool {
 
 func (s *scanner) readHexNumber(x uint64) (n uint64, c rune, i int) {
 	if c, n = s.current, x; !isHexadecimal(c) {
-		s.numberError()
+		return
 	}
 	for {
 		switch {
@@ -281,11 +282,18 @@ func (s *scanner) readNumber() token {
 		}
 		_ = s.readDigits()
 	}
-	f, err := strconv.ParseFloat(s.buffer.String(), bits64)
-	s.buffer.Reset()
+	str := s.buffer.String()
+	if strings.HasPrefix(str, "0") {
+		if str = strings.TrimLeft(str, "0"); str == "" || !isDecimal(rune(str[0])) {
+			str = "0" + str
+		}
+	}
+	f, err := strconv.ParseFloat(str, bits64)
 	if err != nil {
+		println("readNumber", s.buffer.String())
 		s.numberError()
 	}
+	s.buffer.Reset()
 	return token{t: tkNumber, n: f}
 }
 
@@ -464,11 +472,14 @@ func (s *scanner) scan() token {
 		case '.':
 			if s.saveAndAdvance(); s.checkNext(".") {
 				if s.checkNext(".") {
+					s.buffer.Reset()
 					return token{t: tkDots}
 				} else {
+					s.buffer.Reset()
 					return token{t: tkConcat}
 				}
 			} else if !unicode.IsDigit(s.current) {
+				s.buffer.Reset()
 				return token{t: '.'}
 			} else {
 				return s.readNumber()

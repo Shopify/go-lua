@@ -3,12 +3,14 @@ package lua
 import (
 	"bufio"
 	"os"
+	"path/filepath"
 	"reflect"
+	"runtime/debug"
+	"strings"
 	"testing"
 )
 
-func loadFibBinary(l *State, t *testing.T) *luaClosure {
-	fileName := "fib.bin"
+func loadBinary(l *State, t *testing.T, fileName string) *luaClosure {
 	file, err := os.Open(fileName)
 	if err != nil {
 		t.Fatal("couldn't open " + fileName)
@@ -28,8 +30,7 @@ func loadFibBinary(l *State, t *testing.T) *luaClosure {
 	return closure
 }
 
-func loadFibSource(l *State, t *testing.T) *luaClosure {
-	fileName := "fib.lua"
+func loadSource(l *State, t *testing.T, fileName string) *luaClosure {
 	file, err := os.Open(fileName)
 	if err != nil {
 		t.Fatal("couldn't open " + fileName)
@@ -55,9 +56,9 @@ func TestParser(t *testing.T) {
 	// 	printStack(state.stack[state.callInfo.(*luaCallInfo).base():state.top])
 	// 	println(state.callInfo.(*luaCallInfo).code[state.callInfo.(*luaCallInfo).savedPC].String())
 	// }, MaskCount, 1)
-	closure := loadFibSource(l, t)
+	bin := loadBinary(l, t, "fib.bin")
 	Pop(l, 1)
-	bin := loadFibBinary(l, t)
+	closure := loadSource(l, t, "fib.lua")
 	p := closure.prototype
 	if p == nil {
 		t.Fatal("prototype was nil")
@@ -71,6 +72,38 @@ func TestParser(t *testing.T) {
 	}
 	compareClosures(t, bin, closure)
 	Call(l, 0, 0)
+}
+
+func TestParserExhaustively(t *testing.T) {
+	t.Skip()
+	l := NewState()
+	matches, err := filepath.Glob("/Users/fbogsany/Projects/Lua/lua-5.2.2-tests/*.lua")
+	if err != nil {
+		t.Fatal(err)
+	}
+	blackList := map[string]bool{"all.lua": true, "main.lua": true, "bitwise.lua": true}
+	for _, source := range matches {
+		if _, ok := blackList[filepath.Base(source)]; ok {
+			continue
+		}
+		protectedTestParser(l, t, source)
+	}
+}
+
+func protectedTestParser(l *State, t *testing.T, source string) {
+	defer func() {
+		if x := recover(); x != nil {
+			t.Error(x)
+			t.Log(string(debug.Stack()))
+		}
+	}()
+	t.Log("Parsing " + source)
+	bin := loadBinary(l, t, strings.TrimSuffix(source, ".lua")+".bin")
+	Pop(l, 1)
+	src := loadSource(l, t, source)
+	Pop(l, 1)
+	t.Log(source)
+	compareClosures(t, src, bin)
 }
 
 func expectEqual(t *testing.T, x, y interface{}, m string) {
@@ -100,7 +133,7 @@ func comparePrototypes(t *testing.T, a, b *prototype) {
 	expectEqual(t, a.lastLineDefined, b.lastLineDefined, "last line defined")
 	expectEqual(t, a.parameterCount, b.parameterCount, "parameter count")
 	expectEqual(t, a.maxStackSize, b.maxStackSize, "max stack size")
-	expectEqual(t, a.source, b.source, "source")
+	// expectEqual(t, a.source, b.source, "source")
 	expectEqual(t, len(a.code), len(b.code), "code length")
 	expectDeepEqual(t, a.code, b.code, "code")
 	expectDeepEqual(t, a.constants, b.constants, "constants")

@@ -54,22 +54,22 @@ const (
 	kindVarArg         // info = instruction pc
 )
 
-// var kinds []string = []string{
-// 	"void",
-// 	"nil",
-// 	"true",
-// 	"false",
-// 	"constant",
-// 	"number",
-// 	"nonrelocatable",
-// 	"local",
-// 	"upvalue",
-// 	"indexed",
-// 	"jump",
-// 	"relocatable",
-// 	"call",
-// 	"vararg",
-// }
+var kinds []string = []string{
+	"void",
+	"nil",
+	"true",
+	"false",
+	"constant",
+	"number",
+	"nonrelocatable",
+	"local",
+	"upvalue",
+	"indexed",
+	"jump",
+	"relocatable",
+	"call",
+	"vararg",
+}
 
 type exprDesc struct {
 	kind      int
@@ -100,15 +100,15 @@ type block struct {
 }
 
 type function struct {
-	f                      *prototype
-	h                      *table
-	previous               *function
-	p                      *parser
-	block                  *block
-	pc, jumpPC, lastTarget int
-	freeRegisterCount      int
-	activeVariableCount    int
-	firstLocal             int
+	f                   *prototype
+	h                   *table
+	previous            *function
+	p                   *parser
+	block               *block
+	jumpPC, lastTarget  int
+	freeRegisterCount   int
+	activeVariableCount int
+	firstLocal          int
 }
 
 func (f *function) OpenFunction(line int) {
@@ -147,13 +147,13 @@ func (f *function) localVariable(i int) *localVariable {
 
 func (f *function) AdjustLocalVariables(n int) {
 	for f.activeVariableCount += n; n != 0; n-- {
-		f.localVariable(f.activeVariableCount - n).startPC = pc(f.pc)
+		f.localVariable(f.activeVariableCount - n).startPC = pc(len(f.f.code))
 	}
 }
 
 func (f *function) removeLocalVariables(level int) {
 	for i := level; i < f.activeVariableCount; i++ {
-		f.localVariable(i).endPC = pc(f.pc)
+		f.localVariable(i).endPC = pc(len(f.f.code))
 	}
 	f.p.activeVariables = f.p.activeVariables[:len(f.p.activeVariables)-(f.activeVariableCount-level)]
 	f.activeVariableCount = level
@@ -172,12 +172,12 @@ func (f *function) MakeGoto(name string, line, pc int) {
 }
 
 func (f *function) MakeLabel(name string, line int) int {
-	f.p.activeLabels = append(f.p.activeLabels, label{name: name, line: line, pc: f.pc, activeVariableCount: f.activeVariableCount})
+	f.p.activeLabels = append(f.p.activeLabels, label{name: name, line: line, pc: len(f.f.code), activeVariableCount: f.activeVariableCount})
 	return len(f.p.activeLabels) - 1
 }
 
 func (f *function) closeGoto(i int, l label) {
-	g := f.p.activeLabels[i]
+	g := f.p.pendingGotos[i]
 	if f.assert(g.name == l.name); g.activeVariableCount < l.activeVariableCount {
 		f.semanticError(fmt.Sprintf("<goto %s> at line %d jumps into the scope of local '%s'", g.name, g.line, f.localVariable(g.activeVariableCount).name))
 	}
@@ -297,12 +297,24 @@ func (e exprDesc) isNumeral() bool                      { return e.kind == kindN
 func (e exprDesc) isVariable() bool                     { return kindLocal <= e.kind && e.kind <= kindIndexed }
 func (e exprDesc) hasMultipleReturns() bool             { return e.kind == kindCall || e.kind == kindVarArg }
 
+func (f *function) assertEqual(a, b interface{}) {
+	if a != b {
+		panic(fmt.Sprintf("%v != %v", a, b))
+	}
+}
+
 func (f *function) Encode(i instruction) int {
+	f.assert(len(f.f.code) == len(f.f.lineInfo))
 	f.dischargeJumpPC()
-	f.f.code = append(f.f.code, i) // TODO check that we always only append
+	f.f.code = append(f.f.code, i)
 	f.f.lineInfo = append(f.f.lineInfo, int32(f.p.lastLine))
-	f.pc++
-	return f.pc - 1
+	return len(f.f.code) - 1
+}
+
+func (f *function) dropLastInstruction() {
+	f.assert(len(f.f.code) == len(f.f.lineInfo))
+	f.f.code = f.f.code[:len(f.f.code)-1]
+	f.f.lineInfo = f.f.lineInfo[:len(f.f.lineInfo)-1]
 }
 
 func (f *function) EncodeABC(op opCode, a, b, c int) int {
@@ -341,8 +353,8 @@ func (f *function) EncodeString(s string) exprDesc {
 }
 
 func (f *function) LoadNil(from, n int) {
-	if f.pc > f.lastTarget { // no jumps to current position
-		if previous := &f.f.code[f.pc-1]; previous.opCode() == opLoadNil {
+	if len(f.f.code) > f.lastTarget { // no jumps to current position
+		if previous := &f.f.code[len(f.f.code)-1]; previous.opCode() == opLoadNil {
 			if pf, pl, l := previous.a(), previous.a()+previous.b(), from+n-1; pf <= from && from < pl || from <= pf && pf < l { // can connect both
 				from, l = min(from, pf), max(l, pl)
 				previous.setA(from)
@@ -355,6 +367,7 @@ func (f *function) LoadNil(from, n int) {
 }
 
 func (f *function) Jump() int {
+	f.assert(f.isJumpListWalkable(f.jumpPC))
 	jumpPC := f.jumpPC
 	f.jumpPC = noJump
 	return f.Concatenate(f.EncodeAsBx(opJump, 0, noJump), jumpPC)
@@ -386,6 +399,7 @@ func (f *function) conditionalJump(op opCode, a, b, c int) int {
 }
 
 func (f *function) fixJump(pc, dest int) {
+	f.assert(f.isJumpListWalkable(pc))
 	f.assert(dest != noJump)
 	offset := dest - (pc + 1)
 	if abs(offset) > maxArgSBx {
@@ -395,15 +409,27 @@ func (f *function) fixJump(pc, dest int) {
 }
 
 func (f *function) Label() int {
-	f.lastTarget = f.pc
-	return f.pc
+	f.lastTarget = len(f.f.code)
+	return f.lastTarget
 }
 
 func (f *function) jump(pc int) int {
+	f.assert(f.isJumpListWalkable(pc))
 	if offset := f.f.code[pc].sbx(); offset != noJump {
 		return pc + 1 + offset
 	}
 	return noJump
+}
+
+func (f *function) isJumpListWalkable(list int) bool {
+	if list == noJump {
+		return true
+	}
+	if list < 0 || list >= len(f.f.code) {
+		return false
+	}
+	offset := f.f.code[list].sbx()
+	return offset == noJump || f.isJumpListWalkable(list+1+offset)
 }
 
 func (f *function) jumpControl(pc int) *instruction {
@@ -414,6 +440,7 @@ func (f *function) jumpControl(pc int) *instruction {
 }
 
 func (f *function) needValue(list int) bool {
+	f.assert(f.isJumpListWalkable(list))
 	for ; list != noJump; list = f.jump(list) {
 		if f.jumpControl(list).opCode() != opTestSet {
 			return true
@@ -434,12 +461,14 @@ func (f *function) patchTestRegister(node, register int) bool {
 }
 
 func (f *function) removeValues(list int) {
+	f.assert(f.isJumpListWalkable(list))
 	for ; list != noJump; list = f.jump(list) {
 		_ = f.patchTestRegister(list, noRegister)
 	}
 }
 
 func (f *function) patchListHelper(list, target, register, defaultTarget int) {
+	f.assert(f.isJumpListWalkable(list))
 	for list != noJump {
 		next := f.jump(list)
 		if f.patchTestRegister(list, register) {
@@ -452,20 +481,22 @@ func (f *function) patchListHelper(list, target, register, defaultTarget int) {
 }
 
 func (f *function) dischargeJumpPC() {
-	f.patchListHelper(f.jumpPC, f.pc, noRegister, f.pc)
+	f.assert(f.isJumpListWalkable(f.jumpPC))
+	f.patchListHelper(f.jumpPC, len(f.f.code), noRegister, len(f.f.code))
 	f.jumpPC = noJump
 }
 
 func (f *function) PatchList(list, target int) {
-	if target == f.pc {
+	if target == len(f.f.code) {
 		f.PatchToHere(list)
 	} else {
-		f.assert(target < f.pc)
+		f.assert(target < len(f.f.code))
 		f.patchListHelper(list, target, noRegister, target)
 	}
 }
 
 func (f *function) PatchClose(list, level int) {
+	f.assert(f.isJumpListWalkable(list))
 	for level, next := level+1, 0; list != noJump; list = next {
 		next = f.jump(list)
 		f.assert(f.f.code[list].opCode() == opJump && f.f.code[list].a() == 0 || f.f.code[list].a() >= level)
@@ -474,11 +505,15 @@ func (f *function) PatchClose(list, level int) {
 }
 
 func (f *function) PatchToHere(list int) {
+	f.assert(f.isJumpListWalkable(list))
+	f.assert(f.isJumpListWalkable(f.jumpPC))
 	f.Label()
 	f.jumpPC = f.Concatenate(f.jumpPC, list)
+	f.assert(f.isJumpListWalkable(f.jumpPC))
 }
 
 func (f *function) Concatenate(l1, l2 int) int {
+	f.assert(f.isJumpListWalkable(l1))
 	switch {
 	case l2 == noJump:
 	case l1 == noJump:
@@ -531,7 +566,7 @@ func (f *function) ReserveRegisters(n int) {
 func (f *function) freeRegister(r int) {
 	if !isConstant(r) && r >= f.activeVariableCount {
 		f.freeRegisterCount--
-		f.assert(r == f.freeRegisterCount)
+		f.assertEqual(r, f.freeRegisterCount)
 	}
 }
 
@@ -746,7 +781,7 @@ func (f *function) invertJump(pc int) {
 func (f *function) jumpOnCondition(e exprDesc, cond int) int {
 	if e.kind == kindRelocatable {
 		if i := f.Instruction(e); i.opCode() == opNot {
-			f.pc-- // remove previous opNot
+			f.dropLastInstruction() // remove previous opNot
 			return f.conditionalJump(opTest, i.b(), 0, not(cond))
 		}
 	}
@@ -809,6 +844,7 @@ func (f *function) encodeNot(e exprDesc) exprDesc {
 
 func (f *function) Indexed(t, k exprDesc) (r exprDesc) {
 	f.assert(!t.hasJumps())
+	r = makeExpression(kindIndexed, 0)
 	r.table = t.info
 	k, r.index = f.ExpressionToRegisterOrConstant(k)
 	if t.kind == kindUpValue {
@@ -817,7 +853,6 @@ func (f *function) Indexed(t, k exprDesc) (r exprDesc) {
 		f.assert(t.kind == kindNonRelocatable || t.kind == kindLocal)
 		r.tableType = kindLocal
 	}
-	r.kind = kindIndexed
 	return
 }
 
@@ -911,6 +946,13 @@ func (f *function) Postfix(op int, e1, e2 exprDesc, line int) exprDesc {
 		e2.t = f.Concatenate(e2.t, e1.t)
 		return e2
 	case oprConcat:
+		if e2 = f.ExpressionToValue(e2); e2.kind == kindRelocatable && f.Instruction(e2).opCode() == opConcat {
+			f.assert(e1.info == f.Instruction(e2).b()-1)
+			f.freeExpression(e1)
+			f.Instruction(e2).setB(e1.info)
+			return makeExpression(kindRelocatable, e2.info)
+		}
+		return f.encodeArithmetic(opConcat, e1, f.ExpressionToNextRegister(e2), line)
 	case oprAdd, oprSub, oprMul, oprDiv, oprMod, oprPow:
 		return f.encodeArithmetic(opCode(op-oprAdd)+opAdd, e1, e2, line)
 	case oprEq, oprLT, oprLE:
@@ -921,7 +963,7 @@ func (f *function) Postfix(op int, e1, e2 exprDesc, line int) exprDesc {
 	panic("unreachable")
 }
 
-func (f *function) FixLine(line int) { f.f.lineInfo[f.pc-1] = int32(line) }
+func (f *function) FixLine(line int) { f.f.lineInfo[len(f.f.code)-1] = int32(line) }
 
 func (f *function) SetList(base, elementCount, storeCount int) {
 	if f.assert(storeCount != 0); storeCount == MultipleReturns {

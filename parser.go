@@ -116,6 +116,13 @@ func (p *parser) functionArguments(f exprDesc, line int) exprDesc {
 		p.syntaxError("function arguments expected")
 	}
 	base, parameterCount := f.info, MultipleReturns
+	// frc := p.function.freeRegisterCount
+	// defer func() {
+	// 	if x := recover(); x != nil {
+	// 		println("functionArguments", base, parameterCount, line, kinds[f.kind], args.info, kinds[args.kind], frc)
+	// 		panic(x)
+	// 	}
+	// }()
 	if !args.hasMultipleReturns() {
 		if args.kind != kindVoid {
 			args = p.function.ExpressionToNextRegister(args)
@@ -408,7 +415,7 @@ func (p *parser) forStatement(line int) {
 	switch name := p.checkName(); p.t {
 	case '=':
 		p.forNumeric(name, line)
-	case ',':
+	case ',', tkIn:
 		p.forList(name)
 	default:
 		p.syntaxError("'=' or 'in' expected")
@@ -583,7 +590,7 @@ func (p *parser) functionStatement(line int) {
 func (p *parser) localFunction() {
 	p.function.MakeLocalVariable(p.checkName())
 	p.function.AdjustLocalVariables(1)
-	p.function.localVariable(p.body(false, p.lineNumber).info).startPC = pc(p.function.pc)
+	p.function.localVariable(p.body(false, p.lineNumber).info).startPC = pc(len(p.function.f.code))
 }
 
 func (p *parser) localStatement() {
