@@ -2,6 +2,7 @@ package lua
 
 import (
 	"fmt"
+	"io"
 	"math"
 	"strings"
 )
@@ -28,6 +29,7 @@ const (
 	MemoryError
 	GCError
 	ErrorError
+	FileError
 )
 
 const (
@@ -266,6 +268,19 @@ func ProtectedCallWithContinuation(l *State, argCount, resultCount, errorFunctio
 	l.checkResults(argCount, resultCount)
 	// TODO ...
 	return Ok
+}
+
+func Load(l *State, r io.Reader, chunkName, mode string) Status {
+	if chunkName == "" {
+		chunkName = "?"
+	}
+	status := protectedParser(l, r, chunkName, mode)
+	if status == Ok {
+		if f := l.stack[l.top-1].(*luaClosure); f.upValueCount() == 1 {
+			f.setUpValue(0, l.global.registry.atInt(RegistryIndexGlobals))
+		}
+	}
+	return status
 }
 
 func NewState() *State {
@@ -756,6 +771,33 @@ func Concat(l *State, n int) {
 func Register(l *State, name string, f Function) {
 	PushGoFunction(l, f)
 	SetGlobal(l, name)
+}
+
+func (l *State) setErrorObject(status Status, oldTop int) {
+	switch status {
+	case MemoryError:
+		l.stack[oldTop] = l.global.memoryErrorMessage
+	case ErrorError:
+		l.stack[oldTop] = "error in error handling"
+	default:
+		l.stack[oldTop] = l.stack[l.top-1]
+	}
+	l.top = oldTop + 1
+}
+
+func (l *State) protectedCall(f func(), oldTop, errorFunc int) Status {
+	callInfo, allowHook, nonYieldableCallCount, errorFunction := l.callInfo, l.allowHook, l.nonYieldableCallCount, l.errorFunction
+	l.errorFunction = errorFunc
+	status := Ok
+	f() // TODO "raw unprotected"
+	if status != Ok {
+		l.close(oldTop)
+		l.setErrorObject(status, oldTop)
+		l.callInfo, l.allowHook, l.nonYieldableCallCount = callInfo, allowHook, nonYieldableCallCount
+		// l.shrinkStack()
+	}
+	l.errorFunction = errorFunction
+	return status
 }
 
 func Top(l *State) int                             { return l.top - (l.callInfo.function() + 1) }

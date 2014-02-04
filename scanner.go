@@ -69,7 +69,7 @@ type token struct {
 type scanner struct {
 	l                    *State
 	buffer               bytes.Buffer
-	r                    io.RuneReader
+	r                    io.ByteReader
 	current              rune
 	lineNumber, lastLine int
 	source               string
@@ -121,9 +121,10 @@ func (s *scanner) incrementLineNumber() {
 }
 
 func (s *scanner) advance() {
-	var err error
-	if s.current, _, err = s.r.ReadRune(); err != nil {
+	if c, err := s.r.ReadByte(); err != nil {
 		s.current = endOfStream
+	} else {
+		s.current = rune(c)
 	}
 }
 

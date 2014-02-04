@@ -1,8 +1,10 @@
 package lua
 
 import (
+	"bufio"
 	"fmt"
 	"io"
+	"strings"
 )
 
 type parser struct {
@@ -682,7 +684,7 @@ func (p *parser) mainFunction() {
 	p.function = p.function.previous
 }
 
-func (l *State) parse(r io.RuneReader, name string) *luaClosure {
+func (l *State) parse(r io.ByteReader, name string) *luaClosure {
 	p := &parser{scanner: scanner{r: r, lineNumber: 1, lastLine: 1, lookAheadToken: token{t: tkEOS}, l: l, source: name}}
 	f := &function{f: &prototype{source: name, maxStackSize: 2, isVarArg: true}, h: newTable(), p: p, jumpPC: noJump}
 	p.function = f
@@ -697,4 +699,36 @@ func (l *State) parse(r io.RuneReader, name string) *luaClosure {
 	c := l.newLuaClosure(f.f)
 	l.push(c)
 	return c
+}
+
+func (l *State) checkMode(mode, x string) {
+	if mode != "" && !strings.Contains(mode, x[:1]) {
+		l.push(fmt.Sprintf("attempt to load a %s chunk (mode is '%s')", x, mode))
+		l.throw(SyntaxError)
+	}
+}
+
+func protectedParser(l *State, r io.Reader, name, mode string) Status {
+	l.nonYieldableCallCount++
+	status := l.protectedCall(func() {
+		var closure *luaClosure
+		b := bufio.NewReader(r)
+		if c, err := b.ReadByte(); err != nil {
+			// TODO
+		} else if c == Signature[0] {
+			l.checkMode(mode, "binary")
+			b.UnreadByte()
+			closure, err = l.undump(r, name) // TODO handle err
+		} else {
+			l.checkMode(mode, "text")
+			b.UnreadByte()
+			closure = l.parse(b, name)
+		}
+		l.assert(closure.upValueCount() == len(closure.prototype.upValues))
+		for i := range closure.upValues {
+			closure.upValues[i] = l.newUpValue()
+		}
+	}, l.top, l.errorFunction)
+	l.nonYieldableCallCount--
+	return status
 }

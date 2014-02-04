@@ -64,6 +64,21 @@ func protectedCallContinuation(l *State) int {
 	return finishProtectedCall(l, s == Yield)
 }
 
+func loadHelper(l *State, s Status, e int) int {
+	if s == Ok {
+		if e != 0 {
+			PushValue(l, e)
+			// if _, ok := SetUpValue(l, -2, 1); !ok {
+			// 	Pop(l, 1)
+			// }
+		}
+		return 1
+	}
+	PushNil(l)
+	Insert(l, -2)
+	return 2
+}
+
 var baseFunctions = []RegistryFunction{
 	{"assert", func(l *State) int {
 		if !ToBoolean(l, 1) {
@@ -91,7 +106,16 @@ var baseFunctions = []RegistryFunction{
 		}
 		return 1
 	}},
-	// {"dofile", doFile},
+	{"dofile", func(l *State) int {
+		f := OptString(l, 1, "")
+		if SetTop(l, 1); LoadFile(l, f, "") != Ok {
+			Error(l)
+			panic("unreachable")
+		}
+		continuation := func(l *State) int { return Top(l) - 1 }
+		CallWithContinuation(l, 0, MultipleReturns, 0, continuation)
+		return continuation(l)
+	}},
 	{"error", func(l *State) int {
 		level := OptInteger(l, 2, 1)
 		SetTop(l, 1)
@@ -113,7 +137,13 @@ var baseFunctions = []RegistryFunction{
 		return 1
 	}},
 	{"ipairs", pairs("__ipairs", true, intPairs)},
-	// {"loadfile", loadFile},
+	{"loadfile", func(l *State) int {
+		f, m, e := OptString(l, 1, ""), OptString(l, 2, ""), 3
+		if IsNone(l, e) {
+			e = 0
+		}
+		return loadHelper(l, LoadFile(l, f, m), e)
+	}},
 	// {"load", load},
 	{"next", next},
 	{"pairs", pairs("__pairs", false, next)},

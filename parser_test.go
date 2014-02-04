@@ -1,8 +1,6 @@
 package lua
 
 import (
-	"bufio"
-	"os"
 	"path/filepath"
 	"reflect"
 	"runtime/debug"
@@ -10,43 +8,11 @@ import (
 	"testing"
 )
 
-func loadBinary(l *State, t *testing.T, fileName string) *luaClosure {
-	file, err := os.Open(fileName)
-	if err != nil {
-		t.Fatal("couldn't open " + fileName)
+func load(l *State, t *testing.T, fileName string) *luaClosure {
+	if status := LoadFile(l, fileName, "bt"); status != Ok {
+		return nil
 	}
-	closure, err := l.undump(file, "test")
-	if err != nil {
-		offset, _ := file.Seek(0, 1)
-		t.Error("unexpected error", err, "at file offset", offset)
-	}
-	for i := range closure.upValues {
-		closure.upValues[i] = l.newUpValue()
-	}
-	if len(closure.upValues) == 1 {
-		globals := l.global.registry.atInt(RegistryIndexGlobals)
-		closure.upValues[0].setValue(globals)
-	}
-	return closure
-}
-
-func loadSource(l *State, t *testing.T, fileName string) *luaClosure {
-	file, err := os.Open(fileName)
-	if err != nil {
-		t.Fatal("couldn't open " + fileName)
-	}
-	closure := l.parse(bufio.NewReader(file), "@"+fileName)
-	if closure == nil {
-		t.Error("closure was nil")
-	}
-	for i := range closure.upValues {
-		closure.upValues[i] = l.newUpValue()
-	}
-	if len(closure.upValues) == 1 {
-		globals := l.global.registry.atInt(RegistryIndexGlobals)
-		closure.upValues[0].setValue(globals)
-	}
-	return closure
+	return ToValue(l, -1).(*luaClosure)
 }
 
 func TestParser(t *testing.T) {
@@ -56,9 +22,9 @@ func TestParser(t *testing.T) {
 	// 	printStack(state.stack[state.callInfo.(*luaCallInfo).base():state.top])
 	// 	println(state.callInfo.(*luaCallInfo).code[state.callInfo.(*luaCallInfo).savedPC].String())
 	// }, MaskCount, 1)
-	bin := loadBinary(l, t, "fib.bin")
+	bin := load(l, t, "fib.bin")
 	Pop(l, 1)
-	closure := loadSource(l, t, "fib.lua")
+	closure := load(l, t, "fib.lua")
 	p := closure.prototype
 	if p == nil {
 		t.Fatal("prototype was nil")
@@ -98,9 +64,9 @@ func protectedTestParser(l *State, t *testing.T, source string) {
 		}
 	}()
 	t.Log("Parsing " + source)
-	bin := loadBinary(l, t, strings.TrimSuffix(source, ".lua")+".bin")
+	bin := load(l, t, strings.TrimSuffix(source, ".lua")+".bin")
 	Pop(l, 1)
-	src := loadSource(l, t, source)
+	src := load(l, t, source)
 	Pop(l, 1)
 	t.Log(source)
 	compareClosures(t, src, bin)

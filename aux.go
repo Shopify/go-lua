@@ -1,5 +1,12 @@
 package lua
 
+import (
+	"bufio"
+	"io"
+	"os"
+	"strings"
+)
+
 func MetaField(l *State, index int, event string) bool {
 	if !MetaTable(l, index) {
 		return false
@@ -280,4 +287,65 @@ func NewLibraryTable(l *State, functions []RegistryFunction) { CreateTable(l, 0,
 func NewLibrary(l *State, functions []RegistryFunction) {
 	NewLibraryTable(l, functions)
 	SetFunctions(l, functions, 0)
+}
+
+func skipComment(r *bufio.Reader) (bool, error) {
+	bom := "\xEF\xBB\xBF"
+	if ba, err := r.Peek(len(bom)); err != nil {
+		return false, err
+	} else if string(ba) == bom {
+		_, _ = r.Read(ba)
+	}
+	if c, _, err := r.ReadRune(); err != nil {
+		return false, err
+	} else if c == '#' {
+		_, err = r.ReadBytes('\n')
+		return true, err
+	}
+	return false, r.UnreadRune()
+}
+
+func LoadFile(l *State, fileName, mode string) Status {
+	var f *os.File
+	fileNameIndex := Top(l) + 1
+	fileError := func(what string) Status {
+		fileName, _ := ToString(l, fileNameIndex)
+		PushFString(l, "cannot %s %s", what, fileName[1:])
+		Remove(l, fileNameIndex)
+		return FileError
+	}
+	if fileName == "" {
+		PushString(l, "=stdin")
+		f = os.Stdin
+	} else {
+		PushString(l, "@"+fileName)
+		var err error
+		if f, err = os.Open(fileName); err != nil {
+			return fileError("open")
+		}
+	}
+	r := bufio.NewReader(f)
+	if skipped, err := skipComment(r); err != nil {
+		SetTop(l, fileNameIndex)
+		return fileError("read")
+	} else if skipped {
+		r = bufio.NewReader(io.MultiReader(strings.NewReader("\n"), r))
+	}
+	s, _ := ToString(l, -1)
+	status := Load(l, r, s, mode)
+	if f != os.Stdin {
+		_ = f.Close()
+	}
+	if status != Ok {
+		SetTop(l, fileNameIndex)
+		return fileError("read")
+	}
+	Remove(l, fileNameIndex)
+	return status
+}
+
+func LoadString(l *State, s string) Status { return LoadBuffer(l, s, s, "") }
+
+func LoadBuffer(l *State, b, name, mode string) Status {
+	return Load(l, strings.NewReader(b), name, mode)
 }

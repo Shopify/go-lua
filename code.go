@@ -355,7 +355,7 @@ func (f *function) EncodeString(s string) exprDesc {
 func (f *function) LoadNil(from, n int) {
 	if len(f.f.code) > f.lastTarget { // no jumps to current position
 		if previous := &f.f.code[len(f.f.code)-1]; previous.opCode() == opLoadNil {
-			if pf, pl, l := previous.a(), previous.a()+previous.b(), from+n-1; pf <= from && from < pl || from <= pf && pf < l { // can connect both
+			if pf, pl, l := previous.a(), previous.a()+previous.b(), from+n-1; pf <= from && from <= pl+1 || from <= pf && pf <= l+1 { // can connect both
 				from, l = min(from, pf), max(l, pl)
 				previous.setA(from)
 				previous.setB(l - from)
@@ -364,6 +364,7 @@ func (f *function) LoadNil(from, n int) {
 		}
 	}
 	f.EncodeABC(opLoadNil, from, n-1, 0)
+	// loadnil 0, 0; loadnil 1, 0 -> loadnil 0, 1 ==> pf = 0, pl = 0, from = 1, l = 1 ==> pf <= from, from <= pf,
 }
 
 func (f *function) Jump() int {
