@@ -79,7 +79,7 @@ func loadHelper(l *State, s Status, e int) int {
 	return 2
 }
 
-var baseFunctions = []RegistryFunction{
+var baseLibrary = []RegistryFunction{
 	{"assert", func(l *State) int {
 		if !ToBoolean(l, 1) {
 			Errorf(l, "%s", OptString(l, 2, "assertion failed!"))
@@ -273,7 +273,7 @@ func BaseOpen(l *State) int {
 	PushGlobalTable(l)
 	PushGlobalTable(l)
 	SetField(l, -2, "_G")
-	SetFunctions(l, baseFunctions, 0)
+	SetFunctions(l, baseLibrary, 0)
 	PushString(l, VersionString)
 	SetField(l, -2, "_VERSION")
 	return 1
