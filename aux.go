@@ -134,6 +134,47 @@ func ToStringMeta(l *State, index int) (string, bool) {
 	return ToString(l, -1)
 }
 
+func NewMetaTable(l *State, name string) bool {
+	if MetaTableNamed(l, name); !IsNil(l, -1) {
+		return false
+	}
+	Pop(l, 1)
+	NewTable(l)
+	PushValue(l, -1)
+	SetField(l, RegistryIndex, name)
+	return true
+}
+
+func MetaTableNamed(l *State, name string) {
+	Field(l, RegistryIndex, name)
+}
+
+func SetMetaTableNamed(l *State, name string) {
+	MetaTableNamed(l, name)
+	SetMetaTable(l, -2)
+}
+
+func TestUserData(l *State, index int, name string) interface{} {
+	if d := ToUserData(l, index); d != nil {
+		if MetaTable(l, index) {
+			if MetaTableNamed(l, name); !RawEqual(l, -1, -2) {
+				d = nil
+			}
+			Pop(l, 2)
+			return d
+		}
+	}
+	return nil
+}
+
+func CheckUserData(l *State, index int, name string) interface{} {
+	if d := TestUserData(l, index, name); d != nil {
+		return d
+	}
+	typeError(l, index, name)
+	panic("unreachable")
+}
+
 func CheckType(l *State, index, t int) {
 	if Type(l, index) != t {
 		tagError(l, index, t)
