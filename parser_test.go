@@ -47,11 +47,11 @@ func TestParserExhaustively(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	blackList := map[string]bool{"all.lua": true, "main.lua": true, "bitwise.lua": true}
+	// blackList := map[string]bool{"all.lua": true, "main.lua": true, "bitwise.lua": true}
 	for _, source := range matches {
-		if _, ok := blackList[filepath.Base(source)]; ok {
-			continue
-		}
+		// if _, ok := blackList[filepath.Base(source)]; ok {
+		// 	continue
+		// }
 		protectedTestParser(l, t, source)
 	}
 }

@@ -727,6 +727,20 @@ func RawSet(l *State, index int) {
 	l.top -= 2
 }
 
+func SetUserValue(l *State, index int) {
+	l.checkElementCount(1)
+	d, ok := l.indexToValue(index).(*userData)
+	apiCheck(ok, "userdata expected")
+	if l.stack[l.top-1] == nil {
+		d.env = nil
+	} else {
+		t, ok := l.stack[l.top-1].(*table)
+		apiCheck(ok, "table expected")
+		d.env = t
+	}
+	l.top--
+}
+
 func SetMetaTable(l *State, index int) {
 	l.checkElementCount(1)
 	mt, ok := l.stack[l.top-1].(*table)
@@ -818,6 +832,7 @@ func PushInteger(l *State, n int)                  { l.apiPush(float64(n)) }
 func PushUnsigned(l *State, n uint)                { l.apiPush(float64(n)) }
 func PushBoolean(l *State, b bool)                 { l.apiPush(b) }
 func PushLightUserData(l *State, d interface{})    { l.apiPush(d) }
+func PushUserData(l *State, d interface{})         { l.apiPush(&userData{data: d}) }
 func Length(l *State, index int)                   { l.apiPush(l.objectLength(l.indexToValue(index))) }
 func Pop(l *State, n int)                          { SetTop(l, -n-1) }
 func NewTable(l *State)                            { CreateTable(l, 0, 0) }
