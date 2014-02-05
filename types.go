@@ -28,6 +28,8 @@ func printValue(v value) {
 		f := runtime.FuncForPC(pc)
 		file, line := f.FileLine(pc)
 		print(fmt.Sprintf("go function %s %s:%d", f.Name(), file, line))
+	case *userData:
+		print("userdata ", v)
 	case nil:
 		print("nil")
 	default:

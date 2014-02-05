@@ -58,11 +58,16 @@ func (l *State) setTableAt(t value, key value, val value) {
 		} else if tm = l.tagMethodByObject(t, tmNewIndex); tm == nil {
 			l.typeError(t, "index")
 		}
-		if f, ok := tm.(*luaClosure); ok {
-			l.callTagMethodV(f, t, key, val)
-			return
+		switch tm.(type) {
+		case *luaClosure:
+		case *goClosure:
+		case Function:
+		default:
+			t = tm
+			continue
 		}
-		t = tm
+		l.callTagMethodV(tm, t, key, val)
+		return
 	}
 	l.runtimeError("loop in setTable")
 }
