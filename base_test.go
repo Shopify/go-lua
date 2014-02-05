@@ -32,9 +32,9 @@ func Example() {
 	PushValue(l, -1)
 	SetGlobal(l, "step")
 	SetMetaTableNamed(l, "stepMetaTable")
-	LoadString(l, "step.request_tracking_js = function ()\n"+
-		"  get(config.domain..'/javascripts/shopify_stats.js')\n"+
-		"end")
+	LoadString(l, `step.request_tracking_js = function ()
+	  get(config.domain..'/javascripts/shopify_stats.js')
+	end`)
 	Call(l, 0, 0)
 	fmt.Println(steps[0].name)
 	// Output: request_tracking_js
