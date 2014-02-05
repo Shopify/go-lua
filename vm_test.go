@@ -2,4 +2,9 @@ package lua
 
 import "testing"
 
-func TestVm(t *testing.T) { Call(sourceTest(t, "fib.lua", RegistryFunction{"_G", BaseOpen}), 0, 0) }
+func TestVm(t *testing.T) {
+	l := NewState()
+	BaseOpen(l)
+	LoadFile(l, "fib.lua", "t")
+	Call(l, 0, 0)
+}

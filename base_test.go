@@ -5,12 +5,13 @@ import (
 	"testing"
 )
 
-func TestBase(t *testing.T) { Call(sourceTest(t, "base.lua", RegistryFunction{"_G", BaseOpen}), 0, 0) }
-
-func TestHello(t *testing.T) {
+func TestBase(t *testing.T) {
+	s := `
+    print("hello world\n")
+    assert(true)`
 	l := NewState()
 	BaseOpen(l)
-	LoadString(l, `print("Hello World!")`)
+	LoadString(l, s)
 	Call(l, 0, 0)
 }
 
