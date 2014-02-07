@@ -133,7 +133,7 @@ type goCallInfo struct {
 	context, extra, oldErrorFunction int
 	continuation                     Function
 	oldAllowHook                     bool
-	status                           Status
+	status                           error
 }
 
 func (ci *commonCallInfo) top() int                          { return ci.top_ }
@@ -389,7 +389,7 @@ func (l *State) call(function int, resultCount int, allowYield bool) {
 	l.nestedGoCallCount--
 }
 
-func (l *State) throw(errorCode Status) {
+func (l *State) throw(errorCode error) {
 	if l.protectFunction != nil {
 		panic(errorCode)
 	} else {
@@ -406,12 +406,12 @@ func (l *State) throw(errorCode Status) {
 	}
 }
 
-func (l *State) protect(f func()) Status {
+func (l *State) protect(f func()) error {
 	nestedGoCallCount, protectFunction := l.nestedGoCallCount, l.protectFunction
-	status := Ok
+	var status error
 	l.protectFunction = func() {
 		if e := recover(); e != nil {
-			status = e.(Status)
+			status = e.(error)
 		}
 	}
 	defer l.protectFunction()

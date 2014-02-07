@@ -9,7 +9,7 @@ import (
 )
 
 func load(l *State, t *testing.T, fileName string) *luaClosure {
-	if status := LoadFile(l, fileName, "bt"); status != Ok {
+	if status := LoadFile(l, fileName, "bt"); status != nil {
 		return nil
 	}
 	return ToValue(l, -1).(*luaClosure)

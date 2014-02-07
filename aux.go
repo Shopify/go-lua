@@ -62,7 +62,7 @@ func findField(l *State, objectIndex, level int) bool {
 	}
 	for PushNil(l); Next(l, -2); Pop(l, 1) { // for each pair in table
 		if IsString(l, -2) { // ignore non-string keys
-			if RawEqual(l, objectIndex, -1) { // found object?
+			if ok, _ := RawEqual(l, objectIndex, -1); ok { // found object?
 				Pop(l, 1) // remove value (but keep name)
 				return true
 			} else if findField(l, objectIndex, level-1) { // try recursively
@@ -156,16 +156,22 @@ func SetMetaTableNamed(l *State, name string) {
 }
 
 func TestUserData(l *State, index int, name string) interface{} {
-	if d := ToUserData(l, index); d != nil {
-		if MetaTable(l, index) {
-			if MetaTableNamed(l, name); !RawEqual(l, -1, -2) {
-				d = nil
-			}
-			Pop(l, 2)
-			return d
-		}
+	d := ToUserData(l, index)
+	if d == nil {
+		return nil
 	}
-	return nil
+	if !MetaTable(l, index) {
+		return nil
+	}
+
+	MetaTableNamed(l, name)
+	defer Pop(l, 2)
+
+	if ok, _ := RawEqual(l, -1, -2); !ok {
+		return nil
+	}
+
+	return d
 }
 
 func CheckUserData(l *State, index int, name string) interface{} {
@@ -258,16 +264,17 @@ func TypeNameOf(l *State, index int) string {
 	return TypeName(l, TypeOf(l, index))
 }
 
-func SetFunctions(l *State, functions []RegistryFunction, upValueCount int) {
-	CheckStackWithMessage(l, upValueCount, "too many upvalues")
+func SetFunctions(l *State, functions []RegistryFunction, upValueCount uint8) {
+	upValueCountInt := int(upValueCount)
+	CheckStackWithMessage(l, upValueCountInt, "too many upvalues")
 	for _, r := range functions { // fill the table with given functions
-		for i := 0; i < upValueCount; i++ { // copy upvalues to the top
-			PushValue(l, -upValueCount)
+		for i := 0; i < upValueCountInt; i++ { // copy upvalues to the top
+			PushValue(l, -upValueCountInt)
 		}
 		PushGoClosure(l, r.Function, upValueCount) // closure with those upvalues
-		SetField(l, -(upValueCount + 2), r.Name)
+		SetField(l, -(upValueCountInt + 2), r.Name)
 	}
-	Pop(l, upValueCount) // remove upvalues
+	Pop(l, upValueCountInt) // remove upvalues
 }
 
 func CheckStackWithMessage(l *State, space int, message string) {
@@ -347,10 +354,10 @@ func skipComment(r *bufio.Reader) (bool, error) {
 	return false, r.UnreadRune()
 }
 
-func LoadFile(l *State, fileName, mode string) Status {
+func LoadFile(l *State, fileName string, mode Mode) error {
 	var f *os.File
 	fileNameIndex := Top(l) + 1
-	fileError := func(what string) Status {
+	fileError := func(what string) error {
 		fileName, _ := ToString(l, fileNameIndex)
 		PushFString(l, "cannot %s %s", what, fileName[1:])
 		Remove(l, fileNameIndex)
@@ -378,7 +385,7 @@ func LoadFile(l *State, fileName, mode string) Status {
 	if f != os.Stdin {
 		_ = f.Close()
 	}
-	if status != Ok {
+	if status != nil {
 		SetTop(l, fileNameIndex)
 		return fileError("read")
 	}
@@ -386,9 +393,9 @@ func LoadFile(l *State, fileName, mode string) Status {
 	return status
 }
 
-func LoadString(l *State, s string) Status { return LoadBuffer(l, s, s, "") }
+func LoadString(l *State, s string) error { return LoadBuffer(l, s, s, Mode("")) }
 
-func LoadBuffer(l *State, b, name, mode string) Status {
+func LoadBuffer(l *State, b, name string, mode Mode) error {
 	return Load(l, strings.NewReader(b), name, mode)
 }
 
