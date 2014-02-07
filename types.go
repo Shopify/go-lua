@@ -125,7 +125,6 @@ func arith(op int, v1, v2 float64) float64 {
 	case OpUnaryMinus:
 		return -v1
 	}
-
 	panic(fmt.Sprintf("not an arithmetic op code (%d)", op))
 }
 

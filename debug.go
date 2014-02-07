@@ -10,17 +10,16 @@ func (l *State) runtimeError(message string) { // TODO
 
 func (l *State) typeError(v value, message string) { // TODO
 	typeName := TypeName(l, l.valueToType(v))
-	panic(fmt.Sprintf("attempt to %s a '%v' value", message, typeName))
+	panic(fmt.Sprintf("attempt to %s a '%s' value", message, typeName))
 }
 
 func (l *State) orderError(left, right value) { // TODO
-
 	leftType := TypeName(l, l.valueToType(left))
 	rightType := TypeName(l, l.valueToType(right))
 	if leftType == rightType {
-		panic(fmt.Sprintf("attempt to compare two '%v' values", leftType))
+		panic(fmt.Sprintf("attempt to compare two '%s' values", leftType))
 	}
-	panic(fmt.Sprintf("attempt to compare '%v' with '%v'", leftType, rightType))
+	panic(fmt.Sprintf("attempt to compare '%s' with '%s'", leftType, rightType))
 }
 
 func (l *State) arithError(v1, v2 value) { // TODO
