@@ -128,7 +128,7 @@ func ToStringMeta(l *State, index int) (string, bool) {
 		case TypeNil:
 			PushString(l, "nil")
 		default:
-			PushFString(l, "%s: %p", TypeName(l, TypeOf(l, index)), ToValue(l, index))
+			PushFString(l, "%s: %p", TypeNameOf(l, index), ToValue(l, index))
 		}
 	}
 	return ToString(l, -1)
