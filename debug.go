@@ -1,25 +1,33 @@
 package lua
 
+import "fmt"
+
 func (l *State) resetHookCount() { l.hookCount = l.baseHookCount }
 
 func (l *State) runtimeError(message string) { // TODO
-	panic("runtimeError")
+	panic(fmt.Sprintf("runtimeError, %s", message))
 }
 
 func (l *State) typeError(v value, message string) { // TODO
-	panic("typeError")
+	typeName := TypeName(l, l.valueToType(v))
+	panic(fmt.Sprintf("attempt to %s a '%s' value", message, typeName))
 }
 
 func (l *State) orderError(left, right value) { // TODO
-	panic("orderError")
+	leftType := TypeName(l, l.valueToType(left))
+	rightType := TypeName(l, l.valueToType(right))
+	if leftType == rightType {
+		panic(fmt.Sprintf("attempt to compare two '%s' values", leftType))
+	}
+	panic(fmt.Sprintf("attempt to compare '%s' with '%s'", leftType, rightType))
 }
 
 func (l *State) arithError(v1, v2 value) { // TODO
-	panic("arithError")
+	l.typeError(v2, "perform arithmetic on")
 }
 
 func (l *State) concatError(v1, v2 value) { // TODO
-	panic("concatError")
+	l.typeError(v1, "concatenate")
 }
 
 func (l *State) assert(cond bool) {

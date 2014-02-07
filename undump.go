@@ -3,6 +3,7 @@ package lua
 import (
 	"encoding/binary"
 	"errors"
+	"fmt"
 	"io"
 	"math"
 	"unsafe"
@@ -71,7 +72,7 @@ func (state *loadState) readString() (s string, err error) {
 		err = state.read(&size32)
 		size = uintptr(size32)
 	} else {
-		panic("unsupported pointer size")
+		panic(fmt.Sprintf("unsupported pointer size (%d)", maxUint))
 	}
 	if err != nil || size == 0 {
 		return
@@ -256,7 +257,7 @@ func init() {
 		uintptrBitCount++
 	}
 	if uintptrBitCount != header.PointerSize*8 {
-		panic("invalid pointer size")
+		panic(fmt.Sprintf("invalid pointer size (%d)", uintptrBitCount))
 	}
 }
 
