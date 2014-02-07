@@ -10,7 +10,7 @@ func (l *State) arith(rb, rc value, op tm) value {
 	b, bok := toNumber(rb)
 	c, cok := toNumber(rc)
 	if bok && cok {
-		return arith(int(op-tmAdd)+OpAdd, b, c)
+		return arith(Operator(op-tmAdd)+OpAdd, b, c)
 	} else if result, ok := l.callBinaryTagMethod(rb, rc, op); ok {
 		return result
 	}

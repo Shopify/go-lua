@@ -49,8 +49,10 @@ const (
 	TypeNone = TypeNil - 1
 )
 
+type Operator int
+
 const (
-	OpAdd = iota
+	OpAdd Operator = iota
 	OpSub
 	OpMul
 	OpDiv
@@ -354,6 +356,8 @@ func (l *State) setIndexToValue(index int, v value) {
 	}
 }
 
+// AbsIndex converts the acceptable index `index` to an absolute index (that is,
+// one that does not depend on the stack top).
 func AbsIndex(l *State, index int) int {
 	if index > 0 || isPseudoIndex(index) {
 		return index
@@ -471,7 +475,12 @@ func IsUserData(l *State, index int) bool {
 	return ok
 }
 
-func Arith(l *State, op int) {
+// Arith performa an arithmetic operation over the two values (or one, in
+// case of negation) at the top of the stack, with the value at the top being
+// the second operand, ops these values and pushes the result of the operation.
+// The function follows the semantics of the corresponding Lua operator
+// (that is, it may call metamethods).
+func Arith(l *State, op Operator) {
 	if op != OpUnaryMinus {
 		l.checkElementCount(2)
 	} else {

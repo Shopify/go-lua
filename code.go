@@ -863,7 +863,7 @@ func foldConstants(op opCode, e1, e2 exprDesc) (exprDesc, bool) {
 	} else if (op == opDiv || op == opMod) && e2.value == 0.0 {
 		return e1, false
 	}
-	e1.value = arith(int(op-opAdd)+OpAdd, e1.value, e2.value)
+	e1.value = arith(Operator(op-opAdd)+OpAdd, e1.value, e2.value)
 	return e1, true
 }
 
