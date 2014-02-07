@@ -423,8 +423,8 @@ func CheckStack(l *State, size int) bool {
 	return ok
 }
 
-func TypeOf(l *State, index int) Type {
-	switch l.indexToValue(index).(type) {
+func (l *State) valueToType(v value) int {
+	switch v.(type) {
 	case nil:
 		return TypeNil
 	case bool:
@@ -445,6 +445,10 @@ func TypeOf(l *State, index int) Type {
 		return TypeThread
 	}
 	return TypeNone
+}
+
+func TypeOf(l *State, index int) int {
+	return l.valueToType(l.indexToValue(index))
 }
 
 func IsGoFunction(l *State, index int) bool {

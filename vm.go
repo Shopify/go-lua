@@ -546,7 +546,7 @@ func (l *State) execute() {
 				}
 			}
 		case opExtraArg:
-			panic("unexpected opExtraArg instruction")
+			panic(fmt.Sprintf("unexpected opExtraArg instruction, '%s'", i.String()))
 		}
 	}
 }
