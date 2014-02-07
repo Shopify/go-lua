@@ -15,7 +15,21 @@ var stringLibrary = []RegistryFunction{
 	{"len", func(l *State) int { PushInteger(l, len(CheckString(l, 1))); return 1 }},
 	{"lower", func(l *State) int { PushString(l, strings.ToLower(CheckString(l, 1))); return 1 }},
 	// {"match", ...},
-	// {"rep", ...},
+	{"rep", func(l *State) int {
+		s, n, sep := CheckString(l, 1), CheckInteger(l, 2), OptString(l, 3, "")
+		if n <= 0 {
+			PushString(l, "")
+		} else if len(s)+len(sep) < len(s) || len(s)+len(sep) >= maxInt/n {
+			Errorf(l, "resulting string too large")
+		} else {
+			result := s
+			for ; n > 1; n-- {
+				result += sep + s
+			}
+			PushString(l, result)
+		}
+		return 1
+	}},
 	{"reverse", func(l *State) int {
 		r := []rune(CheckString(l, 1))
 		for i, j := 0, len(r)-1; i < j; i, j = i+1, j-1 {

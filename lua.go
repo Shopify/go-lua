@@ -322,15 +322,6 @@ func apiCheckStackIndex(index int, v value) {
 	apiCheck(v != nil && !isPseudoIndex(index), "index not in the stack")
 }
 
-func SetField(l *State, index int, key string) {
-	l.checkElementCount(1)
-	t := l.indexToValue(index)
-	l.stack[l.top] = key
-	l.top++
-	l.setTableAt(t, key, l.stack[l.top-2])
-	l.top -= 2 // pop value and key
-}
-
 func (l *State) indexToValue(index int) value {
 	switch callInfo := l.callInfo; {
 	case index > 0:
@@ -747,6 +738,20 @@ func SetGlobal(l *State, name string) {
 	l.push(name)
 	l.setTableAt(g, l.stack[l.top-1], l.stack[l.top-2])
 	l.top -= 2 // pop value and key
+}
+
+func SetTable(l *State, index int) {
+	l.checkElementCount(2)
+	l.setTableAt(l.indexToValue(index), l.stack[l.top-2], l.stack[l.top-1])
+	l.top -= 2
+}
+
+func SetField(l *State, index int, key string) {
+	l.checkElementCount(1)
+	t := l.indexToValue(index)
+	l.push(key)
+	l.setTableAt(t, key, l.stack[l.top-2])
+	l.top -= 2
 }
 
 func RawSet(l *State, index int) {
