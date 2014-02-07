@@ -4,29 +4,70 @@ import "fmt"
 
 func (l *State) resetHookCount() { l.hookCount = l.baseHookCount }
 
-func (l *State) runtimeError(message string) { // TODO
-	panic(fmt.Sprintf("runtimeError, %s", message))
-}
-
-func (l *State) typeError(v value, message string) { // TODO
-	typeName := TypeName(l, l.valueToType(v))
-	panic(fmt.Sprintf("attempt to %s a '%s' value", message, typeName))
-}
-
-func (l *State) orderError(left, right value) { // TODO
-	leftType := TypeName(l, l.valueToType(left))
-	rightType := TypeName(l, l.valueToType(right))
-	if leftType == rightType {
-		panic(fmt.Sprintf("attempt to compare two '%s' values", leftType))
+func (l *State) runtimeError(message string) {
+	l.push(message)
+	if l.callInfo.isLua() {
+		//...
 	}
-	panic(fmt.Sprintf("attempt to compare '%s' with '%s'", leftType, rightType))
+	l.errorMessage()
 }
 
-func (l *State) arithError(v1, v2 value) { // TODO
+func (l *State) typeError(v value, operation string) {
+	typeName := TypeName(l, l.valueToType(v))
+	if l.callInfo.isLua() {
+		var kind, name string
+		isUpValue := func() bool {
+			c := l.stack[l.callInfo.function()].(*luaClosure)
+			for i, uv := range c.upValues {
+				if uv.value() == v {
+					kind, name = "upvalue", c.prototype.upValues[i].name
+					return true
+				}
+			}
+			return false
+		}
+		isInStack := func() bool {
+			for _, e := range l.callInfo.(*luaCallInfo).frame {
+				if e == v {
+					return true
+				}
+			}
+			return false
+		}
+		if !isUpValue() && isInStack() {
+			// TODO
+		}
+		if true { // TODO
+			l.runtimeError(fmt.Sprintf("attempt to %s %s '%s' (a %s value)", operation, kind, name, typeName))
+		}
+	}
+	l.runtimeError(fmt.Sprintf("attempt to %s a %s value", operation, typeName))
+}
+
+func (l *State) orderError(left, right value) {
+	leftType, rightType := TypeName(l, l.valueToType(left)), TypeName(l, l.valueToType(right))
+	if leftType == rightType {
+		l.runtimeError(fmt.Sprintf("attempt to compare two '%s' values", leftType))
+	}
+	l.runtimeError(fmt.Sprintf("attempt to compare '%s' with '%s'", leftType, rightType))
+}
+
+func (l *State) arithError(v1, v2 value) {
+	if _, ok := toNumber(v1); !ok {
+		v2 = v1
+	}
 	l.typeError(v2, "perform arithmetic on")
 }
 
-func (l *State) concatError(v1, v2 value) { // TODO
+func (l *State) concatError(v1, v2 value) {
+	_, isString := v1.(string)
+	_, isNumber := v1.(float64)
+	if isString || isNumber {
+		v1 = v2
+	}
+	_, isString = v1.(string)
+	_, isNumber = v1.(float64)
+	l.assert(!isString && !isNumber)
 	l.typeError(v1, "concatenate")
 }
 
