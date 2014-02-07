@@ -101,36 +101,14 @@ type Function func(state *State) int
 // basic stack manipulation
 // TODO XMove(from, to State, n int)
 
-// Access functions (stack -> Go)
-// Comparison and arithmetic functions
-// Push functions (Go -> stack)
-
-// Get functions (Lua -> stack)
-// TODO NewUserData(?) interface{}
-
 // Set functions (stack -> Lua)
-// SetTable(index int)
-// SetField(index int, name string)
-// RawSetInt(index, n int)
 // RawSetValue(index int, p interface{})
-// SetUserValue(index int)
-
-// Miscellaneous functions
-// TODO AllocateFunction() (f Alloc, userData interface{})
-// TODO SetAllocateFunction(f Alloc, userData interface{})
-
-// Useful functions
 
 // Debug API
 // Local(activationRecord *Debug, index int) string
 // SetLocal(activationRecord *Debug, index int) string
-// UpValue(function, index int) string
-// SetUpValue(function, index int) string
 // UpValueId(function, index int) interface{}
 // UpValueJoin(function1, index1, function2, index2 int)
-// Hook() Hook
-// HookMask() int
-// HookCount() int
 // }
 
 type pc int
@@ -761,6 +739,14 @@ func RawSet(l *State, index int) {
 	t.put(l.stack[l.top-2], l.stack[l.top-1])
 	t.invalidateTagMethodCache()
 	l.top -= 2
+}
+
+func RawSetInt(l *State, index, key int) {
+	l.checkElementCount(1)
+	t, ok := l.stack[index].(*table)
+	apiCheck(ok, "table expected")
+	t.putAtInt(key, l.stack[l.top-1])
+	l.top--
 }
 
 func SetUserValue(l *State, index int) {

@@ -91,7 +91,7 @@ func (l *State) errorMessage() {
 	l.throw(RuntimeError)
 }
 
-func SetHook(l *State, f Hook, mask byte, count int) {
+func SetHooker(l *State, f Hook, mask byte, count int) {
 	if f == nil || mask == 0 {
 		f, mask = nil, 0
 	}
@@ -102,6 +102,10 @@ func SetHook(l *State, f Hook, mask byte, count int) {
 	l.resetHookCount()
 	l.hookMask = mask
 }
+
+func Hooker(l *State) Hook     { return l.hooker }
+func HookerMask(l *State) byte { return l.hookMask }
+func HookerCount(l *State) int { return l.hookCount }
 
 func Stack(l *State, level int, activationRecord *Debug) (ok bool) {
 	if level < 0 {
