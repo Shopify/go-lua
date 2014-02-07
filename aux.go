@@ -2,6 +2,7 @@ package lua
 
 import (
 	"bufio"
+	"fmt"
 	"io"
 	"os"
 	"strings"
@@ -389,4 +390,16 @@ func LoadString(l *State, s string) Status { return LoadBuffer(l, s, s, "") }
 
 func LoadBuffer(l *State, b, name, mode string) Status {
 	return Load(l, strings.NewReader(b), name, mode)
+}
+
+func NewStateEx() *State {
+	l := NewState()
+	if l != nil {
+		_ = AtPanic(l, func(l *State) int {
+			s, _ := ToString(l, -1)
+			fmt.Fprintln(os.Stderr, "PANIC: unprotected error in call to Lua API (%s)", s)
+			return 0
+		})
+	}
+	return l
 }

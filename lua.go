@@ -149,7 +149,6 @@ const (
 
 // per thread state
 type State struct {
-	// TODO necessary? errorJmp *longjmp // current error recover point
 	status                Status
 	top                   int // first free slot in the stack
 	global                *globalState
@@ -167,18 +166,19 @@ type State struct {
 	upValues              *openUpValue
 	errorFunction         int         // current error handling function (stack index)
 	baseCallInfo          luaCallInfo // callInfo for first level (go calling lua)
+	protectFunction       func()
 }
 
 type globalState struct {
-	mainThread     *State
-	tagMethodNames [tmCount]string
-	metaTables     [TypeCount]*table // metatables for basic types
-	registry       *table
-	// seed uint // randomized seed for hashes
-	// upValueHead upValue // head of double-linked list of all open upvalues
-	// panicFunction ? // to be called in unprotected errors
+	mainThread         *State
+	tagMethodNames     [tmCount]string
+	metaTables         [TypeCount]*table // metatables for basic types
+	registry           *table
+	panicFunction      Function // to be called in unprotected errors
 	version            *float64 // pointer to version number
 	memoryErrorMessage string
+	// seed uint // randomized seed for hashes
+	// upValueHead upValue // head of double-linked list of all open upvalues
 }
 
 func (g *globalState) metaTable(o value) *table {
@@ -268,8 +268,25 @@ func ProtectedCallWithContinuation(l *State, argCount, resultCount, errorFunctio
 	l.checkElementCount(argCount + 1)
 	apiCheck(l.status == Ok, "cannot do calls on non-normal thread")
 	l.checkResults(argCount, resultCount)
-	// TODO ...
-	return Ok
+	if errorFunction != 0 {
+		apiCheckStackIndex(errorFunction, l.indexToValue(errorFunction))
+		errorFunction = AbsIndex(l, errorFunction)
+	}
+	f := l.top - (argCount + 1)
+	status := Ok
+	if continuation == nil || l.nonYieldableCallCount > 0 {
+		status = l.protectedCall(func() { l.call(f, resultCount, false) }, f, errorFunction)
+	} else {
+		c := l.callInfo.(*goCallInfo)
+		c.continuation, c.context, c.extra, c.oldAllowHook, c.oldErrorFunction = continuation, context, f, l.allowHook, l.errorFunction
+		l.errorFunction = errorFunction
+		c.setCallStatus(callStatusYieldableProtected)
+		l.call(f, resultCount, true)
+		c.clearCallStatus(callStatusYieldableProtected)
+		l.errorFunction = c.oldErrorFunction
+	}
+	l.adjustResults(resultCount)
+	return status
 }
 
 func Load(l *State, r io.Reader, chunkName, mode string) Status {
@@ -414,13 +431,17 @@ func CheckStack(l *State, size int) bool {
 	callInfo := l.callInfo
 	ok := l.stackLast-l.top > size
 	if !ok && l.top+extraStack <= maxStack-size {
-		l.growStack(size) // TODO rawRunUnprotected?
-		ok = true
+		ok = l.protect(func() { l.growStack(size) }) == Ok
 	}
 	if ok && callInfo.top() < l.top+size {
 		callInfo.setTop(l.top + size)
 	}
 	return ok
+}
+
+func AtPanic(l *State, panicFunction Function) Function {
+	panicFunction, l.global.panicFunction = l.global.panicFunction, panicFunction
+	return panicFunction
 }
 
 func (l *State) valueToType(v value) Type {
@@ -808,8 +829,7 @@ func (l *State) setErrorObject(status Status, oldTop int) {
 func (l *State) protectedCall(f func(), oldTop, errorFunc int) Status {
 	callInfo, allowHook, nonYieldableCallCount, errorFunction := l.callInfo, l.allowHook, l.nonYieldableCallCount, l.errorFunction
 	l.errorFunction = errorFunc
-	status := Ok
-	f() // TODO "raw unprotected"
+	status := l.protect(f)
 	if status != Ok {
 		l.close(oldTop)
 		l.setErrorObject(status, oldTop)

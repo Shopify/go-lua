@@ -1,5 +1,9 @@
 package lua
 
+import (
+	"runtime"
+)
+
 func (l *State) push(v value) {
 	l.stack[l.top] = v
 	l.top++
@@ -114,11 +118,9 @@ type callInfo interface {
 }
 
 type commonCallInfo struct {
-	function_        int
-	top_             int
-	previous_, next_ callInfo
-	resultCount_     int
-	callStatus_      callStatus
+	function_, top_, resultCount_ int
+	previous_, next_              callInfo
+	callStatus_                   callStatus
 }
 
 type luaCallInfo struct {
@@ -130,14 +132,10 @@ type luaCallInfo struct {
 
 type goCallInfo struct {
 	commonCallInfo
-	context      int
-	continuation Function
-	/*
-		oldErrorFunction ptrdiff_t
-		extra ptrdiff_t
-	*/
-	oldAllowHook bool
-	status       Status
+	context, extra, oldErrorFunction int
+	continuation                     Function
+	oldAllowHook                     bool
+	status                           Status
 }
 
 func (ci *commonCallInfo) top() int                          { return ci.top_ }
@@ -394,8 +392,34 @@ func (l *State) call(function int, resultCount int, allowYield bool) {
 }
 
 func (l *State) throw(errorCode Status) {
-	// TODO
-	panic(errorCode)
+	if l.protectFunction != nil {
+		panic(errorCode)
+	} else {
+		l.status = errorCode
+		if g := l.global.mainThread; g.protectFunction != nil {
+			g.push(l.stack[l.top-1])
+			g.throw(errorCode)
+		} else {
+			if l.global.panicFunction != nil {
+				l.global.panicFunction(l)
+			}
+			runtime.Goexit() // TODO use log.Panicln() instead, to log an error?
+		}
+	}
+}
+
+func (l *State) protect(f func()) Status {
+	nestedGoCallCount, protectFunction := l.nestedGoCallCount, l.protectFunction
+	status := Ok
+	l.protectFunction = func() {
+		if e := recover(); e != nil {
+			status = e.(Status)
+		}
+	}
+	defer l.protectFunction()
+	f()
+	l.nestedGoCallCount, l.protectFunction = nestedGoCallCount, protectFunction
+	return status
 }
 
 func (l *State) hook(event, line int) {

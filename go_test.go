@@ -12,6 +12,13 @@ func TestStringCompare(t *testing.T) {
 	}
 }
 
+func TestStringLength(t *testing.T) {
+	s := "hello\x00world"
+	if len(s) != 11 {
+		t.Error("go doesn't count embedded nulls in string length")
+	}
+}
+
 func TestReslicing(t *testing.T) {
 	a := [5]int{0, 1, 2, 3, 4}
 	s := a[:0]
