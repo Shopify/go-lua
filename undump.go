@@ -164,13 +164,13 @@ func (state *loadState) readConstants() (constants []value, prototypes []prototy
 		switch t, err = state.readByte(); {
 		case err != nil:
 			return
-		case t == TypeNil:
+		case t == byte(TypeNil):
 			constants[i] = nil
-		case t == TypeBoolean:
+		case t == byte(TypeBoolean):
 			constants[i], err = state.readBool()
-		case t == TypeNumber:
+		case t == byte(TypeNumber):
 			constants[i], err = state.readNumber()
-		case t == TypeString:
+		case t == byte(TypeString):
 			constants[i], err = state.readString()
 		default:
 			err = errUnknownConstantType

@@ -182,7 +182,7 @@ var baseLibrary = []RegistryFunction{
 		return 1
 	}},
 	{"rawlen", func(l *State) int {
-		t := Type(l, 1)
+		t := TypeOf(l, 1)
 		ArgumentCheck(l, t == TypeTable || t == TypeString, 1, "table or string expected")
 		PushInteger(l, RawLength(l, 1))
 		return 1
@@ -204,7 +204,7 @@ var baseLibrary = []RegistryFunction{
 	}},
 	{"select", func(l *State) int {
 		n := Top(l)
-		if Type(l, 1) == TypeString {
+		if TypeOf(l, 1) == TypeString {
 			if s, _ := ToString(l, 1); s[0] == '#' {
 				PushInteger(l, n-1)
 				return 1
@@ -220,7 +220,7 @@ var baseLibrary = []RegistryFunction{
 		return n - i
 	}},
 	{"setmetatable", func(l *State) int {
-		t := Type(l, 2)
+		t := TypeOf(l, 2)
 		CheckType(l, 1, TypeTable)
 		ArgumentCheck(l, t == TypeNil || t == TypeTable, 2, "nil or table expected")
 		if MetaField(l, 1, "__metatable") {

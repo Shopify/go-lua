@@ -32,8 +32,10 @@ const (
 	FileError
 )
 
+type Type int
+
 const (
-	TypeNil = iota
+	TypeNil Type = iota
 	TypeBoolean
 	TypeLightUserData
 	TypeNumber
@@ -180,7 +182,7 @@ type globalState struct {
 }
 
 func (g *globalState) metaTable(o value) *table {
-	var t int
+	var t Type
 	switch o.(type) {
 	case nil:
 		t = TypeNil
@@ -421,7 +423,7 @@ func CheckStack(l *State, size int) bool {
 	return ok
 }
 
-func Type(l *State, index int) int {
+func TypeOf(l *State, index int) Type {
 	switch l.indexToValue(index).(type) {
 	case nil:
 		return TypeNil
@@ -751,7 +753,7 @@ func SetMetaTable(l *State, index int) {
 	case *userData:
 		v.metaTable = mt
 	default:
-		l.global.metaTables[Type(l, index)] = mt
+		l.global.metaTables[TypeOf(l, index)] = mt
 	}
 	l.top--
 }
@@ -821,7 +823,7 @@ func Version(l *State) *float64                    { return l.global.version }
 func UpValueIndex(i int) int                       { return RegistryIndex - i }
 func isPseudoIndex(i int) bool                     { return i <= RegistryIndex }
 func ApiCheckStackSpace(l *State, n int)           { l.assert(n < l.top-l.callInfo.function()) }
-func TypeName(l *State, t int) string              { return typeNames[t+1] }
+func TypeName(l *State, t Type) string             { return typeNames[t+1] }
 func ToNumber(l *State, index int) (float64, bool) { return toNumber(l.indexToValue(index)) }
 func ToBoolean(l *State, index int) bool           { return !isFalse(l.indexToValue(index)) }
 func Table(l *State, index int)                    { l.stack[l.top-1] = l.tableAt(l.indexToValue(index), l.stack[l.top-1]) }
@@ -837,12 +839,12 @@ func Length(l *State, index int)                   { l.apiPush(l.objectLength(l.
 func Pop(l *State, n int)                          { SetTop(l, -n-1) }
 func NewTable(l *State)                            { CreateTable(l, 0, 0) }
 func PushGoFunction(l *State, f Function)          { PushGoClosure(l, f, 0) }
-func IsFunction(l *State, index int) bool          { return Type(l, index) == TypeFunction }
-func IsTable(l *State, index int) bool             { return Type(l, index) == TypeTable }
-func IsLightUserData(l *State, index int) bool     { return Type(l, index) == TypeLightUserData }
-func IsNil(l *State, index int) bool               { return Type(l, index) == TypeNil }
-func IsBoolean(l *State, index int) bool           { return Type(l, index) == TypeBoolean }
-func IsThread(l *State, index int) bool            { return Type(l, index) == TypeThread }
-func IsNone(l *State, index int) bool              { return Type(l, index) == TypeNone }
-func IsNoneOrNil(l *State, index int) bool         { return Type(l, index) <= TypeNil }
+func IsFunction(l *State, index int) bool          { return TypeOf(l, index) == TypeFunction }
+func IsTable(l *State, index int) bool             { return TypeOf(l, index) == TypeTable }
+func IsLightUserData(l *State, index int) bool     { return TypeOf(l, index) == TypeLightUserData }
+func IsNil(l *State, index int) bool               { return TypeOf(l, index) == TypeNil }
+func IsBoolean(l *State, index int) bool           { return TypeOf(l, index) == TypeBoolean }
+func IsThread(l *State, index int) bool            { return TypeOf(l, index) == TypeThread }
+func IsNone(l *State, index int) bool              { return TypeOf(l, index) == TypeNone }
+func IsNoneOrNil(l *State, index int) bool         { return TypeOf(l, index) <= TypeNil }
 func PushGlobalTable(l *State)                     { RawGetInt(l, RegistryIndex, RegistryIndexGlobals) }
