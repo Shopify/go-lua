@@ -90,10 +90,10 @@ func pushGlobalFunctionName(l *State, activationRecord *Debug) bool {
 }
 
 func typeError(l *State, argCount int, typeName string) {
-	ArgumentError(l, argCount, PushFString(l, "%s expected, got %s", typeName, TypeName(l, argCount)))
+	ArgumentError(l, argCount, PushFString(l, "%s expected, got %s", typeName, TypeNameOf(l, argCount)))
 }
 
-func tagError(l *State, argCount, tag int) { typeError(l, argCount, TypeName(l, tag)) }
+func tagError(l *State, argCount int, tag Type) { typeError(l, argCount, TypeName(l, tag)) }
 
 func Where(l *State, level int) {
 	var activationRecord Debug
@@ -116,7 +116,7 @@ func Errorf(l *State, format string, a ...interface{}) {
 
 func ToStringMeta(l *State, index int) (string, bool) {
 	if !CallMeta(l, index, "__tostring") {
-		switch Type(l, index) {
+		switch TypeOf(l, index) {
 		case TypeNumber, TypeString:
 			PushValue(l, index)
 		case TypeBoolean:
@@ -128,7 +128,7 @@ func ToStringMeta(l *State, index int) (string, bool) {
 		case TypeNil:
 			PushString(l, "nil")
 		default:
-			PushFString(l, "%s: %p", TypeName(l, index), ToValue(l, index))
+			PushFString(l, "%s: %p", TypeNameOf(l, index), ToValue(l, index))
 		}
 	}
 	return ToString(l, -1)
@@ -175,14 +175,14 @@ func CheckUserData(l *State, index int, name string) interface{} {
 	panic("unreachable")
 }
 
-func CheckType(l *State, index, t int) {
-	if Type(l, index) != t {
+func CheckType(l *State, index int, t Type) {
+	if TypeOf(l, index) != t {
 		tagError(l, index, t)
 	}
 }
 
 func CheckAny(l *State, index int) {
-	if Type(l, index) == TypeNone {
+	if TypeOf(l, index) == TypeNone {
 		ArgumentError(l, index, "value expected")
 	}
 }
@@ -253,8 +253,8 @@ func OptUnsigned(l *State, index int, def uint) uint {
 	return CheckUnsigned(l, index)
 }
 
-func TypeNameAt(l *State, index int) string {
-	return TypeName(l, Type(l, index))
+func TypeNameOf(l *State, index int) string {
+	return TypeName(l, TypeOf(l, index))
 }
 
 func SetFunctions(l *State, functions []RegistryFunction, upValueCount int) {
