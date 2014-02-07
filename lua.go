@@ -263,6 +263,10 @@ func CallWithContinuation(l *State, argCount, resultCount, context int, continua
 	l.adjustResults(resultCount)
 }
 
+func ProtectedCall(l *State, argCount, resultCount, errorFunction int) Status {
+	return ProtectedCallWithContinuation(l, argCount, resultCount, errorFunction, 0, nil)
+}
+
 func ProtectedCallWithContinuation(l *State, argCount, resultCount, errorFunction, context int, continuation Function) Status {
 	apiCheck(continuation == nil || !l.callInfo.isLua(), "cannot use continuations inside hooks")
 	l.checkElementCount(argCount + 1)
@@ -838,6 +842,42 @@ func (l *State) protectedCall(f func(), oldTop, errorFunc int) Status {
 	}
 	l.errorFunction = errorFunction
 	return status
+}
+
+func UpValue(l *State, function, index int) (name string, ok bool) {
+	var v value
+	switch f := l.indexToValue(function).(type) {
+	case *goClosure:
+		if 1 <= index && index <= f.upValueCount() {
+			v, ok = f.upValue(index-1), true
+		}
+	case *luaClosure:
+		if 1 <= index && index <= f.upValueCount() {
+			name, v, ok = f.prototype.upValues[index-1].name, f.upValue(index-1), true
+		}
+	}
+	if ok {
+		l.apiPush(v)
+	}
+	return
+}
+
+func SetUpValue(l *State, function, index int) (name string, ok bool) {
+	switch f := l.indexToValue(function).(type) {
+	case *goClosure:
+		if 1 <= index && index <= f.upValueCount() {
+			ok = true
+			l.top--
+			f.setUpValue(index-1, l.stack[l.top])
+		}
+	case *luaClosure:
+		if 1 <= index && index <= f.upValueCount() {
+			name, ok = f.prototype.upValues[index-1].name, true
+			l.top--
+			f.setUpValue(index-1, l.stack[l.top])
+		}
+	}
+	return
 }
 
 func Top(l *State) int                             { return l.top - (l.callInfo.function() + 1) }

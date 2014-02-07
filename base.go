@@ -68,9 +68,9 @@ func loadHelper(l *State, s Status, e int) int {
 	if s == Ok {
 		if e != 0 {
 			PushValue(l, e)
-			// if _, ok := SetUpValue(l, -2, 1); !ok {
-			// 	Pop(l, 1)
-			// }
+			if _, ok := SetUpValue(l, -2, 1); !ok {
+				Pop(l, 1)
+			}
 		}
 		return 1
 	}
