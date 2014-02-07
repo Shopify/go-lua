@@ -423,7 +423,7 @@ func CheckStack(l *State, size int) bool {
 	return ok
 }
 
-func (l *State) valueToType(v value) int {
+func (l *State) valueToType(v value) Type {
 	switch v.(type) {
 	case nil:
 		return TypeNil
@@ -447,7 +447,7 @@ func (l *State) valueToType(v value) int {
 	return TypeNone
 }
 
-func TypeOf(l *State, index int) int {
+func TypeOf(l *State, index int) Type {
 	return l.valueToType(l.indexToValue(index))
 }
 
