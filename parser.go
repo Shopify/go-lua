@@ -7,13 +7,6 @@ import (
 	"strings"
 )
 
-type Mode string
-
-const (
-	TextMode   Mode = "text"
-	BinaryMode Mode = "binary"
-)
-
 type parser struct {
 	scanner
 	function                   *function
@@ -708,14 +701,14 @@ func (l *State) parse(r io.ByteReader, name string) *luaClosure {
 	return c
 }
 
-func (l *State) checkMode(mode, x Mode) {
-	if mode != Mode("") && !strings.Contains(string(mode), string(x[:1])) {
+func (l *State) checkMode(mode, x string) {
+	if mode != "" && !strings.Contains(mode, string(x[:1])) {
 		l.push(fmt.Sprintf("attempt to load a %s chunk (mode is '%s')", x, mode))
 		l.throw(SyntaxError)
 	}
 }
 
-func protectedParser(l *State, r io.Reader, name string, chunkMode Mode) error {
+func protectedParser(l *State, r io.Reader, name string, chunkMode string) error {
 	l.nonYieldableCallCount++
 	status := l.protectedCall(func() {
 		var closure *luaClosure
@@ -723,11 +716,11 @@ func protectedParser(l *State, r io.Reader, name string, chunkMode Mode) error {
 		if c, err := b.ReadByte(); err != nil {
 			// TODO
 		} else if c == Signature[0] {
-			l.checkMode(chunkMode, BinaryMode)
+			l.checkMode(chunkMode, "binary")
 			b.UnreadByte()
 			closure, err = l.undump(r, name) // TODO handle err
 		} else {
-			l.checkMode(chunkMode, TextMode)
+			l.checkMode(chunkMode, "text")
 			b.UnreadByte()
 			closure = l.parse(b, name)
 		}

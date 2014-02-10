@@ -60,7 +60,7 @@ func finishProtectedCall(l *State, status bool) int {
 }
 
 func protectedCallContinuation(l *State) int {
-	s, _ := Context(l)
+	_, s := Context(l)
 	return finishProtectedCall(l, s == Yield)
 }
 
@@ -138,7 +138,7 @@ var baseLibrary = []RegistryFunction{
 	}},
 	{"ipairs", pairs("__ipairs", true, intPairs)},
 	{"loadfile", func(l *State) int {
-		f, m, e := OptString(l, 1, ""), Mode(OptString(l, 2, "")), 3
+		f, m, e := OptString(l, 1, ""), OptString(l, 2, ""), 3
 		if IsNone(l, e) {
 			e = 0
 		}
@@ -178,7 +178,7 @@ var baseLibrary = []RegistryFunction{
 	{"rawequal", func(l *State) int {
 		CheckAny(l, 1)
 		CheckAny(l, 2)
-		ok, _ := RawEqual(l, 1, 2)
+		ok := RawEqual(l, 1, 2)
 		PushBoolean(l, ok)
 		return 1
 	}},

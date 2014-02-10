@@ -62,7 +62,7 @@ func findField(l *State, objectIndex, level int) bool {
 	}
 	for PushNil(l); Next(l, -2); Pop(l, 1) { // for each pair in table
 		if IsString(l, -2) { // ignore non-string keys
-			if ok, _ := RawEqual(l, objectIndex, -1); ok { // found object?
+			if ok := RawEqual(l, objectIndex, -1); ok { // found object?
 				Pop(l, 1) // remove value (but keep name)
 				return true
 			} else if findField(l, objectIndex, level-1) { // try recursively
@@ -156,22 +156,16 @@ func SetMetaTableNamed(l *State, name string) {
 }
 
 func TestUserData(l *State, index int, name string) interface{} {
-	d := ToUserData(l, index)
-	if d == nil {
-		return nil
+	if d := ToUserData(l, index); d != nil {
+		if MetaTable(l, index) {
+			if MetaTableNamed(l, name); RawEqual(l, -1, -2) {
+				d = nil
+			}
+			Pop(l, 2)
+			return d
+		}
 	}
-	if !MetaTable(l, index) {
-		return nil
-	}
-
-	MetaTableNamed(l, name)
-	defer Pop(l, 2)
-
-	if ok, _ := RawEqual(l, -1, -2); !ok {
-		return nil
-	}
-
-	return d
+	return nil
 }
 
 func CheckUserData(l *State, index int, name string) interface{} {
@@ -265,16 +259,16 @@ func TypeNameOf(l *State, index int) string {
 }
 
 func SetFunctions(l *State, functions []RegistryFunction, upValueCount uint8) {
-	upValueCountInt := int(upValueCount)
-	CheckStackWithMessage(l, upValueCountInt, "too many upvalues")
+	uvCount := int(upValueCount)
+	CheckStackWithMessage(l, uvCount, "too many upvalues")
 	for _, r := range functions { // fill the table with given functions
-		for i := 0; i < upValueCountInt; i++ { // copy upvalues to the top
-			PushValue(l, -upValueCountInt)
+		for i := 0; i < uvCount; i++ { // copy upvalues to the top
+			PushValue(l, -uvCount)
 		}
 		PushGoClosure(l, r.Function, upValueCount) // closure with those upvalues
-		SetField(l, -(upValueCountInt + 2), r.Name)
+		SetField(l, -(uvCount + 2), r.Name)
 	}
-	Pop(l, upValueCountInt) // remove upvalues
+	Pop(l, uvCount) // remove upvalues
 }
 
 func CheckStackWithMessage(l *State, space int, message string) {
@@ -354,7 +348,7 @@ func skipComment(r *bufio.Reader) (bool, error) {
 	return false, r.UnreadRune()
 }
 
-func LoadFile(l *State, fileName string, mode Mode) error {
+func LoadFile(l *State, fileName string, mode string) error {
 	var f *os.File
 	fileNameIndex := Top(l) + 1
 	fileError := func(what string) error {
@@ -393,9 +387,9 @@ func LoadFile(l *State, fileName string, mode Mode) error {
 	return status
 }
 
-func LoadString(l *State, s string) error { return LoadBuffer(l, s, s, Mode("")) }
+func LoadString(l *State, s string) error { return LoadBuffer(l, s, s, "") }
 
-func LoadBuffer(l *State, b, name string, mode Mode) error {
+func LoadBuffer(l *State, b, name string, mode string) error {
 	return Load(l, strings.NewReader(b), name, mode)
 }
 
@@ -404,7 +398,7 @@ func NewStateEx() *State {
 	if l != nil {
 		_ = AtPanic(l, func(l *State) int {
 			s, _ := ToString(l, -1)
-			fmt.Fprintln(os.Stderr, "PANIC: unprotected error in call to Lua API (%s)", s)
+			fmt.Fprintf(os.Stderr, "PANIC: unprotected error in call to Lua API (%s)\n", s)
 			return 0
 		})
 	}

@@ -59,10 +59,10 @@ const (
 	OpUnaryMinus
 )
 
-type CmpOperator int
+type ComparisonOperator int
 
 const (
-	OpEq CmpOperator = iota
+	OpEq ComparisonOperator = iota
 	OpLT
 	OpLE
 )
@@ -223,17 +223,17 @@ func (l *State) checkResults(argCount, resultCount int) {
 
 // Context is called y a continuation function to retrieve the status of the
 // thread and a context information.  When called in the origin function, it
-// will always return (nil, 0). When called inside a continuation function, it
-// will return (Yield, ctx), where `ctx` is the value that was passed to the
+// will always return (0, nil). When called inside a continuation function, it
+// will return (ctx, Yield), where `ctx` is the value that was passed to the
 // callee together with the continuation function.
 //
 // http://www.lua.org/manual/5.2/manual.html#lua_getctx
-func Context(l *State) (error, int) {
+func Context(l *State) (int, error) {
 	if l.callInfo.isCallStatus(callStatusYielded) {
 		callInfo := l.callInfo.(*goCallInfo)
-		return callInfo.status, callInfo.context
+		return callInfo.context, callInfo.status
 	}
-	return nil, 0
+	return 0, nil
 }
 
 // CallWithContinuation is exactly like Call, but allows the called function to
@@ -293,7 +293,7 @@ func ProtectedCall(l *State, argCount, resultCount, errorFunction int) error {
 // allows the called function to yield.
 //
 // http://www.lua.org/manual/5.2/manual.html#lua_pcallk
-func ProtectedCallWithContinuation(l *State, argCount, resultCount, errorFunction, context int, continuation Function) error {
+func ProtectedCallWithContinuation(l *State, argCount, resultCount, errorFunction, context int, continuation Function) (err error) {
 
 	apiCheck(continuation == nil || !l.callInfo.isLua(), "cannot use continuations inside hooks")
 	l.checkElementCount(argCount + 1)
@@ -306,21 +306,19 @@ func ProtectedCallWithContinuation(l *State, argCount, resultCount, errorFunctio
 
 	f := l.top - (argCount + 1)
 
-	defer l.adjustResults(resultCount)
-
 	if continuation == nil || l.nonYieldableCallCount > 0 {
-		return l.protectedCall(func() { l.call(f, resultCount, false) }, f, errorFunction)
+		err = l.protectedCall(func() { l.call(f, resultCount, false) }, f, errorFunction)
+	} else {
+		c := l.callInfo.(*goCallInfo)
+		c.continuation, c.context, c.extra, c.oldAllowHook, c.oldErrorFunction = continuation, context, f, l.allowHook, l.errorFunction
+		l.errorFunction = errorFunction
+		c.setCallStatus(callStatusYieldableProtected)
+		l.call(f, resultCount, true)
+		c.clearCallStatus(callStatusYieldableProtected)
+		l.errorFunction = c.oldErrorFunction
 	}
-
-	c := l.callInfo.(*goCallInfo)
-	c.continuation, c.context, c.extra, c.oldAllowHook, c.oldErrorFunction = continuation, context, f, l.allowHook, l.errorFunction
-	l.errorFunction = errorFunction
-	c.setCallStatus(callStatusYieldableProtected)
-	l.call(f, resultCount, true)
-	c.clearCallStatus(callStatusYieldableProtected)
-	l.errorFunction = c.oldErrorFunction
-
-	return nil
+	l.adjustResults(resultCount)
+	return
 }
 
 // Load loads a Lua chunk, without running it. If there are no errors, it
@@ -328,13 +326,12 @@ func ProtectedCallWithContinuation(l *State, argCount, resultCount, errorFunctio
 // Otherwise, it pushes an error message.
 //
 // http://www.lua.org/manual/5.2/manual.html#lua_load
-func Load(l *State, r io.Reader, chunkName string, mode Mode) error {
+func Load(l *State, r io.Reader, chunkName string, mode string) error {
 	if chunkName == "" {
 		chunkName = "?"
 	}
 
-	err := protectedParser(l, r, chunkName, mode)
-	if err != nil {
+	if err := protectedParser(l, r, chunkName, mode); err != nil {
 		return err
 	}
 
@@ -445,7 +442,7 @@ func AbsIndex(l *State, index int) int {
 
 // SetTop accepts any index, or 0, and sets the stack top to `index`.  If the
 // new top is larger than the old one, then the new elements are filled with
-// Nil.  If `index` is 0, then all stack elements are removed.
+// nil.  If `index` is 0, then all stack elements are removed.
 //
 // If `index` is negative, the stack will be decremented by that much.  If
 // the decrement is larger than the stack, SetTop will panic().
@@ -589,7 +586,7 @@ func IsString(l *State, index int) bool {
 	return ok
 }
 
-// IsUserData verifies that the value at `index` is a userdata (light or full).
+// IsUserData verifies that the value at `index` is a userdata.
 //
 // http://www.lua.org/manual/5.2/manual.html#lua_isuserdata
 func IsUserData(l *State, index int) bool {
@@ -623,29 +620,18 @@ func Arith(l *State, op Operator) {
 // RawEqual verifies that the values at `index1` and `index2` are primitively
 // equal (that is, without calling their metamethods).
 //
-// http://www.lua.org/manual/5.2/manual.html#lua_raqequal
-func RawEqual(l *State, index1, index2 int) (bool, error) {
-	o1, o2 := l.indexToValue(index1), l.indexToValue(index2)
-	if o1 != nil && o2 != nil {
-		return o1 == o2, nil
+// http://www.lua.org/manual/5.2/manual.html#lua_rawequal
+func RawEqual(l *State, index1, index2 int) bool {
+	if o1, o2 := l.indexToValue(index1), l.indexToValue(index2); o1 != nil && o2 != nil {
+		return o1 == o2
 	}
-
-	if o1 == nil && o2 != nil {
-		return false, fmt.Errorf("index1 (%d) doesn't exist on the stack", index1)
-	}
-
-	if o1 != nil && o2 == nil {
-		return false, fmt.Errorf("index2 (%d) doesn't exist on the stack", index2)
-	}
-
-	return false, fmt.Errorf("both indices (%d and %d) don't exist on the stack",
-		index1, index2)
+	return false
 }
 
 // Compare compares two values.
 //
 // http://www.lua.org/manual/5.2/manual.html#lua_compare
-func Compare(l *State, index1, index2 int, op CmpOperator) bool {
+func Compare(l *State, index1, index2 int, op ComparisonOperator) bool {
 	if o1, o2 := l.indexToValue(index1), l.indexToValue(index2); o1 != nil && o2 != nil {
 		switch op {
 		case OpEq:
@@ -666,8 +652,7 @@ func Compare(l *State, index1, index2 int, op CmpOperator) bool {
 //
 // If the number is not an integer, it is truncated in some non-specified way.
 //
-// If the operation failed, the first return value will be 0 and the second
-// return value will be false.
+// If the operation failed, the second return value will be false.
 //
 // http://www.lua.org/manual/5.2/manual.html#lua_tointegerx
 func ToInteger(l *State, index int) (int, bool) {
@@ -685,8 +670,7 @@ func ToInteger(l *State, index int) (int, bool) {
 // to the remainder of its division by one more than the maximum representable
 // value.
 //
-// If the operation failed, the first return value will be 0 and the second
-// return value will be false.
+// If the operation failed, the second return value will be false.
 //
 // http://www.lua.org/manual/5.2/manual.html#lua_tounsignedx
 func ToUnsigned(l *State, index int) (uint, bool) {
@@ -698,12 +682,8 @@ func ToUnsigned(l *State, index int) (uint, bool) {
 }
 
 // ToString  converts the Lua value at `index` to a Go string.  The Lua value
-// must also be a string or a number; otherwise the function returns an empty
-// string and false for its second return value.
-//
-// If the value at `index` is a number, than THAT VALUE IS ALSO CHANGED
-// to a string. This change will confuse Next when ToString is applied during
-// a table traversal.
+// must also be a string or a number; otherwise the function returns
+// false for its second return value.
 //
 // http://www.lua.org/manual/5.2/manual.html#lua_tolstring
 func ToString(l *State, index int) (string, bool) {
@@ -858,7 +838,7 @@ func PushFString(l *State, format string, args ...interface{}) string {
 //
 // When a Go function is created, it is possible to associate some values with
 // it, thus creating a Go closure; these values are then accessible to the
-// function whenever it is called.  To associate values with a C function,
+// function whenever it is called.  To associate values with a Go function,
 // first these values should be pushed onto the stack (when there are multiple
 // values, the first value is pushed first).  Then PushGoClosure is called to
 // create and push the Go function onto the stack, with the argument `n`
@@ -872,15 +852,15 @@ func PushFString(l *State, format string, args ...interface{}) string {
 func PushGoClosure(l *State, function Function, n uint8) {
 	if n == 0 {
 		l.apiPush(function)
-		return
-	}
-	nInt := int(n)
+	} else {
+		nInt := int(n)
 
-	l.checkElementCount(nInt)
-	cl := &goClosure{function: function, upValues: make([]value, n)}
-	l.top -= nInt
-	copy(cl.upValues, l.stack[l.top:l.top+nInt])
-	l.apiPush(cl)
+		l.checkElementCount(nInt)
+		cl := &goClosure{function: function, upValues: make([]value, n)}
+		l.top -= nInt
+		copy(cl.upValues, l.stack[l.top:l.top+nInt])
+		l.apiPush(cl)
+	}
 }
 
 // PushThread pushes the thread `l` onto the stack.  It returns true if `l` is
@@ -1000,7 +980,7 @@ func SetGlobal(l *State, name string) {
 	l.top -= 2 // pop value and key
 }
 
-// SetTable does the equivalent of `table[key]=v`m where `table` is the value
+// SetTable does the equivalent of `table[key]=v`, where `table` is the value
 // at `index`, `v` is the value at the top of the stack and `key` is the value
 // just below the top.
 //
@@ -1031,7 +1011,7 @@ func RawSet(l *State, index int) {
 // `index` and `v` is the value at the top of the stack.
 //
 // This function pops the value from the stack.  The assignment is raw; it
-// doesn't invoke methamethods.
+// doesn't invoke metamethods.
 //
 // http://www.lua.org/manual/5.2/manual.html#lua_rawseti
 func RawSetInt(l *State, index, key int) {
@@ -1061,7 +1041,7 @@ func SetUserValue(l *State, index int) {
 }
 
 // SetMetaTable pops a table from the stack and sets it as the new metatable
-// for the value at `index.
+// for the value at `index`.
 //
 // http://www.lua.org/manual/5.2/manual.html#lua_setmetatable
 func SetMetaTable(l *State, index int) {
@@ -1091,10 +1071,6 @@ func Error(l *State) {
 // Next pops a key from the stack and pushes a key-value pair from the table
 // at `index`, while the table has next elements.  If there are no more
 // elements, nothing is pushed on the stack and Next returns false.
-//
-// While traversing a table, DO NOT call ToString directly on a key, unless
-// you know that the key is actually a string.  Recall that ToString may
-// change the value at the given index; this confuses the next call to Next.
 //
 // http://www.lua.org/manual/5.2/manual.html#lua_next
 func Next(l *State, index int) bool {
@@ -1134,8 +1110,8 @@ func Register(l *State, name string, f Function) {
 	SetGlobal(l, name)
 }
 
-func (l *State) setErrorObject(status error, oldTop int) {
-	switch status {
+func (l *State) setErrorObject(err error, oldTop int) {
+	switch err {
 	case MemoryError:
 		l.stack[oldTop] = l.global.memoryErrorMessage
 	case ErrorError:
@@ -1150,15 +1126,15 @@ func (l *State) protectedCall(f func(), oldTop, errorFunc int) error {
 	callInfo, allowHook, nonYieldableCallCount, errorFunction := l.callInfo, l.allowHook, l.nonYieldableCallCount, l.errorFunction
 	l.errorFunction = errorFunc
 
-	status := l.protect(f)
-	if status != nil {
+	err := l.protect(f)
+	if err != nil {
 		l.close(oldTop)
-		l.setErrorObject(status, oldTop)
+		l.setErrorObject(err, oldTop)
 		l.callInfo, l.allowHook, l.nonYieldableCallCount = callInfo, allowHook, nonYieldableCallCount
 		// l.shrinkStack()
 	}
 	l.errorFunction = errorFunction
-	return status
+	return err
 }
 
 // UpValue returns the name of the upvalue at `index` away from `function`,
@@ -1185,8 +1161,8 @@ func UpValue(l *State, function, index int) (name string, ok bool) {
 }
 
 // SetUpValue sets the value of a closure's upvalue. It assigns the value at
-// the top of the stack to the upvalue and returns its name.  It also value
-// from the stack. `function` and `index` are as in UpValue.
+// the top of the stack to the upvalue and returns its name.  It also pops a
+// value from the stack. `function` and `index` are as in UpValue.
 //
 // Returns an empty string and false if the index is greater than the number
 // of upvalues.
@@ -1217,7 +1193,8 @@ func SetUpValue(l *State, function, index int) (name string, ok bool) {
 // you pushed onto the stack. All arguments and the function value are popped
 // from the stack when the function is called.
 //
-// The resuls are pushed onto the stack when the function returns.  The number of results is adjusted to `resultCount`, unless `resultCount` is
+// The results are pushed onto the stack when the function returns.  The
+// number of results is adjusted to `resultCount`, unless `resultCount` is
 // `MultipleReturns`.  In this case, all results from the function are
 // pushed.  Lua takes care that the returned values fit into the stack space.
 // The function results are pushed onto the stack in direct order (the first
@@ -1268,8 +1245,7 @@ func TypeName(l *State, t Type) string { return typeNames[t+1] }
 // float64).  The Lua value must be a number or a string convertible to a
 // number.
 //
-// If the operation failed, the first return value will be 0 and the second
-// return value will be false.
+// If the operation failed, the second return value will be false.
 //
 // http://www.lua.org/manual/5.2/manual.html#lua_tonumberx
 func ToNumber(l *State, index int) (float64, bool) { return toNumber(l.indexToValue(index)) }
@@ -1292,7 +1268,7 @@ func ToBoolean(l *State, index int) bool { return !isFalse(l.indexToValue(index)
 // http://www.lua.org/manual/5.2/manual.html#lua_gettable
 func Table(l *State, index int) { l.stack[l.top-1] = l.tableAt(l.indexToValue(index), l.stack[l.top-1]) }
 
-// PushValue pushesa copy of the element at `index` onto the stack.
+// PushValue pushes a copy of the element at `index` onto the stack.
 //
 // http://www.lua.org/manual/5.2/manual.html#lua_pushvalue
 func PushValue(l *State, index int) { l.apiPush(l.indexToValue(index)) }
@@ -1323,8 +1299,8 @@ func PushUnsigned(l *State, n uint) { l.apiPush(float64(n)) }
 func PushBoolean(l *State, b bool) { l.apiPush(b) }
 
 // PushLightUserData pushes a light user data onto the stack.  Userdata
-// represents Go values in Lua.  A light userdata is an interface{}.  It is
-// only equal to itself or another Go value pointing to the same address.
+// represents Go values in Lua.  A light userdata is an interface{}.  Its
+// equality matches the Go rules (http://golang.org/ref/spec#Comparison_operators).
 //
 // http://www.lua.org/manual/5.2/manual.html#lua_pushlightuserdata
 func PushLightUserData(l *State, d interface{}) { l.apiPush(d) }
