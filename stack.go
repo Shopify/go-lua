@@ -1,8 +1,6 @@
 package lua
 
-import (
-	"runtime"
-)
+import "log"
 
 func (l *State) push(v value) {
 	l.stack[l.top] = v
@@ -403,7 +401,7 @@ func (l *State) throw(errorCode Status) {
 			if l.global.panicFunction != nil {
 				l.global.panicFunction(l)
 			}
-			runtime.Goexit() // TODO use log.Panicln() instead, to log an error?
+			log.Panicf("Uncaught Lua error: %v", errorCode)
 		}
 	}
 }
