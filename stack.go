@@ -132,8 +132,8 @@ type goCallInfo struct {
 	commonCallInfo
 	context, extra, oldErrorFunction int
 	continuation                     Function
-	oldAllowHook                     bool
-	status                           error
+	oldAllowHook, shouldYield        bool
+	error                            error
 }
 
 func (ci *commonCallInfo) top() int                          { return ci.top_ }
@@ -393,7 +393,7 @@ func (l *State) throw(errorCode error) {
 	if l.protectFunction != nil {
 		panic(errorCode)
 	} else {
-		l.status = errorCode
+		l.error = errorCode
 		if g := l.global.mainThread; g.protectFunction != nil {
 			g.push(l.stack[l.top-1])
 			g.throw(errorCode)
@@ -408,16 +408,16 @@ func (l *State) throw(errorCode error) {
 
 func (l *State) protect(f func()) error {
 	nestedGoCallCount, protectFunction := l.nestedGoCallCount, l.protectFunction
-	var status error
+	var err error
 	l.protectFunction = func() {
 		if e := recover(); e != nil {
-			status = e.(error)
+			err = e.(error)
 		}
 	}
 	defer l.protectFunction()
 	f()
 	l.nestedGoCallCount, l.protectFunction = nestedGoCallCount, protectFunction
-	return status
+	return err
 }
 
 func (l *State) hook(event, line int) {

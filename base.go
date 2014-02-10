@@ -60,8 +60,8 @@ func finishProtectedCall(l *State, status bool) int {
 }
 
 func protectedCallContinuation(l *State) int {
-	_, s := Context(l)
-	return finishProtectedCall(l, s == Yield)
+	_, shouldYield, _ := Context(l)
+	return finishProtectedCall(l, shouldYield)
 }
 
 func loadHelper(l *State, s error, e int) int {

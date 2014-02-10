@@ -62,7 +62,7 @@ func findField(l *State, objectIndex, level int) bool {
 	}
 	for PushNil(l); Next(l, -2); Pop(l, 1) { // for each pair in table
 		if IsString(l, -2) { // ignore non-string keys
-			if ok := RawEqual(l, objectIndex, -1); ok { // found object?
+			if RawEqual(l, objectIndex, -1) { // found object?
 				Pop(l, 1) // remove value (but keep name)
 				return true
 			} else if findField(l, objectIndex, level-1) { // try recursively
@@ -158,7 +158,7 @@ func SetMetaTableNamed(l *State, name string) {
 func TestUserData(l *State, index int, name string) interface{} {
 	if d := ToUserData(l, index); d != nil {
 		if MetaTable(l, index) {
-			if MetaTableNamed(l, name); RawEqual(l, -1, -2) {
+			if MetaTableNamed(l, name); !RawEqual(l, -1, -2) {
 				d = nil
 			}
 			Pop(l, 2)
@@ -348,7 +348,7 @@ func skipComment(r *bufio.Reader) (bool, error) {
 	return false, r.UnreadRune()
 }
 
-func LoadFile(l *State, fileName string, mode string) error {
+func LoadFile(l *State, fileName, mode string) error {
 	var f *os.File
 	fileNameIndex := Top(l) + 1
 	fileError := func(what string) error {
@@ -375,21 +375,21 @@ func LoadFile(l *State, fileName string, mode string) error {
 		r = bufio.NewReader(io.MultiReader(strings.NewReader("\n"), r))
 	}
 	s, _ := ToString(l, -1)
-	status := Load(l, r, s, mode)
+	err := Load(l, r, s, mode)
 	if f != os.Stdin {
 		_ = f.Close()
 	}
-	if status != nil {
+	if err != nil {
 		SetTop(l, fileNameIndex)
 		return fileError("read")
 	}
 	Remove(l, fileNameIndex)
-	return status
+	return err
 }
 
 func LoadString(l *State, s string) error { return LoadBuffer(l, s, s, "") }
 
-func LoadBuffer(l *State, b, name string, mode string) error {
+func LoadBuffer(l *State, b, name, mode string) error {
 	return Load(l, strings.NewReader(b), name, mode)
 }
 

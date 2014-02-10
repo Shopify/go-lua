@@ -710,7 +710,7 @@ func (l *State) checkMode(mode, x string) {
 
 func protectedParser(l *State, r io.Reader, name string, chunkMode string) error {
 	l.nonYieldableCallCount++
-	status := l.protectedCall(func() {
+	err := l.protectedCall(func() {
 		var closure *luaClosure
 		b := bufio.NewReader(r)
 		if c, err := b.ReadByte(); err != nil {
@@ -730,5 +730,5 @@ func protectedParser(l *State, r io.Reader, name string, chunkMode string) error
 		}
 	}, l.top, l.errorFunction)
 	l.nonYieldableCallCount--
-	return status
+	return err
 }

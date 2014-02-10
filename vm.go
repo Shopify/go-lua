@@ -226,14 +226,14 @@ func (l *State) traceExecution() {
 		}
 	}
 	l.oldPC = callInfo.savedPC
-	if l.status == Yield {
+	if l.shouldYield {
 		if countHook {
 			l.hookCount = 1
 		}
 		callInfo.savedPC--
 		callInfo.setCallStatus(callStatusHookYielded)
 		callInfo.function_ = l.top - 1
-		l.throw(Yield)
+		panic("Not implemented - use goroutines to emulate yield")
 	}
 }
 

@@ -21,7 +21,6 @@ const (
 )
 
 var (
-	Yield        = errors.New("yield")
 	RuntimeError = errors.New("runtime error")
 	SyntaxError  = errors.New("syntax error")
 	MemoryError  = errors.New("memory error")
@@ -132,7 +131,8 @@ const (
 
 // per thread state
 type State struct {
-	status                error
+	error                 error
+	shouldYield           bool
 	top                   int // first free slot in the stack
 	global                *globalState
 	callInfo              callInfo // call info for current function
@@ -223,17 +223,17 @@ func (l *State) checkResults(argCount, resultCount int) {
 
 // Context is called y a continuation function to retrieve the status of the
 // thread and a context information.  When called in the origin function, it
-// will always return (0, nil). When called inside a continuation function, it
-// will return (ctx, Yield), where `ctx` is the value that was passed to the
-// callee together with the continuation function.
+// will always return (0, false, nil). When called inside a continuation function,
+// it will return (ctx, shouldYield, err), where `ctx` is the value that was
+// passed to the callee together with the continuation function.
 //
 // http://www.lua.org/manual/5.2/manual.html#lua_getctx
-func Context(l *State) (int, error) {
+func Context(l *State) (int, bool, error) {
 	if l.callInfo.isCallStatus(callStatusYielded) {
 		callInfo := l.callInfo.(*goCallInfo)
-		return callInfo.context, callInfo.status
+		return callInfo.context, callInfo.shouldYield, callInfo.error
 	}
-	return 0, nil
+	return 0, false, nil
 }
 
 // CallWithContinuation is exactly like Call, but allows the called function to
@@ -243,7 +243,7 @@ func Context(l *State) (int, error) {
 func CallWithContinuation(l *State, argCount, resultCount, context int, continuation Function) {
 	apiCheck(continuation == nil || !l.callInfo.isLua(), "cannot use continuations inside hooks")
 	l.checkElementCount(argCount + 1)
-	apiCheck(l.status == nil, "cannot do calls on non-normal thread")
+	apiCheck(!l.shouldYield, "cannot do calls on non-normal thread")
 	l.checkResults(argCount, resultCount)
 	f := l.top - (argCount + 1)
 	if continuation != nil && l.nonYieldableCallCount == 0 { // need to prepare continuation?
@@ -297,7 +297,7 @@ func ProtectedCallWithContinuation(l *State, argCount, resultCount, errorFunctio
 
 	apiCheck(continuation == nil || !l.callInfo.isLua(), "cannot use continuations inside hooks")
 	l.checkElementCount(argCount + 1)
-	apiCheck(l.status == nil, "cannot do calls on non-normal thread")
+	apiCheck(!l.shouldYield, "cannot do calls on non-normal thread")
 	l.checkResults(argCount, resultCount)
 	if errorFunction != 0 {
 		apiCheckStackIndex(errorFunction, l.indexToValue(errorFunction))
@@ -346,7 +346,7 @@ func Load(l *State, r io.Reader, chunkName string, mode string) error {
 // http://www.lua.org/manual/5.2/manual.html#lua_newstate
 func NewState() *State {
 	v := float64(VersionNumber)
-	l := &State{allowHook: true, status: nil, nonYieldableCallCount: 1}
+	l := &State{allowHook: true, error: nil, nonYieldableCallCount: 1}
 	g := &globalState{mainThread: l, registry: newTable(), version: &v, memoryErrorMessage: "not enough memory"}
 	l.global = g
 	l.initializeStack()
