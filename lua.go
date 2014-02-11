@@ -24,7 +24,6 @@ var (
 	RuntimeError = errors.New("runtime error")
 	SyntaxError  = errors.New("syntax error")
 	MemoryError  = errors.New("memory error")
-	GCError      = errors.New("garbage collection error")
 	ErrorError   = errors.New("error within the error handler")
 	FileError    = errors.New("file error")
 )
@@ -281,7 +280,6 @@ func CallWithContinuation(l *State, argCount, resultCount, context int, continua
 //
 //    RuntimeError  a runtime error
 //    MemoryError   allocating memory, the error handler is not called
-//    GCError       running a __gc metamethod (usually unrelated to the call)
 //    ErrorError    running the error handler
 //
 // http://www.lua.org/manual/5.2/manual.html#lua_pcall
@@ -841,24 +839,24 @@ func PushFString(l *State, format string, args ...interface{}) string {
 // function whenever it is called.  To associate values with a Go function,
 // first these values should be pushed onto the stack (when there are multiple
 // values, the first value is pushed first).  Then PushGoClosure is called to
-// create and push the Go function onto the stack, with the argument `n`
+// create and push the Go function onto the stack, with the argument `upValueCount`
 // telling how many values should be associated with the function.  Calling
 // PushGoClosure also pops these values from the stack.
 //
-// When `n` is 0, this function creates a light Go function, which is just a
+// When `upValueCount` is 0, this function creates a light Go function, which is just a
 // Go function.
 //
 // http://www.lua.org/manual/5.2/manual.html#lua_pushcclosure
-func PushGoClosure(l *State, function Function, n uint8) {
-	if n == 0 {
+func PushGoClosure(l *State, function Function, upValueCount uint8) {
+	if upValueCount == 0 {
 		l.apiPush(function)
 	} else {
-		nInt := int(n)
+		n := int(upValueCount)
 
-		l.checkElementCount(nInt)
-		cl := &goClosure{function: function, upValues: make([]value, n)}
-		l.top -= nInt
-		copy(cl.upValues, l.stack[l.top:l.top+nInt])
+		l.checkElementCount(n)
+		cl := &goClosure{function: function, upValues: make([]value, upValueCount)}
+		l.top -= n
+		copy(cl.upValues, l.stack[l.top:l.top+n])
 		l.apiPush(cl)
 	}
 }

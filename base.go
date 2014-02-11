@@ -178,8 +178,7 @@ var baseLibrary = []RegistryFunction{
 	{"rawequal", func(l *State) int {
 		CheckAny(l, 1)
 		CheckAny(l, 2)
-		ok := RawEqual(l, 1, 2)
-		PushBoolean(l, ok)
+		PushBoolean(l, RawEqual(l, 1, 2))
 		return 1
 	}},
 	{"rawlen", func(l *State) int {

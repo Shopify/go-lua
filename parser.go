@@ -702,13 +702,13 @@ func (l *State) parse(r io.ByteReader, name string) *luaClosure {
 }
 
 func (l *State) checkMode(mode, x string) {
-	if mode != "" && !strings.Contains(mode, string(x[:1])) {
+	if mode != "" && !strings.Contains(mode, x[:1]) {
 		l.push(fmt.Sprintf("attempt to load a %s chunk (mode is '%s')", x, mode))
 		l.throw(SyntaxError)
 	}
 }
 
-func protectedParser(l *State, r io.Reader, name string, chunkMode string) error {
+func protectedParser(l *State, r io.Reader, name, chunkMode string) error {
 	l.nonYieldableCallCount++
 	err := l.protectedCall(func() {
 		var closure *luaClosure
