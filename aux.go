@@ -258,16 +258,17 @@ func TypeNameOf(l *State, index int) string {
 	return TypeName(l, TypeOf(l, index))
 }
 
-func SetFunctions(l *State, functions []RegistryFunction, upValueCount int) {
-	CheckStackWithMessage(l, upValueCount, "too many upvalues")
+func SetFunctions(l *State, functions []RegistryFunction, upValueCount uint8) {
+	uvCount := int(upValueCount)
+	CheckStackWithMessage(l, uvCount, "too many upvalues")
 	for _, r := range functions { // fill the table with given functions
-		for i := 0; i < upValueCount; i++ { // copy upvalues to the top
-			PushValue(l, -upValueCount)
+		for i := 0; i < uvCount; i++ { // copy upvalues to the top
+			PushValue(l, -uvCount)
 		}
 		PushGoClosure(l, r.Function, upValueCount) // closure with those upvalues
-		SetField(l, -(upValueCount + 2), r.Name)
+		SetField(l, -(uvCount + 2), r.Name)
 	}
-	Pop(l, upValueCount) // remove upvalues
+	Pop(l, uvCount) // remove upvalues
 }
 
 func CheckStackWithMessage(l *State, space int, message string) {
@@ -347,10 +348,10 @@ func skipComment(r *bufio.Reader) (bool, error) {
 	return false, r.UnreadRune()
 }
 
-func LoadFile(l *State, fileName, mode string) Status {
+func LoadFile(l *State, fileName, mode string) error {
 	var f *os.File
 	fileNameIndex := Top(l) + 1
-	fileError := func(what string) Status {
+	fileError := func(what string) error {
 		fileName, _ := ToString(l, fileNameIndex)
 		PushFString(l, "cannot %s %s", what, fileName[1:])
 		Remove(l, fileNameIndex)
@@ -374,21 +375,21 @@ func LoadFile(l *State, fileName, mode string) Status {
 		r = bufio.NewReader(io.MultiReader(strings.NewReader("\n"), r))
 	}
 	s, _ := ToString(l, -1)
-	status := Load(l, r, s, mode)
+	err := Load(l, r, s, mode)
 	if f != os.Stdin {
 		_ = f.Close()
 	}
-	if status != Ok {
+	if err != nil {
 		SetTop(l, fileNameIndex)
 		return fileError("read")
 	}
 	Remove(l, fileNameIndex)
-	return status
+	return err
 }
 
-func LoadString(l *State, s string) Status { return LoadBuffer(l, s, s, "") }
+func LoadString(l *State, s string) error { return LoadBuffer(l, s, s, "") }
 
-func LoadBuffer(l *State, b, name, mode string) Status {
+func LoadBuffer(l *State, b, name, mode string) error {
 	return Load(l, strings.NewReader(b), name, mode)
 }
 
@@ -397,7 +398,7 @@ func NewStateEx() *State {
 	if l != nil {
 		_ = AtPanic(l, func(l *State) int {
 			s, _ := ToString(l, -1)
-			fmt.Fprintln(os.Stderr, "PANIC: unprotected error in call to Lua API (%s)", s)
+			fmt.Fprintf(os.Stderr, "PANIC: unprotected error in call to Lua API (%s)\n", s)
 			return 0
 		})
 	}

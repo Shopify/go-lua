@@ -708,19 +708,19 @@ func (l *State) checkMode(mode, x string) {
 	}
 }
 
-func protectedParser(l *State, r io.Reader, name, mode string) Status {
+func protectedParser(l *State, r io.Reader, name, chunkMode string) error {
 	l.nonYieldableCallCount++
-	status := l.protectedCall(func() {
+	err := l.protectedCall(func() {
 		var closure *luaClosure
 		b := bufio.NewReader(r)
 		if c, err := b.ReadByte(); err != nil {
 			// TODO
 		} else if c == Signature[0] {
-			l.checkMode(mode, "binary")
+			l.checkMode(chunkMode, "binary")
 			b.UnreadByte()
 			closure, err = l.undump(r, name) // TODO handle err
 		} else {
-			l.checkMode(mode, "text")
+			l.checkMode(chunkMode, "text")
 			b.UnreadByte()
 			closure = l.parse(b, name)
 		}
@@ -730,5 +730,5 @@ func protectedParser(l *State, r io.Reader, name, mode string) Status {
 		}
 	}, l.top, l.errorFunction)
 	l.nonYieldableCallCount--
-	return status
+	return err
 }

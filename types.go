@@ -108,7 +108,7 @@ func intFromFloat8(x float8) int {
 	return int(x&7+8) << uint(e-1)
 }
 
-func arith(op int, v1, v2 float64) float64 {
+func arith(op Operator, v1, v2 float64) float64 {
 	switch op {
 	case OpAdd:
 		return v1 + v2

@@ -10,7 +10,7 @@ func (l *State) arith(rb, rc value, op tm) value {
 	b, bok := toNumber(rb)
 	c, cok := toNumber(rc)
 	if bok && cok {
-		return arith(int(op-tmAdd)+OpAdd, b, c)
+		return arith(Operator(op-tmAdd)+OpAdd, b, c)
 	} else if result, ok := l.callBinaryTagMethod(rb, rc, op); ok {
 		return result
 	}
@@ -226,14 +226,14 @@ func (l *State) traceExecution() {
 		}
 	}
 	l.oldPC = callInfo.savedPC
-	if l.status == Yield {
+	if l.shouldYield {
 		if countHook {
 			l.hookCount = 1
 		}
 		callInfo.savedPC--
 		callInfo.setCallStatus(callStatusHookYielded)
 		callInfo.function_ = l.top - 1
-		l.throw(Yield)
+		panic("Not implemented - use goroutines to emulate yield")
 	}
 }
 

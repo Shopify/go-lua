@@ -60,12 +60,12 @@ func finishProtectedCall(l *State, status bool) int {
 }
 
 func protectedCallContinuation(l *State) int {
-	s, _ := Context(l)
-	return finishProtectedCall(l, s == Yield)
+	_, shouldYield, _ := Context(l)
+	return finishProtectedCall(l, shouldYield)
 }
 
-func loadHelper(l *State, s Status, e int) int {
-	if s == Ok {
+func loadHelper(l *State, s error, e int) int {
+	if s == nil {
 		if e != 0 {
 			PushValue(l, e)
 			if _, ok := SetUpValue(l, -2, 1); !ok {
@@ -108,7 +108,7 @@ var baseLibrary = []RegistryFunction{
 	}},
 	{"dofile", func(l *State) int {
 		f := OptString(l, 1, "")
-		if SetTop(l, 1); LoadFile(l, f, "") != Ok {
+		if SetTop(l, 1); LoadFile(l, f, "") != nil {
 			Error(l)
 			panic("unreachable")
 		}
@@ -151,7 +151,7 @@ var baseLibrary = []RegistryFunction{
 		CheckAny(l, 1)
 		PushNil(l)
 		Insert(l, 1) // create space for status result
-		return finishProtectedCall(l, Ok == ProtectedCallWithContinuation(l, Top(l)-2, MultipleReturns, 0, 0, protectedCallContinuation))
+		return finishProtectedCall(l, nil == ProtectedCallWithContinuation(l, Top(l)-2, MultipleReturns, 0, 0, protectedCallContinuation))
 	}},
 	{"print", func(l *State) int {
 		n := Top(l)
@@ -265,7 +265,7 @@ var baseLibrary = []RegistryFunction{
 		PushValue(l, 1) // exchange function and error handler
 		Copy(l, 2, 1)
 		Replace(l, 2)
-		return finishProtectedCall(l, Ok == ProtectedCallWithContinuation(l, n-2, MultipleReturns, 1, 0, protectedCallContinuation))
+		return finishProtectedCall(l, nil == ProtectedCallWithContinuation(l, n-2, MultipleReturns, 1, 0, protectedCallContinuation))
 	}},
 }
 
