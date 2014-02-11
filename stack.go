@@ -301,19 +301,22 @@ func (l *State) preCall(function int, resultCount int) bool {
 			}
 			return false
 		default:
-			if tm := l.tagMethodByObject(f, tmCall); tm == nil {
+
+			tm := l.tagMethodByObject(f, tmCall)
+			switch tm.(type) {
+			case *luaClosure:
+			case *goClosure:
+			case Function:
+			default:
 				l.typeError(f, "call")
-			} else if fun, ok := tm.(*luaClosure); !ok {
-				l.typeError(f, "call")
-			} else {
-				// Slide the args + function up 1 slot and poke in the tag method
-				for p := l.top; p > function; p-- {
-					l.stack[p] = l.stack[p-1]
-				}
-				l.top++
-				l.checkStack(0)
-				l.stack[function] = fun
 			}
+			// Slide the args + function up 1 slot and poke in the tag method
+			for p := l.top; p > function; p-- {
+				l.stack[p] = l.stack[p-1]
+			}
+			l.top++
+			l.checkStack(0)
+			l.stack[function] = tm
 		}
 	}
 	panic("unreachable")
