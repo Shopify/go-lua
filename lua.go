@@ -1072,6 +1072,16 @@ func Error(l *State) {
 // at `index`, while the table has next elements.  If there are no more
 // elements, nothing is pushed on the stack and Next returns false.
 //
+// A typical traversal looks like this:
+//
+//  // Table is on top of the stack (index -1)
+//  lua.PushNil(l)  // Add `nil` entry on stack (need 2 free slots)
+//  for lua.Next(l, -2) {
+//  	key := lua.CheckString(l, -2)
+//  	val := lua.CheckString(l, -1)
+//  	lua.Pop(l, 1) // Remove `val`, but need `key` for the next iter
+//  }
+//
 // http://www.lua.org/manual/5.2/manual.html#lua_next
 func Next(l *State, index int) bool {
 	t, ok := l.indexToValue(index).(*table)
