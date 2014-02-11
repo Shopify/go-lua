@@ -47,11 +47,11 @@ func TestParserExhaustively(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// blackList := map[string]bool{"all.lua": true, "main.lua": true, "bitwise.lua": true}
+	blackList := map[string]bool{}
 	for _, source := range matches {
-		// if _, ok := blackList[filepath.Base(source)]; ok {
-		// 	continue
-		// }
+		if _, ok := blackList[filepath.Base(source)]; ok {
+			continue
+		}
 		protectedTestParser(l, t, source)
 	}
 }
@@ -78,14 +78,15 @@ func expectEqual(t *testing.T, x, y interface{}, m string) {
 	}
 }
 
-func expectDeepEqual(t *testing.T, x, y interface{}, m string) {
+func expectDeepEqual(t *testing.T, x, y interface{}, m string) bool {
 	if reflect.DeepEqual(x, y) {
-		return
+		return true
 	}
 	if reflect.TypeOf(x).Kind() == reflect.Slice && reflect.ValueOf(y).Len() == 0 && reflect.ValueOf(x).Len() == 0 {
-		return
+		return true
 	}
 	t.Errorf("%s doesn't match: %v, %v\n", m, x, y)
+	return false
 }
 
 func compareClosures(t *testing.T, a, b *luaClosure) {
@@ -101,8 +102,26 @@ func comparePrototypes(t *testing.T, a, b *prototype) {
 	expectEqual(t, a.maxStackSize, b.maxStackSize, "max stack size")
 	// expectEqual(t, a.source, b.source, "source")
 	expectEqual(t, len(a.code), len(b.code), "code length")
-	expectDeepEqual(t, a.code, b.code, "code")
-	expectDeepEqual(t, a.constants, b.constants, "constants")
+	if !expectDeepEqual(t, a.code, b.code, "code") {
+		for i := range a.code {
+			if a.code[i] != b.code[i] {
+				t.Errorf("%d: %v != %v\n", a.lineInfo[i], a.code[i], b.code[i])
+			}
+		}
+		for _, i := range []int{3, 197, 198, 199, 200, 201} {
+			t.Errorf("%d: %#v, %#v\n", i, a.constants[i], b.constants[i])
+		}
+		for _, i := range []int{202, 203, 204} {
+			t.Errorf("%d: %#v\n", i, b.constants[i])
+		}
+	}
+	if !expectDeepEqual(t, a.constants, b.constants, "constants") {
+		for i := range a.constants {
+			if a.constants[i] != b.constants[i] {
+				t.Errorf("%d: %#v != %#v\n", i, a.constants[i], b.constants[i])
+			}
+		}
+	}
 	expectDeepEqual(t, a.lineInfo, b.lineInfo, "line info")
 	expectDeepEqual(t, a.upValues, b.upValues, "upvalues")
 	expectDeepEqual(t, a.localVariables, b.localVariables, "local variables")

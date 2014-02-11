@@ -104,9 +104,8 @@ func (s *scanner) scanError(message string, token rune) {
 	} else {
 		message = fmt.Sprintf("%s:%d: %s", s.source, s.lineNumber, message)
 	}
-	panic(message)
-	// s.l.push(message)
-	// s.l.throw(SyntaxError)
+	s.l.push(message)
+	s.l.throw(SyntaxError)
 }
 
 func (s *scanner) incrementLineNumber() {
@@ -161,7 +160,6 @@ func (s *scanner) skipSeparator() int { // TODO is this the right name?
 	if s.current == c {
 		return i
 	}
-	s.buffer.Reset()
 	return -i - 1
 }
 
@@ -291,7 +289,6 @@ func (s *scanner) readNumber() token {
 	}
 	f, err := strconv.ParseFloat(str, bits64)
 	if err != nil {
-		println("readNumber", s.buffer.String())
 		s.numberError()
 	}
 	s.buffer.Reset()
@@ -363,7 +360,7 @@ func (s *scanner) readString() token {
 				s.save('\n')
 			case c == endOfStream: // do nothing
 			case c == 'x':
-				s.advanceAndSave(s.readHexEscape())
+				s.save(s.readHexEscape())
 			case c == 'z':
 				for s.advance(); unicode.IsSpace(s.current); {
 					if isNewLine(s.current) {
@@ -425,6 +422,7 @@ func (s *scanner) scan() token {
 					_ = s.readMultiLine(comment, sep)
 					break
 				}
+				s.buffer.Reset()
 			}
 			for !isNewLine(s.current) && s.current != endOfStream {
 				s.advance()
@@ -432,7 +430,7 @@ func (s *scanner) scan() token {
 		case '[':
 			if sep := s.skipSeparator(); sep >= 0 {
 				return token{t: tkString, s: s.readMultiLine(str, sep)}
-			} else if sep == -1 {
+			} else if s.buffer.Reset(); sep == -1 {
 				return token{t: '['}
 			}
 			s.scanError("invalid long string delimiter", tkString)

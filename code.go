@@ -100,8 +100,8 @@ type block struct {
 }
 
 type function struct {
+	constantLookup      map[value]int
 	f                   *prototype
-	h                   *table
 	previous            *function
 	p                   *parser
 	block               *block
@@ -113,7 +113,7 @@ type function struct {
 
 func (f *function) OpenFunction(line int) {
 	f.f.prototypes = append(f.f.prototypes, prototype{source: f.p.source, maxStackSize: 2, lineDefined: line})
-	f.p.function = &function{f: &f.f.prototypes[len(f.f.prototypes)-1], h: newTable(), previous: f, p: f.p, jumpPC: noJump, firstLocal: len(f.p.activeVariables)}
+	f.p.function = &function{f: &f.f.prototypes[len(f.f.prototypes)-1], constantLookup: make(map[value]int), previous: f, p: f.p, jumpPC: noJump, firstLocal: len(f.p.activeVariables)}
 	f.p.function.EnterBlock(false)
 }
 
@@ -364,7 +364,6 @@ func (f *function) LoadNil(from, n int) {
 		}
 	}
 	f.EncodeABC(opLoadNil, from, n-1, 0)
-	// loadnil 0, 0; loadnil 1, 0 -> loadnil 0, 1 ==> pf = 0, pl = 0, from = 1, l = 1 ==> pf <= from, from <= pf,
 }
 
 func (f *function) Jump() int {
@@ -528,25 +527,19 @@ func (f *function) Concatenate(l1, l2 int) int {
 	return l1
 }
 
-func (f *function) addConstant(k, v value) (index int) {
-	if old, ok := f.h.at(k).(float64); ok {
-		if index = int(old); f.f.constants[index] == v {
-			return
-		}
+func (f *function) addConstant(k, v value) int {
+	if index, ok := f.constantLookup[k]; ok && f.f.constants[index] == v {
+		return index
 	}
-	index = len(f.f.constants)
-	f.h.put(k, float64(index))
+	index := len(f.f.constants)
+	f.constantLookup[k] = index
 	f.f.constants = append(f.f.constants, v)
-	return
+	return index
 }
 
 func (f *function) NumberConstant(n float64) int {
-	if n == 0.0 && math.Signbit(n) {
-		return f.addConstant("-0.0", n)
-	} else if n == 0.0 {
-		return f.addConstant("0.0", n)
-	} else if math.IsNaN(n) {
-		return f.addConstant("NaN", n)
+	if n == 0.0 || math.IsNaN(n) {
+		return f.addConstant(math.Float64bits(n), n)
 	}
 	return f.addConstant(n, n)
 }
@@ -579,7 +572,7 @@ func (f *function) freeExpression(e exprDesc) {
 
 func (f *function) StringConstant(s string) int { return f.addConstant(s, s) }
 func (f *function) booleanConstant(b bool) int  { return f.addConstant(b, b) }
-func (f *function) nilConstant() int            { return f.addConstant(f.h, nil) }
+func (f *function) nilConstant() int            { return f.addConstant(f, nil) }
 
 func (f *function) SetReturns(e exprDesc, resultCount int) {
 	if e.kind == kindCall {

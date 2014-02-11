@@ -2,7 +2,11 @@ package lua
 
 // Test assumptions about how Go works
 
-import "testing"
+import (
+	"math"
+
+	"testing"
+)
 
 func TestStringCompare(t *testing.T) {
 	s1 := "hello\x00world"
@@ -35,5 +39,20 @@ func TestReslicing(t *testing.T) {
 	s = s[:cap(s)]
 	if cap(s) != len(s) {
 		t.Error("cap(s) != len(s)")
+	}
+}
+
+func TestPow(t *testing.T) {
+	// if a, b := math.Pow(10.0, 33.0), 1.0e33; a != b {
+	// 	t.Errorf("%v != %v\n", a, b)
+	// }
+	if a, b := math.Pow10(33), 1.0e33; a != b {
+		t.Errorf("%v != %v\n", a, b)
+	}
+}
+
+func TestZero(t *testing.T) {
+	if 0.0 != -0.0 {
+		t.Error("0.0 == -0.0")
 	}
 }

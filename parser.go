@@ -118,13 +118,6 @@ func (p *parser) functionArguments(f exprDesc, line int) exprDesc {
 		p.syntaxError("function arguments expected")
 	}
 	base, parameterCount := f.info, MultipleReturns
-	// frc := p.function.freeRegisterCount
-	// defer func() {
-	// 	if x := recover(); x != nil {
-	// 		println("functionArguments", base, parameterCount, line, kinds[f.kind], args.info, kinds[args.kind], frc)
-	// 		panic(x)
-	// 	}
-	// }()
 	if !args.hasMultipleReturns() {
 		if args.kind != kindVoid {
 			args = p.function.ExpressionToNextRegister(args)
@@ -154,7 +147,8 @@ func (p *parser) primaryExpression() (e exprDesc) {
 }
 
 func (p *parser) suffixedExpression() exprDesc {
-	line, e := p.lineNumber, p.primaryExpression()
+	line := p.lineNumber
+	e := p.primaryExpression()
 	for {
 		switch p.t {
 		case '.':
@@ -686,7 +680,7 @@ func (p *parser) mainFunction() {
 
 func (l *State) parse(r io.ByteReader, name string) *luaClosure {
 	p := &parser{scanner: scanner{r: r, lineNumber: 1, lastLine: 1, lookAheadToken: token{t: tkEOS}, l: l, source: name}}
-	f := &function{f: &prototype{source: name, maxStackSize: 2, isVarArg: true}, h: newTable(), p: p, jumpPC: noJump}
+	f := &function{f: &prototype{source: name, maxStackSize: 2, isVarArg: true}, constantLookup: make(map[value]int), p: p, jumpPC: noJump}
 	p.function = f
 	defer func() {
 		if x := recover(); x != nil {
