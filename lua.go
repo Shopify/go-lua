@@ -734,7 +734,7 @@ func SetField(l *State, index int, key string) {
 
 func RawSet(l *State, index int) {
 	l.checkElementCount(2)
-	t, ok := l.stack[index].(*table)
+	t, ok := l.indexToValue(index).(*table)
 	apiCheck(ok, "table expected")
 	t.put(l.stack[l.top-2], l.stack[l.top-1])
 	t.invalidateTagMethodCache()
@@ -743,7 +743,7 @@ func RawSet(l *State, index int) {
 
 func RawSetInt(l *State, index, key int) {
 	l.checkElementCount(1)
-	t, ok := l.stack[index].(*table)
+	t, ok := l.indexToValue(index).(*table)
 	apiCheck(ok, "table expected")
 	t.putAtInt(key, l.stack[l.top-1])
 	l.top--
