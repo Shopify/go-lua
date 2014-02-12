@@ -173,7 +173,6 @@ func (l *State) concat(total int) {
 	}
 	l.assert(total >= 2)
 	for total > 1 {
-		top := l.top
 		n := 2 // # of elements handled in this pass (at least 2)
 		s2, ok := t(2).(string)
 		if !ok {
@@ -190,11 +189,16 @@ func (l *State) concat(total int) {
 			put(2, t(1))
 		} else {
 			// at least 2 non-empty strings; scarf as many as possible
-			ss := make([]string, 0, total)
-			for i, ok, ss := 2, true, append(ss, s1); ok && i <= total; i++ {
-				if s, ok := toString(l.stack[top-i]); ok {
+			ss := []string{s1}
+			for ; n <= total; n++ {
+				if s, ok := toString(t(n)); ok {
 					ss = append(ss, s)
+				} else {
+					break
 				}
+			}
+			for i, j := 0, len(ss)-1; i < j; i, j = i+1, j-1 {
+				ss[i], ss[j] = ss[j], ss[i]
 			}
 			put(len(ss), strings.Join(ss, ""))
 		}

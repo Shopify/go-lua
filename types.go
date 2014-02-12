@@ -149,8 +149,11 @@ func numberToString(f float64) string {
 }
 
 func toString(r value) (string, bool) {
-	if v, ok := r.(float64); ok {
-		return numberToString(v), true
+	switch r := r.(type) {
+	case string:
+		return r, true
+	case float64:
+		return numberToString(r), true
 	}
 	return "", false
 }
