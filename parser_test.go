@@ -41,13 +41,12 @@ func TestParser(t *testing.T) {
 }
 
 func TestParserExhaustively(t *testing.T) {
-	t.Skip()
 	l := NewState()
-	matches, err := filepath.Glob("/Users/fbogsany/Projects/Lua/lua-5.2.2-tests/*.lua")
+	matches, err := filepath.Glob("fixtures/*.lua")
 	if err != nil {
 		t.Fatal(err)
 	}
-	blackList := map[string]bool{}
+	blackList := map[string]bool{"math.lua": true}
 	for _, source := range matches {
 		if _, ok := blackList[filepath.Base(source)]; ok {
 			continue
