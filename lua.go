@@ -292,7 +292,6 @@ func ProtectedCall(l *State, argCount, resultCount, errorFunction int) error {
 //
 // http://www.lua.org/manual/5.2/manual.html#lua_pcallk
 func ProtectedCallWithContinuation(l *State, argCount, resultCount, errorFunction, context int, continuation Function) (err error) {
-
 	apiCheck(continuation == nil || !l.callInfo.isLua(), "cannot use continuations inside hooks")
 	l.checkElementCount(argCount + 1)
 	apiCheck(!l.shouldYield, "cannot do calls on non-normal thread")
@@ -407,8 +406,9 @@ func (l *State) setIndexToValue(index int, v value) {
 		apiCheck(index <= callInfo.top()-(callInfo.function()+1), "unacceptable index")
 		if i := callInfo.function() + index; i < l.top {
 			l.stack[i] = v
+		} else {
+			panic("unacceptable index")
 		}
-		panic("unacceptable index")
 	case !isPseudoIndex(index): // negative index
 		apiCheck(index != 0 && -index <= l.top-(callInfo.function()+1), "invalid index")
 		l.stack[l.top+index] = v
@@ -422,8 +422,9 @@ func (l *State) setIndexToValue(index int, v value) {
 		}
 		if closure := l.stack[callInfo.function()].(*goClosure); i <= len(closure.upValues) {
 			closure.upValues[i-1] = v
+		} else {
+			panic("upvalue index too large")
 		}
-		panic("upvalue index too large")
 	}
 }
 
@@ -485,7 +486,11 @@ func Insert(l *State, index int) {
 }
 
 func (l *State) move(dest int, src value) {
-	apiCheck(src != nil, "invalid index")
+	// println("==== move", dest)
+	// printValue(src)
+	// printValue(l.indexToValue(dest))
+	// println()
+	apiCheck(l.indexToValue(dest) != nil, "invalid index")
 	l.setIndexToValue(dest, src)
 }
 
@@ -541,6 +546,10 @@ func (l *State) valueToType(v value) Type {
 		return TypeUserData
 	case *State:
 		return TypeThread
+	case *luaClosure:
+		return TypeFunction
+	case *goClosure:
+		return TypeFunction
 	}
 	return TypeNone
 }
@@ -1133,12 +1142,13 @@ func (l *State) setErrorObject(err error, oldTop int) {
 func (l *State) protectedCall(f func(), oldTop, errorFunc int) error {
 	callInfo, allowHook, nonYieldableCallCount, errorFunction := l.callInfo, l.allowHook, l.nonYieldableCallCount, l.errorFunction
 	l.errorFunction = errorFunc
-
+	// fmt.Printf("%#v\n", l.callInfo)
 	err := l.protect(f)
 	if err != nil {
 		l.close(oldTop)
 		l.setErrorObject(err, oldTop)
 		l.callInfo, l.allowHook, l.nonYieldableCallCount = callInfo, allowHook, nonYieldableCallCount
+		// fmt.Printf("%#v\n", l.callInfo)
 		// l.shrinkStack()
 	}
 	l.errorFunction = errorFunction

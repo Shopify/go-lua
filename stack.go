@@ -284,13 +284,15 @@ func (l *State) preCall(function int, resultCount int) bool {
 			p := f.prototype
 			l.checkStack(p.maxStackSize)
 			argCount, parameterCount := l.top-function-1, p.parameterCount
-			extra := parameterCount - argCount
-			args := l.stack[l.top : l.top+extra]
-			for i := range args {
-				args[i] = nil
+			if argCount < parameterCount {
+				extra := parameterCount - argCount
+				args := l.stack[l.top : l.top+extra]
+				for i := range args {
+					args[i] = nil
+				}
+				l.top += extra
+				argCount += extra
 			}
-			l.top += extra
-			argCount += extra
 			base := function + 1
 			if p.isVarArg {
 				base = l.adjustVarArgs(p, argCount)

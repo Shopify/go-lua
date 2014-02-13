@@ -5,7 +5,6 @@ import (
 	"math"
 	"reflect"
 	"runtime"
-	"strconv"
 	"strings"
 )
 
@@ -33,8 +32,10 @@ func printValue(v value) {
 		print("userdata ", v)
 	case nil:
 		print("nil")
+	case bool:
+		print(v)
 	default:
-		print("unknown ", v)
+		print("unknown ", v, reflect.TypeOf(v).Name())
 	}
 }
 
@@ -133,17 +134,29 @@ func arith(op Operator, v1, v2 float64) float64 {
 	panic(fmt.Sprintf("not an arithmetic op code (%d)", op))
 }
 
-func (l *State) parseNumber(s string) (float64, bool) {
+func (l *State) parseNumber(s string) (v float64, ok bool) { // TODO this is f*cking ugly - scanner.readNumber should be refactored.
+	if len(strings.Fields(s)) != 1 || strings.ContainsRune(s, 0) {
+		return
+	}
 	scanner := scanner{l: l, r: strings.NewReader(s)}
 	t := scanner.scan()
 	if t.t == '-' {
 		if t := scanner.scan(); t.t == tkNumber {
-			return -t.n, true
+			v, ok = -t.n, true
 		}
 	} else if t.t == tkNumber {
-		return t.n, true
+		v, ok = t.n, true
+	} else if t.t == '+' {
+		if t := scanner.scan(); t.t == tkNumber {
+			v, ok = t.n, true
+		}
 	}
-	return 0.0, false
+	if ok && scanner.scan().t != tkEOS {
+		ok = false
+	} else if math.IsInf(v, 0) || math.IsNaN(v) {
+		ok = false
+	}
+	return
 }
 
 func (l *State) toNumber(r value) (v float64, ok bool) {
@@ -152,13 +165,7 @@ func (l *State) toNumber(r value) (v float64, ok bool) {
 	}
 	var s string
 	if s, ok = r.(string); ok {
-		s = strings.TrimSpace(s)
-		if v, err := strconv.ParseFloat(s, 64); err == nil {
-			return v, true
-		}
-		if err := l.protectedCall(func() { v, ok = l.parseNumber(s) }, l.top, l.errorFunction); err == nil {
-			return
-		} else {
+		if err := l.protectedCall(func() { v, ok = l.parseNumber(strings.TrimSpace(s)) }, l.top, l.errorFunction); err != nil {
 			l.pop() // Remove error message from the stack.
 			ok = false
 		}

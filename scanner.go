@@ -211,7 +211,7 @@ func isHexadecimal(c rune) bool {
 	return '0' <= c && c <= '9' || 'a' <= c && c <= 'f' || 'A' <= c && c <= 'F'
 }
 
-func (s *scanner) readHexNumber(x uint64) (n uint64, c rune, i int) {
+func (s *scanner) readHexNumber(x float64) (n float64, c rune, i int) {
 	if c, n = s.current, x; !isHexadecimal(c) {
 		return
 	}
@@ -227,7 +227,7 @@ func (s *scanner) readHexNumber(x uint64) (n uint64, c rune, i int) {
 			return
 		}
 		s.advance()
-		c, n, i = s.current, n<<4+uint64(c), i+1
+		c, n, i = s.current, n*16.0+float64(c), i+1
 	}
 }
 
@@ -241,12 +241,15 @@ func (s *scanner) readNumber() token {
 		s.assert(prefix == "0x" || prefix == "0X")
 		s.buffer.Reset()
 		var exponent int
-		fraction, c, _ := s.readHexNumber(0)
+		fraction, c, i := s.readHexNumber(0)
 		if c == '.' {
 			s.advance()
 			fraction, c, exponent = s.readHexNumber(fraction)
-			exponent *= -4
 		}
+		if i == 0 && exponent == 0 {
+			s.numberError()
+		}
+		exponent *= -4
 		if c == 'p' || c == 'P' {
 			s.advance()
 			var negativeExponent bool
@@ -267,7 +270,7 @@ func (s *scanner) readNumber() token {
 			}
 			s.buffer.Reset()
 		}
-		return token{t: tkNumber, n: math.Ldexp(float64(fraction), exponent)}
+		return token{t: tkNumber, n: math.Ldexp(fraction, exponent)}
 	}
 	c = s.readDigits()
 	if c == '.' {

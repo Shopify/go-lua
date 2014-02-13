@@ -4,6 +4,7 @@ package lua
 
 import (
 	"math"
+	"strconv"
 
 	"testing"
 )
@@ -54,5 +55,11 @@ func TestPow(t *testing.T) {
 func TestZero(t *testing.T) {
 	if 0.0 != -0.0 {
 		t.Error("0.0 == -0.0")
+	}
+}
+
+func TestParseFloat(t *testing.T) {
+	if f, err := strconv.ParseFloat("inf", 64); err != nil {
+		t.Error("ParseFloat('inf', 64) == ", f, err)
 	}
 }

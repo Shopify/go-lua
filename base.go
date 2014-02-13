@@ -4,6 +4,7 @@ import (
 	"os"
 	"runtime"
 	"strconv"
+	"strings"
 )
 
 func next(l *State) int {
@@ -241,7 +242,7 @@ var baseLibrary = []RegistryFunction{
 			s := CheckString(l, 1)
 			base := CheckInteger(l, 2)
 			ArgumentCheck(l, 2 <= base && base <= 36, 2, "base out of range")
-			if i, err := strconv.ParseInt(s, base, 64); err == nil { // TODO strings.TrimSpace(s)?
+			if i, err := strconv.ParseInt(strings.TrimSpace(s), base, 64); err == nil {
 				PushNumber(l, float64(i))
 				return 1
 			}
