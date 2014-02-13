@@ -35,6 +35,7 @@ func TestScanner(t *testing.T) {
 		{"0x0.1E", []token{{t: tkNumber, n: 0.1171875}}},
 		{"0xA23p-4", []token{{t: tkNumber, n: 162.1875}}},
 		{"0X1.921FB54442D18P+1", []token{{t: tkNumber, n: 3.141592653589793}}},
+		{"  -0xa  ", []token{{t: '-'}, {t: tkNumber, n: 10.0}}},
 	}
 	for i, v := range tests {
 		testScanner(t, i, v.source, v.tokens)

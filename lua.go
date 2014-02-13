@@ -568,7 +568,7 @@ func IsGoFunction(l *State, index int) bool {
 //
 // http://www.lua.org/manual/5.2/manual.html#lua_isnumber
 func IsNumber(l *State, index int) bool {
-	_, ok := toNumber(l.indexToValue(index))
+	_, ok := l.toNumber(l.indexToValue(index))
 	return ok
 }
 
@@ -654,7 +654,7 @@ func Compare(l *State, index1, index2 int, op ComparisonOperator) bool {
 //
 // http://www.lua.org/manual/5.2/manual.html#lua_tointegerx
 func ToInteger(l *State, index int) (int, bool) {
-	if n, ok := toNumber(l.indexToValue(index)); ok {
+	if n, ok := l.toNumber(l.indexToValue(index)); ok {
 		return int(n), true
 	}
 	return 0, false
@@ -672,7 +672,7 @@ func ToInteger(l *State, index int) (int, bool) {
 //
 // http://www.lua.org/manual/5.2/manual.html#lua_tounsignedx
 func ToUnsigned(l *State, index int) (uint, bool) {
-	if n, ok := toNumber(l.indexToValue(index)); ok {
+	if n, ok := l.toNumber(l.indexToValue(index)); ok {
 		const supUnsigned = float64(^uint(0)) + 1
 		return uint(n - math.Floor(n/supUnsigned)*supUnsigned), true
 	}
@@ -1256,7 +1256,7 @@ func TypeName(l *State, t Type) string { return typeNames[t+1] }
 // If the operation failed, the second return value will be false.
 //
 // http://www.lua.org/manual/5.2/manual.html#lua_tonumberx
-func ToNumber(l *State, index int) (float64, bool) { return toNumber(l.indexToValue(index)) }
+func ToNumber(l *State, index int) (float64, bool) { return l.toNumber(l.indexToValue(index)) }
 
 // ToBoolean converts the Lua value at `index` to a Go boolean.  Like all
 // tests in Lua, the only true values are `true` booleans and `nil`.

@@ -409,9 +409,8 @@ func (l *State) throw(errorCode error) {
 	}
 }
 
-func (l *State) protect(f func()) error {
+func (l *State) protect(f func()) (err error) {
 	nestedGoCallCount, protectFunction := l.nestedGoCallCount, l.protectFunction
-	var err error
 	l.protectFunction = func() {
 		if e := recover(); e != nil {
 			err = e.(error)

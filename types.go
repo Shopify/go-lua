@@ -6,6 +6,7 @@ import (
 	"reflect"
 	"runtime"
 	"strconv"
+	"strings"
 )
 
 type value interface{}
@@ -132,16 +133,37 @@ func arith(op Operator, v1, v2 float64) float64 {
 	panic(fmt.Sprintf("not an arithmetic op code (%d)", op))
 }
 
-func toNumber(r value) (float64, bool) {
-	if v, ok := r.(float64); ok {
-		return v, true
-	}
-	if s, ok := r.(string); ok {
-		if v, err := strconv.ParseFloat(s, 64); err == nil { // TODO handle hexadecimal floats
-			return v, true
+func (l *State) parseNumber(s string) (float64, bool) {
+	scanner := scanner{l: l, r: strings.NewReader(s)}
+	t := scanner.scan()
+	if t.t == '-' {
+		if t := scanner.scan(); t.t == tkNumber {
+			return -t.n, true
 		}
+	} else if t.t == tkNumber {
+		return t.n, true
 	}
 	return 0.0, false
+}
+
+func (l *State) toNumber(r value) (v float64, ok bool) {
+	if v, ok = r.(float64); ok {
+		return
+	}
+	var s string
+	if s, ok = r.(string); ok {
+		s = strings.TrimSpace(s)
+		if v, err := strconv.ParseFloat(s, 64); err == nil {
+			return v, true
+		}
+		if err := l.protectedCall(func() { v, ok = l.parseNumber(s) }, l.top, l.errorFunction); err == nil {
+			return
+		} else {
+			l.pop() // Remove error message from the stack.
+			ok = false
+		}
+	}
+	return
 }
 
 func numberToString(f float64) string {

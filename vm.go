@@ -7,8 +7,8 @@ import (
 )
 
 func (l *State) arith(rb, rc value, op tm) value {
-	b, bok := toNumber(rb)
-	c, cok := toNumber(rc)
+	b, bok := l.toNumber(rb)
+	c, cok := l.toNumber(rc)
 	if bok && cok {
 		return arith(Operator(op-tmAdd)+OpAdd, b, c)
 	} else if result, ok := l.callBinaryTagMethod(rb, rc, op); ok {
@@ -485,11 +485,11 @@ func (l *State) execute() {
 			}
 		case opForPrep:
 			a := i.a()
-			if init, ok := toNumber(frame[a+0]); !ok {
+			if init, ok := l.toNumber(frame[a+0]); !ok {
 				l.runtimeError("'for' initial value must be a number")
-			} else if limit, ok := toNumber(frame[a+1]); !ok {
+			} else if limit, ok := l.toNumber(frame[a+1]); !ok {
 				l.runtimeError("'for' limit must be a number")
-			} else if step, ok := toNumber(frame[a+2]); !ok {
+			} else if step, ok := l.toNumber(frame[a+2]); !ok {
 				l.runtimeError("'for' step must be a number")
 			} else {
 				frame[a+0], frame[a+1], frame[a+2] = init-step, limit, step
@@ -518,7 +518,7 @@ func (l *State) execute() {
 				c = expectNext(opExtraArg).ax()
 			}
 			h := frame[a].(*table)
-			start := c - 1*listItemsPerFlush
+			start := (c - 1) * listItemsPerFlush
 			last := start + n
 			if last > cap(h.array) {
 				h.extendArray(last)

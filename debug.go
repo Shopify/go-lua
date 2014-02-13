@@ -53,7 +53,7 @@ func (l *State) orderError(left, right value) {
 }
 
 func (l *State) arithError(v1, v2 value) {
-	if _, ok := toNumber(v1); !ok {
+	if _, ok := l.toNumber(v1); !ok {
 		v2 = v1
 	}
 	l.typeError(v2, "perform arithmetic on")

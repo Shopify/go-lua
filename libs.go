@@ -5,6 +5,7 @@ func OpenLibraries(l *State) {
 		{"_G", BaseOpen},
 		{"package", PackageOpen},
 		{"math", MathOpen},
+		{"string", StringOpen},
 	}
 	for _, lib := range libs {
 		Require(l, lib.Name, lib.Function, true)

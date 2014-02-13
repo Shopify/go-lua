@@ -256,7 +256,7 @@ var baseLibrary = []RegistryFunction{
 	}},
 	{"type", func(l *State) int {
 		CheckAny(l, 1)
-		PushString(l, TypeName(l, 1))
+		PushString(l, TypeNameOf(l, 1))
 		return 1
 	}},
 	{"xpcall", func(l *State) int {
