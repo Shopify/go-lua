@@ -1,6 +1,7 @@
 package lua
 
 import (
+	"io"
 	"os"
 	"runtime"
 	"strconv"
@@ -19,7 +20,7 @@ func next(l *State) int {
 
 func pairs(method string, isZero bool, iter Function) Function {
 	return func(l *State) int {
-		if !MetaField(l, 1, method) { // no metamethod?
+		if hasMetamethod := MetaField(l, 1, method); !hasMetamethod {
 			CheckType(l, 1, TypeTable) // argument must be a table
 			PushGoFunction(l, iter)    // will return generator,
 			PushValue(l, 1)            // state,
@@ -78,6 +79,39 @@ func loadHelper(l *State, s error, e int) int {
 	PushNil(l)
 	Insert(l, -2)
 	return 2
+}
+
+type genericReader struct {
+	l *State
+	r *strings.Reader
+	e error
+}
+
+func (r *genericReader) Read(b []byte) (n int, err error) {
+	if r.e != nil {
+		return 0, r.e
+	}
+	if l := r.l; r.r == nil {
+		CheckStackWithMessage(l, 2, "too many nested functions")
+		PushValue(l, 1)
+		if Call(l, 0, 1); IsNil(l, -1) {
+			Pop(l, 1)
+			return 0, io.EOF
+		} else if !IsString(l, -1) {
+			Errorf(l, "reader function must return a string")
+		}
+		if s, ok := ToString(l, -1); ok {
+			r.r = strings.NewReader(s)
+		} else {
+			return 0, io.EOF
+		}
+	}
+	if n, err = r.r.Read(b); err == io.EOF {
+		r.r, err = nil, nil
+	} else if err != nil {
+		r.e = err
+	}
+	return
 }
 
 var baseLibrary = []RegistryFunction{
@@ -145,7 +179,21 @@ var baseLibrary = []RegistryFunction{
 		}
 		return loadHelper(l, LoadFile(l, f, m), e)
 	}},
-	// {"load", load},
+	{"load", func(l *State) int {
+		m, e := OptString(l, 3, "bt"), 4
+		if IsNone(l, e) {
+			e = 0
+		}
+		var err error
+		if s, ok := ToString(l, 1); ok {
+			err = LoadBuffer(l, s, OptString(l, 2, s), m)
+		} else {
+			chunkName := OptString(l, 2, "=(load)")
+			CheckType(l, 1, TypeFunction)
+			err = Load(l, &genericReader{l: l}, chunkName, m)
+		}
+		return loadHelper(l, err, e)
+	}},
 	{"next", next},
 	{"pairs", pairs("__pairs", false, next)},
 	{"pcall", func(l *State) int {

@@ -15,3 +15,10 @@ func TestConcat(t *testing.T) {
 	LoadString(l, "print('hello'..'world')")
 	Call(l, 0, 0)
 }
+
+func TestProtectedCall(t *testing.T) {
+	l := NewState()
+	OpenLibraries(l)
+	LoadString(l, "assert(not pcall(bit32.band, {}))")
+	Call(l, 0, 0)
+}

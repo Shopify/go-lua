@@ -682,12 +682,6 @@ func (l *State) parse(r io.ByteReader, name string) *luaClosure {
 	p := &parser{scanner: scanner{r: r, lineNumber: 1, lastLine: 1, lookAheadToken: token{t: tkEOS}, l: l, source: name}}
 	f := &function{f: &prototype{source: name, maxStackSize: 2, isVarArg: true}, constantLookup: make(map[value]int), p: p, jumpPC: noJump}
 	p.function = f
-	defer func() {
-		if x := recover(); x != nil {
-			p.syntaxError(fmt.Sprintf("%s", x))
-			panic(x)
-		}
-	}()
 	p.mainFunction()
 	// TODO assertions about parser state
 	c := l.newLuaClosure(f.f)

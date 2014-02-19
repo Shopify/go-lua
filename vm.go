@@ -51,7 +51,7 @@ func (l *State) setTableAt(t value, key value, val value) {
 				ok = false
 			}
 			if ok {
-				table.put(key, val)
+				table.put(l, key, val)
 				table.invalidateTagMethodCache()
 				return
 			}
@@ -197,6 +197,7 @@ func (l *State) concat(total int) {
 					break
 				}
 			}
+			n-- // last increment wasn't valid
 			for i, j := 0, len(ss)-1; i < j; i, j = i+1, j-1 {
 				ss[i], ss[j] = ss[j], ss[i]
 			}
@@ -502,6 +503,7 @@ func (l *State) execute() {
 			a := i.a()
 			callBase := a + 3
 			copy(frame[callBase:callBase+3], frame[a:a+3])
+			callBase += ci.base()
 			l.top = callBase + 3 // function + 2 args (state and index)
 			l.call(callBase, i.c(), true)
 			frame, l.top = ci.frame, ci.top()

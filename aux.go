@@ -91,7 +91,7 @@ func pushGlobalFunctionName(l *State, activationRecord *Debug) bool {
 }
 
 func typeError(l *State, argCount int, typeName string) {
-	ArgumentError(l, argCount, PushFString(l, "%s expected, got %s", typeName, TypeNameOf(l, argCount)))
+	ArgumentError(l, argCount, PushString(l, typeName+" expected, got "+TypeNameOf(l, argCount)))
 }
 
 func tagError(l *State, argCount int, tag Type) { typeError(l, argCount, TypeName(l, tag)) }
@@ -101,7 +101,7 @@ func Where(l *State, level int) {
 	if Stack(l, level, &activationRecord) { // check function at level
 		Info(l, "Sl", &activationRecord)      // get info about it
 		if activationRecord.CurrentLine > 0 { // is there info?
-			PushFString(l, "%s:%d: ", activationRecord.Source, activationRecord.CurrentLine)
+			PushString(l, fmt.Sprintf("%s:%d: ", activationRecord.Source, activationRecord.CurrentLine))
 			return
 		}
 	}
@@ -403,4 +403,14 @@ func NewStateEx() *State {
 		})
 	}
 	return l
+}
+
+func LengthEx(l *State, index int) int {
+	Length(l, index)
+	if length, ok := ToInteger(l, -1); ok {
+		Pop(l, 1)
+		return length
+	}
+	Errorf(l, "object length is not a number")
+	panic("unreachable")
 }

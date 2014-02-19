@@ -63,3 +63,20 @@ func TestParseFloat(t *testing.T) {
 		t.Error("ParseFloat('inf', 64) == ", f, err)
 	}
 }
+
+func TestUnsigned(t *testing.T) {
+	n := -1.0
+	const supUnsigned = float64(^uint32(0)) + 1
+	if x := math.Floor(n / supUnsigned); x != -1.0 {
+		t.Error("math.Floor(-1/supUnsigned) == ", x)
+	}
+	if x := math.Floor(n/supUnsigned) * supUnsigned; x != -4294967296.0 {
+		t.Error("math.Floor(n/supUnsigned)*supUnsigned == ", x)
+	}
+	if x := n - math.Floor(n/supUnsigned)*supUnsigned; x != 4294967295.0 {
+		t.Error("n-math.Floor(n/supUnsigned)*supUnsigned == ", x)
+	}
+	if x := uint(n - math.Floor(n/supUnsigned)*supUnsigned); x != 4294967295 {
+		t.Error("uint(n-math.Floor(n/supUnsigned)*supUnsigned) == ", x)
+	}
+}

@@ -15,6 +15,13 @@ func TestBase(t *testing.T) {
 	Call(l, 0, 0)
 }
 
+func TestGoto(t *testing.T) {
+	l := NewState()
+	OpenLibraries(l)
+	LoadFile(l, "fixtures/goto.lua", "text")
+	Call(l, 0, 0)
+}
+
 func Example() {
 	type step struct {
 		name     string

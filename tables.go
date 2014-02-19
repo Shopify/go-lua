@@ -68,15 +68,15 @@ func (t *table) at(k value) value {
 	return t.hash[k]
 }
 
-func (t *table) put(k, v value) {
+func (t *table) put(l *State, k, v value) {
 	switch k := k.(type) {
 	case nil:
-		panic("table index is nil") // TODO should be l.runtimeError(), but need state
+		l.runtimeError("table index is nil")
 	case float64:
 		if i := int(k); float64(i) == k {
 			t.putAtInt(i, v)
 		} else if math.IsNaN(k) {
-			panic("table index is NaN") // TODO should be l.runtimeError()
+			l.runtimeError("table index is NaN")
 		} else {
 			t.hash[k] = v
 		}

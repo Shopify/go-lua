@@ -122,18 +122,34 @@ func Stack(l *State, level int, activationRecord *Debug) (ok bool) {
 
 func Info(l *State, what string, activationRecord *Debug) bool {
 	var f closure
+	var fun value
 	var callInfo callInfo
 	if what[0] == '>' {
-		_, ok := l.stack[l.top-1].(closure)
-		apiCheck(ok, "function expected")
+		fun = l.stack[l.top-1]
+		switch fun := fun.(type) {
+		case *goClosure:
+			f = fun
+		case *luaClosure:
+			f = fun
+		case Function:
+		default:
+			apiCheck(false, "function expected")
+		}
 		what = what[1:] // skip the '>'
 		l.top--         // pop function
 	} else {
 		callInfo = activationRecord.callInfo
-		_, ok := l.stack[callInfo.function()].(closure)
-		l.assert(ok)
+		fun = l.stack[callInfo.function()]
+		switch fun := fun.(type) {
+		case *goClosure:
+			f = fun
+		case *luaClosure:
+			f = fun
+		case Function:
+		default:
+			l.assert(false)
+		}
 	}
-	// TODO cl = ttisclosure(f) ? clvalue(f) : NULL;
 	ok, hasL, hasF := true, false, false
 	for _, r := range what {
 		switch r {
@@ -161,7 +177,7 @@ func Info(l *State, what string, activationRecord *Debug) bool {
 			activationRecord.IsTailCall = callInfo != nil && callInfo.callStatus()&callStatusTail != 0
 		case 'n':
 			// calling function is a known Lua function?
-			if callInfo != nil && callInfo.callStatus()&callStatusTail == 0 && callInfo.previous().isLua() {
+			if callInfo != nil && !callInfo.isCallStatus(callStatusTail) && callInfo.previous().isLua() {
 				// TODO activationRecord.Name, activationRecord.NameKind = functionName(l, callInfo.previous())
 			} else {
 				activationRecord.NameKind = ""

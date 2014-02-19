@@ -468,7 +468,7 @@ func SetTop(l *State, index int) {
 // http://www.lua.org/manual/5.2/manual.html#lua_remove
 func Remove(l *State, index int) {
 	apiCheckStackIndex(index, l.indexToValue(index))
-	i := AbsIndex(l, index)
+	i := l.callInfo.function() + AbsIndex(l, index)
 	copy(l.stack[i:l.top-1], l.stack[i+1:l.top])
 	l.top--
 }
@@ -480,19 +480,12 @@ func Remove(l *State, index int) {
 // http://www.lua.org/manual/5.2/manual.html#lua_insert
 func Insert(l *State, index int) {
 	apiCheckStackIndex(index, l.indexToValue(index))
-	i := AbsIndex(l, index)
+	i := l.callInfo.function() + AbsIndex(l, index)
 	copy(l.stack[i+1:l.top+1], l.stack[i:l.top])
 	l.stack[i] = l.stack[l.top]
 }
 
-func (l *State) move(dest int, src value) {
-	// println("==== move", dest)
-	// printValue(src)
-	// printValue(l.indexToValue(dest))
-	// println()
-	apiCheck(l.indexToValue(dest) != nil, "invalid index")
-	l.setIndexToValue(dest, src)
-}
+func (l *State) move(dest int, src value) { l.setIndexToValue(dest, src) }
 
 // Replace moves the top element into the given valid `index` without shifting
 // any element (therefore replacing the value at the given index), and then
@@ -682,7 +675,7 @@ func ToInteger(l *State, index int) (int, bool) {
 // http://www.lua.org/manual/5.2/manual.html#lua_tounsignedx
 func ToUnsigned(l *State, index int) (uint, bool) {
 	if n, ok := l.toNumber(l.indexToValue(index)); ok {
-		const supUnsigned = float64(^uint(0)) + 1
+		const supUnsigned = float64(^uint32(0)) + 1
 		return uint(n - math.Floor(n/supUnsigned)*supUnsigned), true
 	}
 	return 0, false
@@ -1009,7 +1002,7 @@ func RawSet(l *State, index int) {
 	l.checkElementCount(2)
 	t, ok := l.indexToValue(index).(*table)
 	apiCheck(ok, "table expected")
-	t.put(l.stack[l.top-2], l.stack[l.top-1])
+	t.put(l, l.stack[l.top-2], l.stack[l.top-1])
 	t.invalidateTagMethodCache()
 	l.top -= 2
 }

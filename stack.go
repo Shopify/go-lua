@@ -416,6 +416,7 @@ func (l *State) protect(f func()) (err error) {
 	l.protectFunction = func() {
 		if e := recover(); e != nil {
 			err = e.(error)
+			l.nestedGoCallCount, l.protectFunction = nestedGoCallCount, protectFunction
 		}
 	}
 	defer l.protectFunction()
