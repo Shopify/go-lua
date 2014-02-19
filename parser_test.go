@@ -22,14 +22,14 @@ func TestParser(t *testing.T) {
 	// 	printStack(state.stack[state.callInfo.(*luaCallInfo).base():state.top])
 	// 	println(state.callInfo.(*luaCallInfo).code[state.callInfo.(*luaCallInfo).savedPC].String())
 	// }, MaskCount, 1)
-	bin := load(l, t, "fib.bin")
+	bin := load(l, t, "fixtures/fib.bin")
 	Pop(l, 1)
-	closure := load(l, t, "fib.lua")
+	closure := load(l, t, "fixtures/fib.lua")
 	p := closure.prototype
 	if p == nil {
 		t.Fatal("prototype was nil")
 	}
-	validate("@fib.lua", p.source, "as source file name", t)
+	validate("@fixtures/fib.lua", p.source, "as source file name", t)
 	if !p.isVarArg {
 		t.Error("expected main function to be var arg, but wasn't")
 	}

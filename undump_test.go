@@ -42,7 +42,7 @@ func TestCorruptTail(t *testing.T) {
 
 func TestUndump(t *testing.T) {
 	// TODO this is brittle & should be replaced when we have a working compiler
-	file, err := os.Open("checktable.bin")
+	file, err := os.Open("fixtures/checktable.bin")
 	if err != nil {
 		t.Fatal("couldn't open checktable.bin")
 	}

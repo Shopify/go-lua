@@ -5,7 +5,7 @@ import "testing"
 func TestVm(t *testing.T) {
 	l := NewState()
 	BaseOpen(l)
-	LoadFile(l, "fib.lua", "t")
+	LoadFile(l, "fixtures/fib.lua", "t")
 	Call(l, 0, 0)
 }
 
