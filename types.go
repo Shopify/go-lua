@@ -14,7 +14,26 @@ type float8 int
 func printValue(v value) {
 	switch v := v.(type) {
 	case *table:
-		print("table ", v)
+		print("table ", v, " {[")
+		printEntry := func(x value) {
+			if t, ok := x.(*table); ok {
+				print("table ", t)
+			} else {
+				printValue(x)
+			}
+		}
+		for _, x := range v.array {
+			printEntry(x)
+			print(", ")
+		}
+		print("], {")
+		for k, x := range v.hash {
+			printEntry(k)
+			print(": ")
+			printEntry(x)
+			print(", ")
+		}
+		print("}}")
 	case string:
 		print("'", v, "'")
 	case float64:

@@ -18,10 +18,6 @@ func load(l *State, t *testing.T, fileName string) *luaClosure {
 func TestParser(t *testing.T) {
 	l := NewState()
 	OpenLibraries(l)
-	// SetHooker(l, func(state *State, ar *Debug) {
-	// 	printStack(state.stack[state.callInfo.(*luaCallInfo).base():state.top])
-	// 	println(state.callInfo.(*luaCallInfo).code[state.callInfo.(*luaCallInfo).savedPC].String())
-	// }, MaskCount, 1)
 	bin := load(l, t, "fixtures/fib.bin")
 	Pop(l, 1)
 	closure := load(l, t, "fixtures/fib.lua")

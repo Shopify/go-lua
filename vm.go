@@ -525,10 +525,10 @@ func (l *State) execute() {
 			h := frame[a].(*table)
 			start := (c - 1) * listItemsPerFlush
 			last := start + n
-			if last > cap(h.array) {
+			if last > len(h.array) {
 				h.extendArray(last)
 			}
-			copy(h.array[start:last], frame[a:a+n])
+			copy(h.array[start:last], frame[a+1:a+1+n])
 			l.top = ci.top()
 		case opClosure:
 			a, p := i.a(), &closure.prototype.prototypes[i.bx()]

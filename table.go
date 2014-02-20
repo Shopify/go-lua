@@ -35,7 +35,6 @@ var tableLibrary = []RegistryFunction{
 			Errorf(l, "too many results to unpack")
 			panic("unreachable")
 		}
-		RawGetInt(l, 1, i)
 		for RawGetInt(l, 1, i); i < e; i++ {
 			RawGetInt(l, 1, i+1)
 		}

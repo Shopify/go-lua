@@ -35,20 +35,18 @@ func (l *State) fastTagMethod(table *table, event tm) value {
 	return table.tagMethod(event, l.global.tagMethodNames[event])
 }
 
-func (t *table) extendArray(last int) {
-	t.array = append(t.array, make([]interface{}, last-cap(t.array)))
-}
+func (t *table) extendArray(last int) { t.array = append(t.array, make([]value, last-len(t.array))...) }
 
 func (t *table) atInt(k int) value {
-	if 0 <= k && k < len(t.array) {
-		return t.array[k]
+	if 0 < k && k <= len(t.array) {
+		return t.array[k-1]
 	}
 	return t.hash[k]
 }
 
 func (t *table) putAtInt(k int, v value) {
-	if 0 <= k && k < len(t.array) {
-		t.array[k] = v
+	if 0 < k && k <= len(t.array) {
+		t.array[k-1] = v
 	} else {
 		t.hash[k] = v
 	}
@@ -140,7 +138,6 @@ func (l *State) next(t *table, key int) bool {
 	i, k := 0, l.stack[key]
 	if k == nil { // first iteration
 	} else if i = arrayIndex(k); 0 < i && i <= len(t.array) {
-		i-- // Lua index -> Go index
 	} else if _, ok := t.hash[k]; !ok {
 		l.runtimeError("invalid key to 'next'") // key not found
 	} else {

@@ -275,7 +275,7 @@ if not _port then
   end
 
   aux(0, 1, {})
-  -- aux(-10, 0, {-10,0})
+  aux(-10, 0, {-10,0})
 end
 
 for i=1,10 do
