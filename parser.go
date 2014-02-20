@@ -342,30 +342,9 @@ func (p *parser) assignment(t *assignmentTarget, variableCount int) {
 func (p *parser) forBody(base, line, n int, isNumeric bool) {
 	p.function.AdjustLocalVariables(3)
 	p.checkNext(tkDo)
-	// TODO following down to p.block() belongs in a *function method
-	var prep int
-	if isNumeric {
-		prep = p.function.EncodeAsBx(opForPrep, base, noJump)
-	} else {
-		prep = p.function.Jump()
-	}
-	p.function.EnterBlock(false)
-	p.function.AdjustLocalVariables(n)
-	p.function.ReserveRegisters(n)
+	prep := p.function.OpenForBody(base, n, isNumeric)
 	p.block()
-	// TODO following belongs in a *function method
-	p.function.LeaveBlock()
-	p.function.PatchToHere(prep)
-	var end int
-	if isNumeric {
-		end = p.function.EncodeAsBx(opForLoop, base, noJump)
-	} else {
-		p.function.EncodeABC(opTForCall, base, 0, n)
-		p.function.FixLine(line)
-		end = p.function.EncodeAsBx(opTForLoop, base+2, noJump)
-	}
-	p.function.PatchList(end, prep+1)
-	p.function.FixLine(line)
+	p.function.CloseForBody(prep, base, line, n, isNumeric)
 }
 
 func (p *parser) forNumeric(name string, line int) {
@@ -586,7 +565,7 @@ func (p *parser) functionStatement(line int) {
 func (p *parser) localFunction() {
 	p.function.MakeLocalVariable(p.checkName())
 	p.function.AdjustLocalVariables(1)
-	p.function.localVariable(p.body(false, p.lineNumber).info).startPC = pc(len(p.function.f.code))
+	p.function.LocalVariable(p.body(false, p.lineNumber).info).startPC = pc(len(p.function.f.code))
 }
 
 func (p *parser) localStatement() {
@@ -667,15 +646,11 @@ func (p *parser) statement() {
 }
 
 func (p *parser) mainFunction() {
-	p.function.EnterBlock(false)
-	p.function.makeUpValue("_ENV", makeExpression(kindLocal, 0))
+	p.function.OpenMainFunction()
 	p.next()
 	p.statementList()
 	p.check(tkEOS)
-	p.function.ReturnNone()
-	p.function.LeaveBlock()
-	p.assert(p.function.block == nil)
-	p.function = p.function.previous
+	p.function = p.function.CloseMainFunction()
 }
 
 func (l *State) parse(r io.ByteReader, name string) *luaClosure {

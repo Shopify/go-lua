@@ -118,7 +118,7 @@ func (f *function) OpenFunction(line int) {
 }
 
 func (f *function) CloseFunction() exprDesc {
-	e := f.previous.ExpressionToNextRegister(makeExpression(kindRelocatable, f.previous.EncodeABx(opClosure, 0, len(f.previous.f.prototypes)-1)))
+	e := f.previous.ExpressionToNextRegister(makeExpression(kindRelocatable, f.previous.encodeABx(opClosure, 0, len(f.previous.f.prototypes)-1)))
 	f.ReturnNone()
 	f.LeaveBlock()
 	f.assert(f.block == nil)
@@ -140,20 +140,20 @@ func (f *function) undefinedGotoError(g label) {
 	}
 }
 
-func (f *function) localVariable(i int) *localVariable {
+func (f *function) LocalVariable(i int) *localVariable {
 	index := f.p.activeVariables[f.firstLocal+i]
 	return &f.f.localVariables[index]
 }
 
 func (f *function) AdjustLocalVariables(n int) {
 	for f.activeVariableCount += n; n != 0; n-- {
-		f.localVariable(f.activeVariableCount - n).startPC = pc(len(f.f.code))
+		f.LocalVariable(f.activeVariableCount - n).startPC = pc(len(f.f.code))
 	}
 }
 
 func (f *function) removeLocalVariables(level int) {
 	for i := level; i < f.activeVariableCount; i++ {
-		f.localVariable(i).endPC = pc(len(f.f.code))
+		f.LocalVariable(i).endPC = pc(len(f.f.code))
 	}
 	f.p.activeVariables = f.p.activeVariables[:len(f.p.activeVariables)-(f.activeVariableCount-level)]
 	f.activeVariableCount = level
@@ -179,7 +179,7 @@ func (f *function) MakeLabel(name string, line int) int {
 func (f *function) closeGoto(i int, l label) {
 	g := f.p.pendingGotos[i]
 	if f.assert(g.name == l.name); g.activeVariableCount < l.activeVariableCount {
-		f.semanticError(fmt.Sprintf("<goto %s> at line %d jumps into the scope of local '%s'", g.name, g.line, f.localVariable(g.activeVariableCount).name))
+		f.semanticError(fmt.Sprintf("<goto %s> at line %d jumps into the scope of local '%s'", g.name, g.line, f.LocalVariable(g.activeVariableCount).name))
 	}
 	f.PatchList(g.pc, l.pc)
 	copy(f.p.pendingGotos[i:], f.p.pendingGotos[i+1:])
@@ -303,7 +303,7 @@ func (f *function) assertEqual(a, b interface{}) {
 	}
 }
 
-func (f *function) Encode(i instruction) int {
+func (f *function) encode(i instruction) int {
 	f.assert(len(f.f.code) == len(f.f.lineInfo))
 	f.dischargeJumpPC()
 	f.f.code = append(f.f.code, i)
@@ -322,37 +322,37 @@ func (f *function) EncodeABC(op opCode, a, b, c int) int {
 	f.assert(bMode(op) != opArgN || b == 0)
 	f.assert(cMode(op) != opArgN || c == 0)
 	f.assert(a <= maxArgA && b <= maxArgB && c <= maxArgC)
-	return f.Encode(createABC(op, a, b, c))
+	return f.encode(createABC(op, a, b, c))
 }
 
-func (f *function) EncodeABx(op opCode, a, bx int) int {
+func (f *function) encodeABx(op opCode, a, bx int) int {
 	f.assert(opMode(op) == iABx || opMode(op) == iAsBx)
 	f.assert(cMode(op) == opArgN)
 	f.assert(a <= maxArgA && bx <= maxArgBx)
-	return f.Encode(createABx(op, a, bx))
+	return f.encode(createABx(op, a, bx))
 }
 
-func (f *function) EncodeAsBx(op opCode, a, sbx int) int { return f.EncodeABx(op, a, sbx+maxArgSBx) }
+func (f *function) encodeAsBx(op opCode, a, sbx int) int { return f.encodeABx(op, a, sbx+maxArgSBx) }
 
 func (f *function) encodeExtraArg(a int) int {
 	f.assert(a <= maxArgAx)
-	return f.Encode(createAx(opExtraArg, a))
+	return f.encode(createAx(opExtraArg, a))
 }
 
 func (f *function) EncodeConstant(r, constant int) int {
 	if constant <= maxArgBx {
-		return f.EncodeABx(opLoadConstant, r, constant)
+		return f.encodeABx(opLoadConstant, r, constant)
 	}
-	pc := f.EncodeABx(opLoadConstant, r, 0)
+	pc := f.encodeABx(opLoadConstant, r, 0)
 	f.encodeExtraArg(constant)
 	return pc
 }
 
 func (f *function) EncodeString(s string) exprDesc {
-	return makeExpression(kindConstant, f.StringConstant(s))
+	return makeExpression(kindConstant, f.stringConstant(s))
 }
 
-func (f *function) LoadNil(from, n int) {
+func (f *function) loadNil(from, n int) {
 	if len(f.f.code) > f.lastTarget { // no jumps to current position
 		if previous := &f.f.code[len(f.f.code)-1]; previous.opCode() == opLoadNil {
 			if pf, pl, l := previous.a(), previous.a()+previous.b(), from+n-1; pf <= from && from <= pl+1 || from <= pf && pf <= l+1 { // can connect both
@@ -370,12 +370,12 @@ func (f *function) Jump() int {
 	f.assert(f.isJumpListWalkable(f.jumpPC))
 	jumpPC := f.jumpPC
 	f.jumpPC = noJump
-	return f.Concatenate(f.EncodeAsBx(opJump, 0, noJump), jumpPC)
+	return f.Concatenate(f.encodeAsBx(opJump, 0, noJump), jumpPC)
 }
 
 func (f *function) JumpTo(target int)             { f.PatchList(f.Jump(), target) }
 func (f *function) ReturnNone()                   { f.EncodeABC(opReturn, 0, 1, 0) }
-func (f *function) SetMultipleReturns(e exprDesc) { f.SetReturns(e, MultipleReturns) }
+func (f *function) SetMultipleReturns(e exprDesc) { f.setReturns(e, MultipleReturns) }
 
 func (f *function) Return(e exprDesc, resultCount int) {
 	if e.hasMultipleReturns() {
@@ -570,11 +570,11 @@ func (f *function) freeExpression(e exprDesc) {
 	}
 }
 
-func (f *function) StringConstant(s string) int { return f.addConstant(s, s) }
+func (f *function) stringConstant(s string) int { return f.addConstant(s, s) }
 func (f *function) booleanConstant(b bool) int  { return f.addConstant(b, b) }
 func (f *function) nilConstant() int            { return f.addConstant(f, nil) }
 
-func (f *function) SetReturns(e exprDesc, resultCount int) {
+func (f *function) setReturns(e exprDesc, resultCount int) {
 	if e.kind == kindCall {
 		f.Instruction(e).setC(resultCount + 1)
 	} else if e.kind == kindVarArg {
@@ -616,7 +616,7 @@ func (f *function) DischargeVariables(e exprDesc) exprDesc {
 func (f *function) dischargeToRegister(e exprDesc, r int) exprDesc {
 	switch e = f.DischargeVariables(e); e.kind {
 	case kindNil:
-		f.LoadNil(r, 1)
+		f.loadNil(r, 1)
 	case kindFalse:
 		f.EncodeABC(opLoadBool, r, 0, 0)
 	case kindTrue:
@@ -707,7 +707,7 @@ func (f *function) ExpressionToValue(e exprDesc) exprDesc {
 	return f.DischargeVariables(e)
 }
 
-func (f *function) ExpressionToRegisterOrConstant(e exprDesc) (exprDesc, int) {
+func (f *function) expressionToRegisterOrConstant(e exprDesc) (exprDesc, int) {
 	switch e = f.ExpressionToValue(e); e.kind {
 	case kindTrue, kindFalse:
 		if len(f.f.constants) <= maxIndexRK {
@@ -742,7 +742,7 @@ func (f *function) StoreVariable(v, e exprDesc) {
 		f.EncodeABC(opSetUpValue, e.info, v.info, 0)
 	case kindIndexed:
 		var r int
-		e, r = f.ExpressionToRegisterOrConstant(e)
+		e, r = f.expressionToRegisterOrConstant(e)
 		if v.tableType == kindLocal {
 			f.EncodeABC(opSetTable, v.table, v.index, r)
 		} else {
@@ -760,7 +760,7 @@ func (f *function) Self(e, key exprDesc) exprDesc {
 	f.freeExpression(e)
 	result := exprDesc{info: f.freeRegisterCount, kind: kindNonRelocatable} // base register for opSelf
 	f.ReserveRegisters(2)                                                   // function and 'self' produced by opSelf
-	key, k := f.ExpressionToRegisterOrConstant(key)
+	key, k := f.expressionToRegisterOrConstant(key)
 	f.EncodeABC(opSelf, result.info, r, k)
 	f.freeExpression(key)
 	return result
@@ -840,7 +840,7 @@ func (f *function) Indexed(t, k exprDesc) (r exprDesc) {
 	f.assert(!t.hasJumps())
 	r = makeExpression(kindIndexed, 0)
 	r.table = t.info
-	k, r.index = f.ExpressionToRegisterOrConstant(k)
+	k, r.index = f.expressionToRegisterOrConstant(k)
 	if t.kind == kindUpValue {
 		r.tableType = kindUpValue
 	} else {
@@ -866,9 +866,9 @@ func (f *function) encodeArithmetic(op opCode, e1, e2 exprDesc, line int) exprDe
 	}
 	o2 := 0
 	if op != opUnaryMinus && op != opLength {
-		e2, o2 = f.ExpressionToRegisterOrConstant(e2)
+		e2, o2 = f.expressionToRegisterOrConstant(e2)
 	}
-	e1, o1 := f.ExpressionToRegisterOrConstant(e1)
+	e1, o1 := f.expressionToRegisterOrConstant(e1)
 	if o1 > o2 {
 		f.freeExpression(e1)
 		f.freeExpression(e2)
@@ -908,17 +908,17 @@ func (f *function) Infix(op int, e exprDesc) exprDesc {
 		e = f.ExpressionToNextRegister(e)
 	case oprAdd, oprSub, oprMul, oprDiv, oprMod, oprPow:
 		if !e.isNumeral() {
-			e, _ = f.ExpressionToRegisterOrConstant(e)
+			e, _ = f.expressionToRegisterOrConstant(e)
 		}
 	default:
-		e, _ = f.ExpressionToRegisterOrConstant(e)
+		e, _ = f.expressionToRegisterOrConstant(e)
 	}
 	return e
 }
 
 func (f *function) encodeComparison(op opCode, cond int, e1, e2 exprDesc) exprDesc {
-	e1, o1 := f.ExpressionToRegisterOrConstant(e1)
-	e2, o2 := f.ExpressionToRegisterOrConstant(e2)
+	e1, o1 := f.expressionToRegisterOrConstant(e1)
+	e2, o2 := f.expressionToRegisterOrConstant(e2)
 	f.freeExpression(e2)
 	f.freeExpression(e1)
 	if cond == 0 && op != opEqual {
@@ -959,7 +959,7 @@ func (f *function) Postfix(op int, e1, e2 exprDesc, line int) exprDesc {
 
 func (f *function) FixLine(line int) { f.f.lineInfo[len(f.f.code)-1] = int32(line) }
 
-func (f *function) SetList(base, elementCount, storeCount int) {
+func (f *function) setList(base, elementCount, storeCount int) {
 	if f.assert(storeCount != 0); storeCount == MultipleReturns {
 		storeCount = 0
 	}
@@ -1003,7 +1003,7 @@ func (f *function) AdjustAssignment(variableCount, expressionCount int, e exprDe
 		if extra++; extra < 0 {
 			extra = 0
 		}
-		if f.SetReturns(e, extra); extra > 1 {
+		if f.setReturns(e, extra); extra > 1 {
 			f.ReserveRegisters(extra - 1)
 		}
 	} else {
@@ -1013,7 +1013,7 @@ func (f *function) AdjustAssignment(variableCount, expressionCount int, e exprDe
 		if extra > 0 {
 			r := f.freeRegisterCount
 			f.ReserveRegisters(extra)
-			f.LoadNil(r, extra)
+			f.loadNil(r, extra)
 		}
 	}
 }
@@ -1033,7 +1033,7 @@ func singleVariableHelper(f *function, name string, base bool) (e exprDesc, foun
 	}
 	find := func() (int, bool) {
 		for i := f.activeVariableCount - 1; i >= 0; i-- {
-			if name == f.localVariable(i).name {
+			if name == f.LocalVariable(i).name {
 				return i, true
 			}
 		}
@@ -1083,8 +1083,8 @@ func (f *function) OpenConstructor() (pc int, t exprDesc) {
 }
 
 func (f *function) FlushFieldToConstructor(tableRegister, freeRegisterCount int, k exprDesc, v func() exprDesc) {
-	_, rk := f.ExpressionToRegisterOrConstant(k)
-	_, rv := f.ExpressionToRegisterOrConstant(v())
+	_, rk := f.expressionToRegisterOrConstant(k)
+	_, rv := f.expressionToRegisterOrConstant(v())
 	f.EncodeABC(opSetTable, tableRegister, rk, rv)
 	f.freeRegisterCount = freeRegisterCount
 }
@@ -1092,7 +1092,7 @@ func (f *function) FlushFieldToConstructor(tableRegister, freeRegisterCount int,
 func (f *function) FlushToConstructor(tableRegister, pending, arrayCount int, e exprDesc) int {
 	f.ExpressionToNextRegister(e)
 	if pending == listItemsPerFlush {
-		f.SetList(tableRegister, arrayCount, listItemsPerFlush)
+		f.setList(tableRegister, arrayCount, listItemsPerFlush)
 		pending = 0
 	}
 	return pending
@@ -1102,15 +1102,54 @@ func (f *function) CloseConstructor(pc, tableRegister, pending, arrayCount, hash
 	if pending != 0 {
 		if e.hasMultipleReturns() {
 			f.SetMultipleReturns(e)
-			f.SetList(tableRegister, arrayCount, MultipleReturns)
+			f.setList(tableRegister, arrayCount, MultipleReturns)
 			arrayCount--
 		} else {
 			if e.kind != kindVoid {
 				f.ExpressionToNextRegister(e)
 			}
-			f.SetList(tableRegister, arrayCount, pending)
+			f.setList(tableRegister, arrayCount, pending)
 		}
 	}
 	f.f.code[pc].setB(int(float8FromInt(arrayCount)))
 	f.f.code[pc].setC(int(float8FromInt(hashCount)))
+}
+
+func (f *function) OpenForBody(base, n int, isNumeric bool) (prep int) {
+	if isNumeric {
+		prep = f.encodeAsBx(opForPrep, base, noJump)
+	} else {
+		prep = f.Jump()
+	}
+	f.EnterBlock(false)
+	f.AdjustLocalVariables(n)
+	f.ReserveRegisters(n)
+	return
+}
+
+func (f *function) CloseForBody(prep, base, line, n int, isNumeric bool) {
+	f.LeaveBlock()
+	f.PatchToHere(prep)
+	var end int
+	if isNumeric {
+		end = f.encodeAsBx(opForLoop, base, noJump)
+	} else {
+		f.EncodeABC(opTForCall, base, 0, n)
+		f.FixLine(line)
+		end = f.encodeAsBx(opTForLoop, base+2, noJump)
+	}
+	f.PatchList(end, prep+1)
+	f.FixLine(line)
+}
+
+func (f *function) OpenMainFunction() {
+	f.EnterBlock(false)
+	f.makeUpValue("_ENV", makeExpression(kindLocal, 0))
+}
+
+func (f *function) CloseMainFunction() *function {
+	f.ReturnNone()
+	f.LeaveBlock()
+	f.assert(f.block == nil)
+	return f.previous
 }
