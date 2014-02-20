@@ -11,60 +11,54 @@ import (
 type value interface{}
 type float8 int
 
-func printValue(v value) {
+func debugValue(v value) string {
 	switch v := v.(type) {
 	case *table:
-		print("table ", v, " {[")
-		printEntry := func(x value) {
+		entry := func(x value) string {
 			if t, ok := x.(*table); ok {
-				print("table ", t)
+				return fmt.Sprintf("table %#v", t)
 			} else {
-				printValue(x)
+				return debugValue(x)
 			}
 		}
+		s := fmt.Sprintf("table %#v {[", v)
 		for _, x := range v.array {
-			printEntry(x)
-			print(", ")
+			s += entry(x) + ", "
 		}
-		print("], {")
+		s += "], {"
 		for k, x := range v.hash {
-			printEntry(k)
-			print(": ")
-			printEntry(x)
-			print(", ")
+			s += entry(k) + ": " + entry(x) + ", "
 		}
-		print("}}")
+		return s + "}}"
 	case string:
-		print("'", v, "'")
+		return "'" + v + "'"
 	case float64:
-		print(v)
+		return fmt.Sprintf("%f", v)
 	case *luaClosure:
-		print(fmt.Sprintf("closure %s:%d %v", v.prototype.source, v.prototype.lineDefined, v))
+		return fmt.Sprintf("closure %s:%d %v", v.prototype.source, v.prototype.lineDefined, v)
 	case *goClosure:
-		print("go closure ", v)
+		return fmt.Sprintf("go closure %#v", v)
 	case Function:
 		pc := reflect.ValueOf(v).Pointer()
 		f := runtime.FuncForPC(pc)
 		file, line := f.FileLine(pc)
-		print(fmt.Sprintf("go function %s %s:%d", f.Name(), file, line))
+		return fmt.Sprintf("go function %s %s:%d", f.Name(), file, line)
 	case *userData:
-		print("userdata ", v)
+		return fmt.Sprintf("userdata %#v", v)
 	case nil:
-		print("nil")
+		return "nil"
 	case bool:
-		print(v)
-	default:
-		print("unknown ", v, reflect.TypeOf(v).Name())
+		return fmt.Sprintf("%#v", v)
 	}
+	return fmt.Sprintf("unknown %#v %s", v, reflect.TypeOf(v).Name())
 }
 
-func printStack(s []value) {
-	println("stack (len: ", len(s), ", cap: ", cap(s), "):")
+func stack(s []value) string {
+	r := fmt.Sprintf("stack (len: %d, cap: %d):\n", len(s), cap(s))
 	for i, v := range s {
-		print("  ", i, ": ")
-		printValue(v)
-		println()
+		r = fmt.Sprintf("%s %d: %s\n", r, i, debugValue(v))
 	}
+	return r
 }
 
 func isFalse(s value) bool {
