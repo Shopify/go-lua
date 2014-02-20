@@ -3,13 +3,13 @@
 A Lua VM in pure Go
 ===================
 
-go-lua is (intended to be) a Lua 5.2 VM implemented in pure Go. It is compatible with binary files dumped by ```luac```, from the [Lua reference implementation](http://www.lua.org/).
+go-lua is a port of the Lua 5.2 VM to pure Go. It is compatible with binary files dumped by ```luac```, from the [Lua reference implementation](http://www.lua.org/).
 
 The motivation is to enable simple scripting of Go applications. Two immediate targets are stored procedures in [etcd](https://github.com/coreos/etcd) and flows in [Gonan](https://github.com/csfrancis/gonan).
 
 Status
 ------
 
-It is able to “undump” Lua binaries, such as ```checktable.bin``` compiled from the [Lua test suite](http://www.lua.org/tests/5.2/).
+The core VM and compiler has been ported and tested. The compiler is able to correctly process all Lua source files from the [Lua test suite](http://www.lua.org/tests/5.2/). The VM has been tested to correctly execute `bitwise.lua`, `math.lua` and most of `goto.lua`.
 
-It can execute basic recursive functions, like ```fib```, tail-recursive functions & loops.
+The following Lua libraries are implemented: `base`, `bit32`, `math`, along with parts of `string` and `table`.
