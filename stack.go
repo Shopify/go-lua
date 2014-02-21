@@ -267,7 +267,7 @@ func (l *State) callGo(f value, function int, resultCount int) {
 	case Function:
 		n = f(l)
 	}
-	ApiCheckStackSpace(l, n)
+	apiCheckStackSpace(l, n)
 	l.postCall(l.top - n)
 }
 

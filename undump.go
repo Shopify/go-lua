@@ -261,9 +261,6 @@ func init() {
 	}
 }
 
-// The int and uint numeric types are IntBits wide.
-const IntBits = (1 + ^uint(0)>>32&1) * 32
-
 func endianness() binary.ByteOrder {
 	if x := 1; *(*byte)(unsafe.Pointer(&x)) == 1 {
 		return binary.LittleEndian

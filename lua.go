@@ -1243,9 +1243,7 @@ func Version(l *State) *float64 { return l.global.version }
 func UpValueIndex(i int) int   { return RegistryIndex - i }
 func isPseudoIndex(i int) bool { return i <= RegistryIndex }
 
-// ApiCheckStackSpace verifies that the stack has at least `n` free stack
-// slots in the stack, and panic() otherwise.
-func ApiCheckStackSpace(l *State, n int) { l.assert(n < l.top-l.callInfo.function()) }
+func apiCheckStackSpace(l *State, n int) { l.assert(n < l.top-l.callInfo.function()) }
 
 // TypeName returns the name of Type `t`.
 //
