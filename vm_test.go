@@ -5,13 +5,6 @@ import (
 	"testing"
 )
 
-func TestVm(t *testing.T) {
-	l := NewState()
-	BaseOpen(l)
-	LoadFile(l, "fixtures/fib.lua", "t")
-	Call(l, 0, 0)
-}
-
 func TestConcat(t *testing.T) {
 	l := NewState()
 	BaseOpen(l)
@@ -31,18 +24,31 @@ func TestProtectedCall(t *testing.T) {
 	Call(l, 0, 0)
 }
 
-func TestBit32(t *testing.T) {
-	l := NewState()
-	OpenLibraries(l)
-	LoadFile(l, "fixtures/bitwise.lua", "text")
-	Call(l, 0, 0)
-}
-
-func TestMath(t *testing.T) {
-	l := NewState()
-	OpenLibraries(l)
-	LoadFile(l, "fixtures/math.lua", "text")
-	Call(l, 0, 0)
+func TestLua(t *testing.T) {
+	tests := []string{
+		"fib",
+		"bitwise",
+		"math",
+		"goto",
+		"closure",
+		// "attrib",
+	}
+	for _, v := range tests {
+		t.Log(v)
+		l := NewState()
+		OpenLibraries(l)
+		PushBoolean(l, true)
+		SetGlobal(l, "_port")
+		// SetHooker(l, func(state *State, ar *Debug) {
+		// 	ci := state.callInfo.(*luaCallInfo)
+		// 	println(stack(state.stack[ci.base():state.top]))
+		// 	println(ci.code[ci.savedPC].String())
+		// }, MaskCount, 1)
+		LoadFile(l, "fixtures/"+v+".lua", "text")
+		if err := ProtectedCall(l, 0, 0, 0); err != nil {
+			t.Errorf("'%s' failed: %s", v, err.Error())
+		}
+	}
 }
 
 func TestTableUnpack(t *testing.T) {
@@ -59,13 +65,6 @@ func TestBase(t *testing.T) {
 	l := NewState()
 	BaseOpen(l)
 	LoadString(l, s)
-	Call(l, 0, 0)
-}
-
-func TestGoto(t *testing.T) {
-	l := NewState()
-	OpenLibraries(l)
-	LoadFile(l, "fixtures/goto.lua", "text")
 	Call(l, 0, 0)
 }
 

@@ -1197,6 +1197,31 @@ func SetUpValue(l *State, function, index int) (name string, ok bool) {
 	return
 }
 
+func (l *State) upValue(f, n int) **upValue {
+	fun, ok := l.indexToValue(f).(*luaClosure)
+	apiCheck(ok, "Lua function expected")
+	apiCheck(1 <= n && n <= len(fun.prototype.upValues), "invalid upvalue index")
+	return &fun.upValues[n-1]
+}
+
+func UpValueId(l *State, f, n int) interface{} {
+	switch fun := l.indexToValue(f).(type) {
+	case *luaClosure:
+		return *l.upValue(f, n)
+	case *goClosure:
+		apiCheck(1 <= n && n <= fun.upValueCount(), "invalid upvalue index")
+		return &fun.upValues[n-1]
+	}
+	apiCheck(false, "closure expected")
+	panic("unreachable")
+}
+
+func UpValueJoin(l *State, f1, n1, f2, n2 int) {
+	u1 := l.upValue(f1, n1)
+	u2 := l.upValue(f2, n2)
+	*u1 = *u2
+}
+
 // Call calls a function. To do so, use the following protocol: first, the
 // function to be called is pushed onto the stack; then, the arguments to the
 // function are pushed in direct order; that is, the first argument is pushed

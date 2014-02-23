@@ -42,7 +42,7 @@ func TestParserExhaustively(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	blackList := map[string]bool{"math.lua": true, "goto.lua": true}
+	blackList := map[string]bool{"math.lua": true}
 	for _, source := range matches {
 		if _, ok := blackList[filepath.Base(source)]; ok {
 			continue
@@ -95,7 +95,7 @@ func comparePrototypes(t *testing.T, a, b *prototype) {
 	expectEqual(t, a.lastLineDefined, b.lastLineDefined, "last line defined")
 	expectEqual(t, a.parameterCount, b.parameterCount, "parameter count")
 	expectEqual(t, a.maxStackSize, b.maxStackSize, "max stack size")
-	// expectEqual(t, a.source, b.source, "source")
+	expectEqual(t, a.source, b.source, "source")
 	expectEqual(t, len(a.code), len(b.code), "code length")
 	if !expectDeepEqual(t, a.code, b.code, "code") {
 		for i := range a.code {

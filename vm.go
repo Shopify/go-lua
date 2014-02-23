@@ -180,7 +180,7 @@ func (l *State) concat(total int) {
 		}
 		if !ok {
 			concatTagMethod()
-		} else if s1, ok := t(1).(string); !ok {
+		} else if s1, ok := toString(t(1)); !ok {
 			concatTagMethod()
 		} else if len(s1) == 0 {
 			v, _ := toString(t(2))

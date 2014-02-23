@@ -59,7 +59,7 @@ func TestUndump(t *testing.T) {
 	if p == nil {
 		t.Fatal("prototype was nil")
 	}
-	validate("@checktable.lua", p.source, "as source file name", t)
+	validate("@fixtures/checktable.lua", p.source, "as source file name", t)
 	validate(23, len(p.code), "instructions", t)
 	validate(8, len(p.constants), "constants", t)
 	validate(4, len(p.prototypes), "prototypes", t)

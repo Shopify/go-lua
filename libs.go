@@ -8,6 +8,7 @@ func OpenLibraries(l *State, preloaded ...RegistryFunction) {
 		{"string", StringOpen},
 		{"bit32", Bit32Open},
 		{"math", MathOpen},
+		{"debug", DebugOpen},
 	}
 	for _, lib := range libs {
 		Require(l, lib.Name, lib.Function, true)

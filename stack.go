@@ -70,9 +70,9 @@ func (uv *upValue) isInStackAt(level int) bool {
 	return false
 }
 
-func (uv *upValue) isInStackBelow(level int) bool {
+func (uv *upValue) isInStackAbove(level int) bool {
 	if home, ok := uv.home.(stackLocation); ok {
-		return home.index < level
+		return home.index >= level
 	}
 	return false
 }
@@ -89,14 +89,18 @@ func (l *State) newUpValueAt(level int) *upValue {
 }
 
 func (l *State) close(level int) {
-	for e := l.upValues; e != nil; e = e.next {
-		if e.upValue.isInStackBelow(level) {
-			l.upValues = e
-			return
+	// TODO this seems really inefficient - how can we terminate early?
+	var p *openUpValue
+	for e := l.upValues; e != nil; e, p = e.next, e {
+		if e.upValue.isInStackAbove(level) {
+			e.upValue.close()
+			if p != nil {
+				p.next = e.next
+			} else {
+				l.upValues = e.next
+			}
 		}
-		e.upValue.close()
 	}
-	l.upValues = nil
 }
 
 // information about a call
@@ -303,7 +307,6 @@ func (l *State) preCall(function int, resultCount int) bool {
 			}
 			return false
 		default:
-
 			tm := l.tagMethodByObject(f, tmCall)
 			switch tm.(type) {
 			case *luaClosure:
