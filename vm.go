@@ -59,9 +59,8 @@ func (l *State) setTableAt(t value, key value, val value) {
 			l.typeError(t, "index")
 		}
 		switch tm.(type) {
-		case *luaClosure:
-		case *goClosure:
-		case Function:
+		case closure:
+		case *goFunction:
 		default:
 			t = tm
 			continue
@@ -452,8 +451,8 @@ func (l *State) execute() {
 				// move new frame into old one
 				copy(l.stack[ofn:ofn+lim+1], l.stack[nfn:nfn+lim+1])
 				base := ofn + (nci.base() - nfn) // correct base
-				oci.frame = l.stack[base:ci.top()]
-				oci.top_ = ofn + (l.top - nfn) // correct top
+				oci.setTop(ofn + (l.top - nfn))  // correct top
+				oci.frame = l.stack[base:oci.top()]
 				oci.savedPC = nci.savedPC
 				oci.setCallStatus(callStatusTail) // function was tail called
 				l.top, l.callInfo, ci = oci.top(), oci, oci
@@ -517,7 +516,7 @@ func (l *State) execute() {
 		case opSetList:
 			a, n, c := i.a(), i.b(), i.c()
 			if n == 0 {
-				n = l.top - a - 1
+				n = l.top - ci.stackIndex(a) - 1
 			}
 			if c == 0 {
 				c = expectNext(opExtraArg).ax()

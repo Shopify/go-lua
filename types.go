@@ -38,8 +38,8 @@ func debugValue(v value) string {
 		return fmt.Sprintf("closure %s:%d %v", v.prototype.source, v.prototype.lineDefined, v)
 	case *goClosure:
 		return fmt.Sprintf("go closure %#v", v)
-	case Function:
-		pc := reflect.ValueOf(v).Pointer()
+	case *goFunction:
+		pc := reflect.ValueOf(v.Function).Pointer()
 		f := runtime.FuncForPC(pc)
 		file, line := f.FileLine(pc)
 		return fmt.Sprintf("go function %s %s:%d", f.Name(), file, line)

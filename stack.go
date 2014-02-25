@@ -32,6 +32,11 @@ type goClosure struct {
 	upValues []value
 }
 
+// Function wrapper, to allow go functions as keys in maps. Explicitly not a closure.
+type goFunction struct {
+	Function
+}
+
 func (c *luaClosure) upValue(i int) value       { return c.upValues[i].value() }
 func (c *luaClosure) setUpValue(i int, v value) { c.upValues[i].setValue(v) }
 func (c *luaClosure) upValueCount() int         { return len(c.upValues) }
@@ -268,8 +273,8 @@ func (l *State) callGo(f value, function int, resultCount int) {
 	switch f := f.(type) {
 	case *goClosure:
 		n = f.function(l)
-	case Function:
-		n = f(l)
+	case *goFunction:
+		n = f.Function(l)
 	}
 	apiCheckStackSpace(l, n)
 	l.postCall(l.top - n)
@@ -281,7 +286,7 @@ func (l *State) preCall(function int, resultCount int) bool {
 		case *goClosure:
 			l.callGo(f, function, resultCount)
 			return true
-		case Function:
+		case *goFunction:
 			l.callGo(f, function, resultCount)
 			return true
 		case *luaClosure:
@@ -309,9 +314,8 @@ func (l *State) preCall(function int, resultCount int) bool {
 		default:
 			tm := l.tagMethodByObject(f, tmCall)
 			switch tm.(type) {
-			case *luaClosure:
-			case *goClosure:
-			case Function:
+			case closure:
+			case *goFunction:
 			default:
 				l.typeError(f, "call")
 			}

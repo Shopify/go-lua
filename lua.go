@@ -177,7 +177,9 @@ func (g *globalState) metaTable(o value) *table {
 		t = TypeString
 	case *table:
 		t = TypeTable
-	case Function:
+	case *goFunction:
+		t = TypeFunction
+	case closure:
 		t = TypeFunction
 	case *userData:
 		t = TypeUserData
@@ -389,7 +391,7 @@ func (l *State) indexToValue(index int) value {
 	default: // upvalues
 		i := RegistryIndex - index
 		apiCheck(i <= maxUpValue+1, "upvalue index too large")
-		if _, ok := l.stack[callInfo.function()].(Function); ok {
+		if _, ok := l.stack[callInfo.function()].(*goFunction); ok {
 			return nil // light Go functions have no upvalues
 		}
 		if closure := l.stack[callInfo.function()].(*goClosure); i <= len(closure.upValues) {
@@ -417,7 +419,7 @@ func (l *State) setIndexToValue(index int, v value) {
 	default: // upvalues
 		i := RegistryIndex - index
 		apiCheck(i <= maxUpValue+1, "upvalue index too large")
-		if _, ok := l.stack[callInfo.function()].(Function); ok {
+		if _, ok := l.stack[callInfo.function()].(*goFunction); ok {
 			panic("light Go functions have no upvalues")
 		}
 		if closure := l.stack[callInfo.function()].(*goClosure); i <= len(closure.upValues) {
@@ -533,7 +535,7 @@ func (l *State) valueToType(v value) Type {
 		return TypeString
 	case *table:
 		return TypeTable
-	case Function:
+	case *goFunction:
 		return TypeFunction
 	case *userData:
 		return TypeUserData
@@ -559,7 +561,7 @@ func TypeOf(l *State, index int) Type {
 //
 // http://www.lua.org/manual/5.2/manual.html#lua_iscfunction
 func IsGoFunction(l *State, index int) bool {
-	if _, ok := l.indexToValue(index).(Function); ok {
+	if _, ok := l.indexToValue(index).(*goFunction); ok {
 		return true
 	}
 	_, ok := l.indexToValue(index).(*goClosure)
@@ -718,8 +720,8 @@ func RawLength(l *State, index int) int {
 // http://www.lua.org/manual/5.2/manual.html#lua_tocfunction
 func ToGoFunction(l *State, index int) Function {
 	switch v := l.indexToValue(index).(type) {
-	case Function:
-		return v
+	case *goFunction:
+		return v.Function
 	case *goClosure:
 		return v.function
 	}
@@ -764,7 +766,7 @@ func ToValue(l *State, index int) interface{} {
 	case *table:
 	case *luaClosure:
 	case *goClosure:
-	case Function:
+	case *goFunction:
 	case *State:
 	case *userData:
 		return v.data
@@ -851,7 +853,7 @@ func PushFString(l *State, format string, args ...interface{}) string {
 // http://www.lua.org/manual/5.2/manual.html#lua_pushcclosure
 func PushGoClosure(l *State, function Function, upValueCount uint8) {
 	if upValueCount == 0 {
-		l.apiPush(function)
+		l.apiPush(&goFunction{function})
 	} else {
 		n := int(upValueCount)
 
@@ -1154,19 +1156,13 @@ func (l *State) protectedCall(f func(), oldTop, errorFunc int) error {
 // Returns an empty string and false if the index is greater than the number
 // of upvalues.
 func UpValue(l *State, function, index int) (name string, ok bool) {
-	var v value
-	switch f := l.indexToValue(function).(type) {
-	case *goClosure:
-		if 1 <= index && index <= f.upValueCount() {
-			v, ok = f.upValue(index-1), true
+	if c, isClosure := l.indexToValue(function).(closure); isClosure {
+		if ok = 1 <= index && index <= c.upValueCount(); ok {
+			if c, isLua := c.(*luaClosure); isLua {
+				name = c.prototype.upValues[index-1].name
+			}
+			l.apiPush(c.upValue(index - 1))
 		}
-	case *luaClosure:
-		if 1 <= index && index <= f.upValueCount() {
-			name, v, ok = f.prototype.upValues[index-1].name, f.upValue(index-1), true
-		}
-	}
-	if ok {
-		l.apiPush(v)
 	}
 	return
 }
@@ -1180,18 +1176,13 @@ func UpValue(l *State, function, index int) (name string, ok bool) {
 //
 // http://www.lua.org/manual/5.2/manual.html#lua_setupvalue
 func SetUpValue(l *State, function, index int) (name string, ok bool) {
-	switch f := l.indexToValue(function).(type) {
-	case *goClosure:
-		if 1 <= index && index <= f.upValueCount() {
-			ok = true
+	if c, isClosure := l.indexToValue(function).(closure); isClosure {
+		if ok = 1 <= index && index <= c.upValueCount(); ok {
+			if c, isLua := c.(*luaClosure); isLua {
+				name = c.prototype.upValues[index-1].name
+			}
 			l.top--
-			f.setUpValue(index-1, l.stack[l.top])
-		}
-	case *luaClosure:
-		if 1 <= index && index <= f.upValueCount() {
-			name, ok = f.prototype.upValues[index-1].name, true
-			l.top--
-			f.setUpValue(index-1, l.stack[l.top])
+			c.setUpValue(index-1, l.stack[l.top])
 		}
 	}
 	return

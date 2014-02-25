@@ -31,7 +31,9 @@ func TestLua(t *testing.T) {
 		"math",
 		"goto",
 		"closure",
-		// "attrib",
+		"attrib",
+		// "events",
+		// "vararg",
 	}
 	for _, v := range tests {
 		t.Log(v)
@@ -41,8 +43,9 @@ func TestLua(t *testing.T) {
 		SetGlobal(l, "_port")
 		// SetHooker(l, func(state *State, ar *Debug) {
 		// 	ci := state.callInfo.(*luaCallInfo)
+		// 	p := state.stack[ci.function()].(*luaClosure).prototype
 		// 	println(stack(state.stack[ci.base():state.top]))
-		// 	println(ci.code[ci.savedPC].String())
+		// 	println(ci.code[ci.savedPC].String(), p.source, p.lineInfo[ci.savedPC])
 		// }, MaskCount, 1)
 		LoadFile(l, "fixtures/"+v+".lua", "text")
 		if err := ProtectedCall(l, 0, 0, 0); err != nil {

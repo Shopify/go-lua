@@ -127,11 +127,9 @@ func Info(l *State, what string, activationRecord *Debug) bool {
 	if what[0] == '>' {
 		fun = l.stack[l.top-1]
 		switch fun := fun.(type) {
-		case *goClosure:
+		case closure:
 			f = fun
-		case *luaClosure:
-			f = fun
-		case Function:
+		case *goFunction:
 		default:
 			apiCheck(false, "function expected")
 		}
@@ -141,11 +139,9 @@ func Info(l *State, what string, activationRecord *Debug) bool {
 		callInfo = activationRecord.callInfo
 		fun = l.stack[callInfo.function()]
 		switch fun := fun.(type) {
-		case *goClosure:
+		case closure:
 			f = fun
-		case *luaClosure:
-			f = fun
-		case Function:
+		case *goFunction:
 		default:
 			l.assert(false)
 		}
