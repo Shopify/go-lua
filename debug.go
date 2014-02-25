@@ -88,7 +88,8 @@ func (l *State) errorMessage() {
 			l.throw(ErrorError)
 		}
 	}
-	l.throw(RuntimeError)
+	msg := CheckString(l, -1)
+	l.throw(fmt.Errorf("%v: %s", RuntimeError, msg))
 }
 
 func SetHooker(l *State, f Hook, mask byte, count int) {
