@@ -1,8 +1,58 @@
 package lua
 
+import (
+	"fmt"
+)
+
 var tableLibrary = []RegistryFunction{
-	// {"concat", tconcat},
-	// {"insert", tinsert},
+	{"concat", func(l *State) int {
+		CheckType(l, 1, TypeTable)
+		sep := OptString(l, 2, "")
+		i := OptInteger(l, 3, 1)
+		var last int
+		if IsNoneOrNil(l, 4) {
+			last = LengthEx(l, 1)
+		} else {
+			last = CheckInteger(l, 4)
+		}
+		s := ""
+		addField := func() {
+			RawGetInt(l, 1, i)
+			if str, ok := ToString(l, -1); ok {
+				s += str
+			} else {
+				Errorf(l, fmt.Sprintf("invalid value (%s) at index %d in table for 'concat'", TypeNameOf(l, -1), i))
+			}
+		}
+		for ; i < last; i++ {
+			addField()
+			s += sep
+		}
+		if i == last {
+			addField()
+		}
+		PushString(l, s)
+		return 1
+	}},
+	{"insert", func(l *State) int {
+		CheckType(l, 1, TypeTable)
+		e := LengthEx(l, 1) + 1 // First empty element.
+		switch Top(l) {
+		case 2:
+			RawSetInt(l, 1, e) // Insert new element at the end.
+		case 3:
+			pos := CheckInteger(l, 2)
+			ArgumentCheck(l, 1 <= pos && pos <= e, 2, "position out of bounds")
+			for i := e; i > pos; i-- {
+				RawGetInt(l, 1, i-1)
+				RawSetInt(l, 1, i) // t[i] = t[i-1]
+			}
+			RawSetInt(l, 1, pos) // t[pos] = v
+		default:
+			Errorf(l, "wrong number of arguments to 'insert'")
+		}
+		return 0
+	}},
 	{"pack", func(l *State) int {
 		n := Top(l)
 		CreateTable(l, n, 1)
@@ -40,7 +90,21 @@ var tableLibrary = []RegistryFunction{
 		}
 		return n
 	}},
-	// {"remove", tremove},
+	{"remove", func(l *State) int {
+		CheckType(l, 1, TypeTable)
+		size := LengthEx(l, 1)
+		pos := OptInteger(l, 2, size)
+		if pos != size {
+			ArgumentCheck(l, 1 <= pos && pos <= size+1, 2, "position out of bounds")
+		}
+		for RawGetInt(l, 1, pos); pos < size; pos++ {
+			RawGetInt(l, 1, pos+1)
+			RawSetInt(l, 1, pos) // t[pos] = t[pos+1]
+		}
+		PushNil(l)
+		RawSetInt(l, 1, pos) // t[pos] = nil
+		return 1
+	}},
 	// {"sort", sort},
 }
 
