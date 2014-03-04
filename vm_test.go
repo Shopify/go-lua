@@ -71,6 +71,28 @@ func TestBase(t *testing.T) {
 	Call(l, 0, 0)
 }
 
+func TestError(t *testing.T) {
+	l := NewState()
+	BaseOpen(l)
+	errorHandled := false
+	PushGoFunction(l, func(l *State) int {
+		if Top(l) == 0 {
+			t.Error("error handler received no arguments")
+		} else if errorMessage, ok := ToString(l, -1); !ok {
+			t.Errorf("error handler received %s instead of string", TypeNameOf(l, -1))
+		} else if errorMessage != "error" {
+			t.Errorf("error handler received '%s' instead of 'error'", errorMessage)
+		}
+		errorHandled = true
+		return 1
+	})
+	LoadString(l, "error('error')")
+	ProtectedCall(l, 0, 0, -2)
+	if !errorHandled {
+		t.Error("error not handled")
+	}
+}
+
 func Example() {
 	type step struct {
 		name     string

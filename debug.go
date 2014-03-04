@@ -79,14 +79,17 @@ func (l *State) assert(cond bool) {
 
 func (l *State) errorMessage() {
 	if l.errorFunction != 0 { // is there an error handling function?
-		if errorFunction, ok := l.stack[l.errorFunction].(*luaClosure); ok {
-			l.stack[l.top] = l.stack[l.top-1] // move argument
-			l.stack[l.top-1] = errorFunction  // push function
-			l.top++
-			l.call(l.top-2, 1, false)
-		} else {
+		errorFunction := l.stack[l.errorFunction]
+		switch errorFunction.(type) {
+		case closure:
+		case *goFunction:
+		default:
 			l.throw(ErrorError)
 		}
+		l.stack[l.top] = l.stack[l.top-1] // move argument
+		l.stack[l.top-1] = errorFunction  // push function
+		l.top++
+		l.call(l.top-2, 1, false)
 	}
 	l.throw(fmt.Errorf("%v: %s", RuntimeError, CheckString(l, -1)))
 }
