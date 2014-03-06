@@ -54,6 +54,27 @@ func TestLua(t *testing.T) {
 	}
 }
 
+func TestTableNext(t *testing.T) {
+	l := NewState()
+	OpenLibraries(l)
+	NewTable(l)
+	for i := 1; i <= 4; i++ {
+		PushInteger(l, i)
+		PushValue(l, -1)
+		SetTable(l, -3)
+	}
+	count := 0
+	for PushNil(l); Next(l, -2); count++ {
+		if k, v := CheckInteger(l, -2), CheckInteger(l, -1); k != v {
+			t.Errorf("key %d != value %d", k, v)
+		}
+		Pop(l, 1)
+	}
+	if count != 4 {
+		t.Errorf("incorrect iteration count %d in Next()", count)
+	}
+}
+
 func TestTableUnpack(t *testing.T) {
 	l := NewState()
 	OpenLibraries(l)

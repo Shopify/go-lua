@@ -41,14 +41,14 @@ func (t *table) atInt(k int) value {
 	if 0 < k && k <= len(t.array) {
 		return t.array[k-1]
 	}
-	return t.hash[k]
+	return t.hash[float64(k)]
 }
 
 func (t *table) putAtInt(k int, v value) {
 	if 0 < k && k <= len(t.array) {
 		t.array[k-1] = v
 	} else {
-		t.hash[k] = v
+		t.hash[float64(k)] = v
 	}
 }
 
@@ -150,7 +150,7 @@ func (l *State) next(t *table, key int) bool {
 			return true
 		}
 	}
-	found := false
+	found := k == nil
 	for hk, v := range t.hash {
 		if found {
 			if v != nil {
