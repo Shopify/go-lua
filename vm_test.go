@@ -57,11 +57,14 @@ func TestLua(t *testing.T) {
 func TestTableNext(t *testing.T) {
 	l := NewState()
 	OpenLibraries(l)
-	NewTable(l)
+	CreateTable(l, 10, 0)
 	for i := 1; i <= 4; i++ {
 		PushInteger(l, i)
 		PushValue(l, -1)
 		SetTable(l, -3)
+	}
+	if length := LengthEx(l, -1); length != 4 {
+		t.Errorf("expected table length to be 4, but was %d", length)
 	}
 	count := 0
 	for PushNil(l); Next(l, -2); count++ {

@@ -18,7 +18,7 @@ func (t *table) atString(k string) value   { return t.hash[k] }
 func newTableWithSize(arraySize, hashSize int) *table {
 	t := new(table)
 	if arraySize > 0 {
-		t.array = make([]value, 0, arraySize)
+		t.array = make([]value, arraySize)
 	}
 	if hashSize > 0 {
 		t.hash = make(map[value]value, hashSize)
