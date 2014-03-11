@@ -751,8 +751,8 @@ func ToThread(l *State, index int) *State {
 }
 
 // ToValue convertes the value at `index` into a generic Go interface{}.  The
-// value can be a userdata, a table, a thread, or a function.  Otherwise, the
-// function returns nil.
+// value can be a userdata, a table, a thread, a function, or Go string, bool,
+// uint, int or float64 types. Otherwise, the function returns nil.
 //
 // Different objects will give different values.  There is no way to convert
 // the value back into its original value.
@@ -763,6 +763,7 @@ func ToThread(l *State, index int) *State {
 func ToValue(l *State, index int) interface{} {
 	v := l.indexToValue(index)
 	switch v := v.(type) {
+	case string, uint, int, float64, bool:
 	case *table:
 	case *luaClosure:
 	case *goClosure:
