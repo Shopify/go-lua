@@ -414,3 +414,18 @@ func LengthEx(l *State, index int) int {
 	Errorf(l, "object length is not a number")
 	panic("unreachable")
 }
+
+func FileResult(l *State, err error, filename string) int {
+	if err == nil {
+		PushBoolean(l, true)
+		return 1
+	}
+	PushNil(l)
+	if filename != "" {
+		PushString(l, filename+": "+err.Error())
+	} else {
+		PushString(l, err.Error())
+	}
+	PushInteger(l, 0) // TODO map err to errno
+	return 3
+}
