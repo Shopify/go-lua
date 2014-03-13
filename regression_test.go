@@ -1,7 +1,6 @@
-package lua_test
+package lua
 
 import (
-	"github.com/Shopify/go-lua"
 	"testing"
 )
 
@@ -13,11 +12,11 @@ func TestCanRemoveNilObjectFromStack(t *testing.T) {
 		}
 	}()
 
-	l := lua.NewState()
+	l := NewState()
 
-	lua.PushString(l, "hello")
-	lua.Remove(l, -1)
+	PushString(l, "hello")
+	Remove(l, -1)
 
-	lua.PushNil(l)
-	lua.Remove(l, -1)
+	PushNil(l)
+	Remove(l, -1)
 }
