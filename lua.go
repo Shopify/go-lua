@@ -356,7 +356,7 @@ func NewState() *State {
 }
 
 func apiCheckStackIndex(index int, v value) {
-	apiCheck(v != nil && !isPseudoIndex(index), fmt.Sprintf("index %d not in the stack", index))
+	apiCheck(v != none && !isPseudoIndex(index), fmt.Sprintf("index %d not in the stack", index))
 }
 
 // SetField does the equivalent of `table[key]=v`, where `table` is the value
@@ -374,6 +374,8 @@ func SetField(l *State, index int, key string) {
 	l.top -= 2
 }
 
+var none value = &struct{}{}
+
 func (l *State) indexToValue(index int) value {
 	switch callInfo := l.callInfo; {
 	case index > 0:
@@ -382,7 +384,7 @@ func (l *State) indexToValue(index int) value {
 		if i := callInfo.function() + index; i < l.top {
 			return l.stack[i]
 		}
-		return nil
+		return none
 	case !isPseudoIndex(index): // negative index
 		apiCheck(index != 0 && -index <= l.top-(callInfo.function()+1), "invalid index")
 		return l.stack[l.top+index]
@@ -392,12 +394,12 @@ func (l *State) indexToValue(index int) value {
 		i := RegistryIndex - index
 		apiCheck(i <= maxUpValue+1, "upvalue index too large")
 		if _, ok := l.stack[callInfo.function()].(*goFunction); ok {
-			return nil // light Go functions have no upvalues
+			return none // light Go functions have no upvalues
 		}
 		if closure := l.stack[callInfo.function()].(*goClosure); i <= len(closure.upValues) {
 			return closure.upValues[i-1]
 		}
-		return nil
+		return none
 	}
 }
 
