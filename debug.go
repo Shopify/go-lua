@@ -1,8 +1,13 @@
 package lua
 
-import "fmt"
+import (
+	"fmt"
+	"strings"
+)
 
 func (l *State) resetHookCount() { l.hookCount = l.baseHookCount }
+func (l *State) prototype(ci callInfo) *prototype { return l.stack[ci.function()].(*luaClosure).prototype }
+func (l *State) currentLine(ci callInfo) int { return int(l.prototype(ci).lineInfo[ci.(*luaCallInfo).savedPC]) }
 
 func (l *State) runtimeError(message string) {
 	l.push(message)
@@ -15,29 +20,31 @@ func (l *State) runtimeError(message string) {
 func (l *State) typeError(v value, operation string) {
 	typeName := TypeName(l, l.valueToType(v))
 	if l.callInfo.isLua() {
+		c := l.stack[l.callInfo.function()].(*luaClosure)
 		var kind, name string
 		isUpValue := func() bool {
-			c := l.stack[l.callInfo.function()].(*luaClosure)
 			for i, uv := range c.upValues {
 				if uv.value() == v {
-					kind, name = "upvalue", c.prototype.upValues[i].name
+					kind, name = "upvalue", c.prototype.upValueName(i)
 					return true
 				}
 			}
 			return false
 		}
+		frameIndex := 0
 		isInStack := func() bool {
-			for _, e := range l.callInfo.(*luaCallInfo).frame {
+			for i, e := range l.callInfo.(*luaCallInfo).frame {
 				if e == v {
+					frameIndex = i
 					return true
 				}
 			}
 			return false
 		}
 		if !isUpValue() && isInStack() {
-			// TODO
+			kind, name = c.prototype.objectName(frameIndex, l.callInfo.(*luaCallInfo).savedPC)
 		}
-		if true { // TODO
+		if kind != "" {
 			l.runtimeError(fmt.Sprintf("attempt to %s %s '%s' (a %s value)", operation, kind, name, typeName))
 		}
 	}
@@ -104,13 +111,14 @@ func SetHooker(l *State, f Hook, mask byte, count int) {
 	l.hooker, l.baseHookCount = f, count
 	l.resetHookCount()
 	l.hookMask = mask
+	l.internalHook = false
 }
 
 func Hooker(l *State) Hook     { return l.hooker }
 func HookerMask(l *State) byte { return l.hookMask }
 func HookerCount(l *State) int { return l.hookCount }
 
-func Stack(l *State, level int, activationRecord *Debug) (ok bool) {
+func Stack(l *State, level int, d *Debug) (ok bool) {
 	if level < 0 {
 		return // invalid (negative) level
 	}
@@ -118,12 +126,86 @@ func Stack(l *State, level int, activationRecord *Debug) (ok bool) {
 	for ; level > 0 && callInfo != &l.baseCallInfo; level, callInfo = level-1, callInfo.previous() {
 	}
 	if level == 0 && callInfo != &l.baseCallInfo { // level found?
-		activationRecord.callInfo, ok = callInfo, true
+		d.callInfo, ok = callInfo, true
 	}
 	return
 }
 
-func Info(l *State, what string, activationRecord *Debug) bool {
+func functionInfo(d *Debug, f closure) {
+	if l, ok := f.(*luaClosure); !ok {
+		d.Source = "=[Go]"
+		d.LineDefined, d.LastLineDefined = -1, -1
+		d.What = "Go"
+	} else {
+		p := l.prototype
+		d.Source = p.source
+		if d.Source == "" {
+			d.Source = "=?"
+		}
+		d.LineDefined, d.LastLineDefined = p.lineDefined, p.lastLineDefined
+		d.What = "Lua"
+		if d.LineDefined == 0 {
+			d.What = "main"
+		}
+	}
+}
+
+func (l *State) functionName(ci callInfo) (name, kind string) {
+	var tm tm
+	p := l.prototype(ci)
+	pc := ci.(*luaCallInfo).savedPC
+	switch i := p.code[pc]; i.opCode() {
+	case opCall, opTailCall:
+		return p.objectName(i.a(), pc)
+	case opTForCall:
+		return "for iterator", "for iterator"
+	case opSelf, opGetTableUp, opGetTable:
+		tm = tmIndex
+	case opSetTableUp, opSetTable:
+		tm = tmNewIndex
+	case opEqual:
+		tm = tmEq
+	case opAdd:
+		tm = tmAdd
+	case opSub:
+		tm = tmSub
+	case opMul:
+		tm = tmMul
+	case opDiv:
+		tm = tmDiv
+	case opMod:
+		tm = tmMod
+	case opPow:
+		tm = tmPow
+	case opUnaryMinus:
+		tm = tmUnaryMinus
+	case opLength:
+		tm = tmLen
+	case opLessThan:
+		tm = tmLT
+	case opLessOrEqual:
+		tm = tmLE
+	case opConcat:
+		tm = tmConcat
+	default:
+		return
+	}
+	return eventNames[tm], "metamethod"
+}
+
+func (l *State) collectValidLines(f closure) {
+	if lc, ok := f.(*luaClosure); !ok {
+		l.apiPush(nil)
+	} else {
+		t := newTable()
+		l.apiPush(t)
+		for _, i := range lc.prototype.lineInfo {
+			t.putAtInt(int(i), true)
+		}
+	}
+}
+
+func Info(l *State, what string, d *Debug) bool {
 	var f closure
 	var fun value
 	var callInfo callInfo
@@ -139,7 +221,7 @@ func Info(l *State, what string, activationRecord *Debug) bool {
 		what = what[1:] // skip the '>'
 		l.top--         // pop function
 	} else {
-		callInfo = activationRecord.callInfo
+		callInfo = d.callInfo
 		fun = l.stack[callInfo.function()]
 		switch fun := fun.(type) {
 		case closure:
@@ -153,37 +235,37 @@ func Info(l *State, what string, activationRecord *Debug) bool {
 	for _, r := range what {
 		switch r {
 		case 'S':
-			// TODO functionInfo(activationRecord, f)
+			functionInfo(d, f)
 		case 'l':
-			activationRecord.CurrentLine = -1
+			d.CurrentLine = -1
 			if callInfo != nil && callInfo.isLua() {
-				// TODO activationRecord.CurrentLine = currentLine(callInfo)
+				d.CurrentLine = l.currentLine(callInfo)
 			}
 		case 'u':
 			if f == nil {
-				activationRecord.UpValueCount = 0
+				d.UpValueCount = 0
 			} else {
-				activationRecord.UpValueCount = f.upValueCount()
+				d.UpValueCount = f.upValueCount()
 			}
 			if lf, ok := f.(*luaClosure); !ok {
-				activationRecord.IsVarArg = true
-				activationRecord.ParameterCount = 0
+				d.IsVarArg = true
+				d.ParameterCount = 0
 			} else {
-				activationRecord.IsVarArg = lf.prototype.isVarArg
-				activationRecord.ParameterCount = lf.prototype.parameterCount
+				d.IsVarArg = lf.prototype.isVarArg
+				d.ParameterCount = lf.prototype.parameterCount
 			}
 		case 't':
-			activationRecord.IsTailCall = callInfo != nil && callInfo.callStatus()&callStatusTail != 0
+			d.IsTailCall = callInfo != nil && callInfo.callStatus()&callStatusTail != 0
 		case 'n':
 			// calling function is a known Lua function?
 			if callInfo != nil && !callInfo.isCallStatus(callStatusTail) && callInfo.previous().isLua() {
-				// TODO activationRecord.Name, activationRecord.NameKind = functionName(l, callInfo.previous())
+				d.Name, d.NameKind = l.functionName(callInfo.previous())
 			} else {
-				activationRecord.NameKind = ""
+				d.NameKind = ""
 			}
-			if activationRecord.NameKind == "" {
-				activationRecord.NameKind = "" // not found
-				activationRecord.Name = ""
+			if d.NameKind == "" {
+				d.NameKind = "" // not found
+				d.Name = ""
 			}
 		case 'L':
 			hasL = true
@@ -197,7 +279,7 @@ func Info(l *State, what string, activationRecord *Debug) bool {
 		l.apiPush(f)
 	}
 	if hasL {
-		// TODO collectValidLines(l, cl)
+		l.collectValidLines(f)
 	}
 	return ok
 }
@@ -225,6 +307,57 @@ func (l *State) checkUpValue(f, upValueCount int) int {
 	return n
 }
 
+func threadArg(l *State) (int, *State) {
+	if IsThread(l, 1) {
+		return 1, ToThread(l, 1)
+	}
+	return 0, l
+}
+
+func hookTable(l *State) bool { return SubTable(l, RegistryIndex, "_HKEY") }
+
+func internalHooker(l *State, d *Debug) {
+	hookNames := []string{"call", "return", "line", "count", "tail call"}
+	hookTable(l)
+	PushThread(l)
+	RawGet(l, -2)
+	if IsFunction(l, -1) {
+		PushString(l, hookNames[d.Event])
+		if d.CurrentLine >= 0 {
+			PushInteger(l, d.CurrentLine)
+		} else {
+			PushNil(l)
+		}
+		l.assert(Info(l, "lS", d))
+		Call(l, 2, 0)
+	}
+}
+
+func maskToString(mask byte) (s string) {
+	if mask&MaskCall != 0 {
+		s += "c"
+	}
+	if mask&MaskReturn != 0 {
+		s += "r"
+	}
+	if mask&MaskLine != 0 {
+		s += "l"
+	}
+	return
+}
+
+func stringToMask(s string, maskCount bool) (mask byte) {
+	for r, b := range map[rune]byte{'c': MaskCall, 'r': MaskReturn, 'l': MaskLine} {
+		if strings.ContainsRune(s, r) {
+			mask |= b
+		}
+	}
+	if maskCount {
+		mask |= MaskCount
+	}
+	return
+}
+
 var debugLibrary = []RegistryFunction{
 	// {"debug", db_debug},
 	{"getuservalue", func(l *State) int {
@@ -235,7 +368,23 @@ var debugLibrary = []RegistryFunction{
 		}
 		return 1
 	}},
-	// {"gethook", db_gethook},
+	{"gethook", func(l *State) int {
+		_, l1 := threadArg(l)
+		hooker, mask := Hooker(l1), HookerMask(l1)
+		if hooker != nil && !l.internalHook {
+			PushString(l, "external hook")
+		} else {
+			hookTable(l)
+			PushThread(l1)
+			//			XMove(l1, l, 1)
+			panic("XMove not implemented yet")
+			RawGet(l, -2)
+			Remove(l, -2)
+		}
+		PushString(l, maskToString(mask))
+		PushInteger(l, HookerCount(l1))
+		return 3
+	}},
 	// {"getinfo", db_getinfo},
 	// {"getlocal", db_getlocal},
 	{"getregistry", func(l *State) int { PushValue(l, RegistryIndex); return 1 }},
@@ -268,7 +417,34 @@ var debugLibrary = []RegistryFunction{
 		SetUserValue(l, 1)
 		return 1
 	}},
-	// {"sethook", db_sethook},
+	{"sethook", func(l *State) int {
+		var hooker Hook
+		var mask byte
+		var count int
+		i, l1 := threadArg(l)
+		if IsNoneOrNil(l, i+1) {
+			SetTop(l, i+1)
+		} else {
+			s := CheckString(l, i+2)
+			CheckType(l, i+1, TypeFunction)
+			count = OptInteger(l, i+3, 0)
+			hooker, mask = internalHooker, stringToMask(s, count > 0)
+		}
+		if !hookTable(l) {
+			PushString(l, "k")
+			SetField(l, -2, "__mode")
+			PushValue(l, -1)
+			SetMetaTable(l, -2)
+		}
+		PushThread(l1)
+		//	 	XMove(l1, l, 1)
+		panic("XMove not yet implemented")
+		PushValue(l, i+1)
+		RawSet(l, -3)
+		SetHooker(l1, hooker, mask, count)
+		l1.internalHook = true
+		return 0
+	}},
 	// {"setlocal", db_setlocal},
 	{"setmetatable", func(l *State) int {
 		t := TypeOf(l, 2)

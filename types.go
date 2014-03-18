@@ -101,6 +101,106 @@ type prototype struct {
 	isVarArg                     bool
 }
 
+func (p *prototype) upValueName(index int) string {
+	if s := p.upValues[index].name; s != "" {
+		return s
+	}
+	return "?"
+}
+
+func (p *prototype) lastLoad(reg int, lastPC pc) (loadPC pc, found bool) {
+	var ip, jumpTarget pc
+	for ; ip < lastPC; ip++ {
+		i, maybe := p.code[ip], false
+		switch i.opCode() {
+		case opLoadNil:
+			maybe = i.a() <= reg && reg <= i.a() + i.b()
+		case opTForCall:
+			maybe = reg >= i.a()+2
+		case opCall, opTailCall:
+			maybe = reg >= i.a()
+		case opJump:
+			if dest := ip+1+pc(i.sbx()); ip < dest && dest <= lastPC && dest > jumpTarget {
+				jumpTarget = dest
+			}
+		case opTest:
+			maybe = reg == i.a()
+		default:
+			maybe = testAMode(i.opCode()) && reg == i.a()
+		}
+		if maybe {
+			if ip < jumpTarget { // Can't know loading instruction because code is conditional.
+				found = false
+			} else {
+				loadPC, found = ip, true
+			}
+		}
+	}
+	return
+}
+
+func (p *prototype) objectName(reg int, lastPC  pc) (name, kind string) {
+	if name, isLocal := p.localName(reg+1, lastPC); isLocal {
+		return name, "local"
+	}
+	if pc, found := p.lastLoad(reg, lastPC); found {
+		i := p.code[pc]
+		switch op := i.opCode(); op {
+		case opMove:
+			if b := i.b(); b < i.a() {
+				return p.objectName(b, pc)
+			}
+		case opGetTableUp:
+			name, kind = p.constantName(i.c(), pc), "local"
+			if p.upValueName(i.b()) == "_ENV" {
+				kind = "global"
+			}
+			return
+		case opGetTable:
+			name, kind = p.constantName(i.c(), pc), "local"
+			if v, ok := p.localName(i.b()+1, pc); ok && v == "_ENV" {
+				kind = "global"
+			}
+			return
+		case opGetUpValue:
+			return p.upValueName(i.b()), "upvalue"
+		case opLoadConstant:
+			if s, ok := p.constants[i.bx()].(string); ok {
+				return s, "constant"
+			}
+		case opLoadConstantEx:
+			if s, ok := p.constants[p.code[pc+1].ax()].(string); ok {
+				return s, "constant"
+			}
+		case opSelf:
+			return p.constantName(i.c(), pc), "method"
+		}
+	}
+	return
+}
+
+func (p *prototype) constantName(k int, pc pc) string {
+	if isConstant(k) {
+		if s, ok := p.constants[constantIndex(k)].(string); ok {
+			return s
+		}
+	} else if name, kind := p.objectName(k, pc); kind == "c" {
+		return name
+	}
+	return "?"
+}
+
+func (p *prototype) localName(index int, pc pc) (string, bool) {
+	for i := 0; i < len(p.localVariables) && p.localVariables[i].startPC <= pc; i++ {
+		if pc < p.localVariables[i].endPC {
+			if index--; index == 0 {
+				return p.localVariables[i].name, true
+			}
+		}
+	}
+	return "", false
+}
+
 // Converts an integer to a "floating point byte", represented as
 // (eeeeexxx), where the real value is (1xxx) * 2^(eeeee - 1) if
 // eeeee != 0 and (xxx) otherwise.

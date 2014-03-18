@@ -5,6 +5,7 @@ import (
 	"os"
 	"os/exec"
 	"strings"
+	"syscall"
 	"time"
 )
 
@@ -22,7 +23,12 @@ func field(l *State, key string, def int) int {
 }
 
 var osLibrary = []RegistryFunction{
-	// {"clock", func(l *State) int { PushNumber(l, clock()/clocksPerSec); return 1 }},
+	{"clock", func(l *State) int {
+		var rusage syscall.Rusage
+		_ = syscall.Getrusage(syscall.RUSAGE_SELF, &rusage) // ignore errors
+		PushNumber(l, float64(rusage.Utime.Sec+rusage.Stime.Sec))
+		return 1
+	}},
 	// {"date", os_date},
 	{"difftime", func(l *State) int {
 		PushNumber(l, time.Unix(int64(CheckNumber(l, 1)), 0).Sub(time.Unix(int64(OptNumber(l, 2, 0)), 0)).Seconds())

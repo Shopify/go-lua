@@ -2,7 +2,38 @@ package lua
 
 import (
 	"fmt"
+	"sort"
 )
+
+type sortHelper struct {
+	l           *State
+	n           int
+	hasFunction bool
+}
+
+func (h sortHelper) Len() int { return h.n }
+
+func (h sortHelper) Swap(i, j int) {
+	RawGetInt(h.l, 1, i)
+	RawGetInt(h.l, 1, j)
+	RawSetInt(h.l, 1, i)
+	RawSetInt(h.l, 1, j)
+}
+
+func (h sortHelper) Less(i, j int) bool {
+	if h.hasFunction {
+		PushValue(h.l, 2)
+		RawGetInt(h.l, 1, i)
+		RawGetInt(h.l, 1, j)
+		Call(h.l, 2, 1)
+		defer Pop(h.l, 1)
+		return ToBoolean(h.l, -1)
+	}
+	RawGetInt(h.l, 1, i)
+	RawGetInt(h.l, 1, j)
+	defer Pop(h.l, 2)
+	return Compare(h.l, -2, -1, OpLT)
+}
 
 var tableLibrary = []RegistryFunction{
 	{"concat", func(l *State) int {
@@ -105,7 +136,17 @@ var tableLibrary = []RegistryFunction{
 		RawSetInt(l, 1, pos) // t[pos] = nil
 		return 1
 	}},
-	// {"sort", sort},
+	{"sort", func(l *State) int {
+		CheckType(l, 1, TypeTable)
+		n := LengthEx(l, 1)
+		hasFunction := !IsNoneOrNil(l, 2)
+		if hasFunction {
+			CheckType(l, 2, TypeFunction)
+		}
+		SetTop(l, 2)
+		sort.Sort(sortHelper{l, n, hasFunction})
+		return 0
+	}},
 }
 
 func TableOpen(l *State) int {
