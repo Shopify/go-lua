@@ -119,7 +119,7 @@ func TestError(t *testing.T) {
 			t.Error("error handler received no arguments")
 		} else if errorMessage, ok := ToString(l, -1); !ok {
 			t.Errorf("error handler received %s instead of string", TypeNameOf(l, -1))
-		} else if errorMessage != program + ":1: error" {
+		} else if errorMessage != program+":1: error" {
 			t.Errorf("error handler received '%s' instead of 'error'", errorMessage)
 		}
 		errorHandled = true

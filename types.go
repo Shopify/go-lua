@@ -114,13 +114,13 @@ func (p *prototype) lastLoad(reg int, lastPC pc) (loadPC pc, found bool) {
 		i, maybe := p.code[ip], false
 		switch i.opCode() {
 		case opLoadNil:
-			maybe = i.a() <= reg && reg <= i.a() + i.b()
+			maybe = i.a() <= reg && reg <= i.a()+i.b()
 		case opTForCall:
 			maybe = reg >= i.a()+2
 		case opCall, opTailCall:
 			maybe = reg >= i.a()
 		case opJump:
-			if dest := ip+1+pc(i.sbx()); ip < dest && dest <= lastPC && dest > jumpTarget {
+			if dest := ip + 1 + pc(i.sbx()); ip < dest && dest <= lastPC && dest > jumpTarget {
 				jumpTarget = dest
 			}
 		case opTest:
@@ -139,7 +139,7 @@ func (p *prototype) lastLoad(reg int, lastPC pc) (loadPC pc, found bool) {
 	return
 }
 
-func (p *prototype) objectName(reg int, lastPC  pc) (name, kind string) {
+func (p *prototype) objectName(reg int, lastPC pc) (name, kind string) {
 	if name, isLocal := p.localName(reg+1, lastPC); isLocal {
 		return name, "local"
 	}

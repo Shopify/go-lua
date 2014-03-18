@@ -6,8 +6,12 @@ import (
 )
 
 func (l *State) resetHookCount() { l.hookCount = l.baseHookCount }
-func (l *State) prototype(ci callInfo) *prototype { return l.stack[ci.function()].(*luaClosure).prototype }
-func (l *State) currentLine(ci callInfo) int { return int(l.prototype(ci).lineInfo[ci.(*luaCallInfo).savedPC]) }
+func (l *State) prototype(ci callInfo) *prototype {
+	return l.stack[ci.function()].(*luaClosure).prototype
+}
+func (l *State) currentLine(ci callInfo) int {
+	return int(l.prototype(ci).lineInfo[ci.(*luaCallInfo).savedPC])
+}
 
 func (l *State) runtimeError(message string) {
 	l.push(message)
