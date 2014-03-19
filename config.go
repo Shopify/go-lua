@@ -11,4 +11,5 @@ const (
 	maxTagLoop       = 100
 	firstPseudoIndex = -maxStack - 1000
 	maxUpValue       = math.MaxUint8
+	idSize           = 60
 )

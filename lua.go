@@ -1136,14 +1136,12 @@ func (l *State) setErrorObject(err error, oldTop int) {
 func (l *State) protectedCall(f func(), oldTop, errorFunc int) error {
 	callInfo, allowHook, nonYieldableCallCount, errorFunction := l.callInfo, l.allowHook, l.nonYieldableCallCount, l.errorFunction
 	l.errorFunction = errorFunc
-	// fmt.Printf("%#v\n", l.callInfo)
 	err := l.protect(f)
 	if err != nil {
 		l.close(oldTop)
 		l.setErrorObject(err, oldTop)
 		l.callInfo, l.allowHook, l.nonYieldableCallCount = callInfo, allowHook, nonYieldableCallCount
-		// fmt.Printf("%#v\n", l.callInfo)
-		// l.shrinkStack()
+		// TODO l.shrinkStack()
 	}
 	l.errorFunction = errorFunction
 	return err
