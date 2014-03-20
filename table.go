@@ -54,6 +54,7 @@ var tableLibrary = []RegistryFunction{
 			} else {
 				Errorf(l, fmt.Sprintf("invalid value (%s) at index %d in table for 'concat'", TypeNameOf(l, -1), i))
 			}
+			Pop(l, 1)
 		}
 		for ; i < last; i++ {
 			addField()

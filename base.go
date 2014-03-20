@@ -300,7 +300,7 @@ var baseLibrary = []RegistryFunction{
 	}},
 	{"tostring", func(l *State) int {
 		CheckAny(l, 1)
-		ToString(l, 1)
+		ToStringMeta(l, 1)
 		return 1
 	}},
 	{"type", func(l *State) int {

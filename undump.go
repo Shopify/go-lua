@@ -79,11 +79,7 @@ func (state *loadState) readString() (s string, err error) {
 	}
 	ba := make([]byte, size)
 	if err = state.read(ba); err == nil {
-		ra := make([]rune, size)
-		for i, b := range ba {
-			ra[i] = rune(b)
-		}
-		s = string(ra[:len(ra)-1])
+		s = string(ba[:len(ba)-1])
 	}
 	return
 }

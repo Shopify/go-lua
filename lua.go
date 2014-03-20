@@ -691,12 +691,11 @@ func ToUnsigned(l *State, index int) (uint, bool) {
 // false for its second return value.
 //
 // http://www.lua.org/manual/5.2/manual.html#lua_tolstring
-func ToString(l *State, index int) (string, bool) {
-	v := l.indexToValue(index)
-	if s, ok := v.(string); ok {
-		return s, true
+func ToString(l *State, index int) (s string, ok bool) {
+	if s, ok = toString(l.indexToValue(index)); ok { // Bug compatibility: replace a number with its string representation.
+		l.setIndexToValue(index, s)
 	}
-	return toString(v)
+	return
 }
 
 // RawLength returns the length of the value at `index`.  For strings, this is

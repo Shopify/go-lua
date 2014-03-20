@@ -138,7 +138,7 @@ func (s *scanner) advanceAndSave(c rune) {
 }
 
 func (s *scanner) save(c rune) {
-	if _, err := s.buffer.WriteRune(c); err != nil {
+	if err := s.buffer.WriteByte(byte(c)); err != nil {
 		s.scanError("lexical element too long", 0)
 	}
 }

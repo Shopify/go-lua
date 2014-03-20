@@ -179,10 +179,10 @@ func (l *State) concat(total int) {
 		}
 		if !ok {
 			concatTagMethod()
-		} else if s1, ok := toString(t(1)); !ok {
+		} else if s1, ok := l.toString(l.top-1); !ok {
 			concatTagMethod()
 		} else if len(s1) == 0 {
-			v, _ := toString(t(2))
+			v, _ := l.toString(l.top-2)
 			put(2, v)
 		} else if s2, ok = t(2).(string); ok && len(s2) == 0 {
 			put(2, t(1))
@@ -190,7 +190,7 @@ func (l *State) concat(total int) {
 			// at least 2 non-empty strings; scarf as many as possible
 			ss := []string{s1}
 			for ; n <= total; n++ {
-				if s, ok := toString(t(n)); ok {
+				if s, ok := l.toString(l.top-n); ok {
 					ss = append(ss, s)
 				} else {
 					break

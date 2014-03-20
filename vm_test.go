@@ -32,6 +32,7 @@ func TestLua(t *testing.T) {
 		"goto",
 		"closure",
 		"attrib",
+		"strings",
 		// "events",
 		// "vararg",
 	}
@@ -40,7 +41,11 @@ func TestLua(t *testing.T) {
 		l := NewState()
 		OpenLibraries(l)
 		PushBoolean(l, true)
+		PushValue(l, 1)
+		PushValue(l, 1)
 		SetGlobal(l, "_port")
+		SetGlobal(l, "_no32")
+		SetGlobal(l, "_noformatA")
 		// SetHooker(l, func(state *State, ar *Debug) {
 		// 	ci := state.callInfo.(*luaCallInfo)
 		// 	p := state.stack[ci.function()].(*luaClosure).prototype

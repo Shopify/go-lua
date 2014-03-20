@@ -42,7 +42,7 @@ func (l *State) runtimeError(message string) {
 		} else {
 			source = chunkID(source)
 		}
-		l.push( fmt.Sprintf("%s:%d: %s", source, line, message))
+		l.push(fmt.Sprintf("%s:%d: %s", source, line, message))
 	}
 	l.errorMessage()
 }

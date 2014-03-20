@@ -286,6 +286,13 @@ func (l *State) toNumber(r value) (v float64, ok bool) {
 	return
 }
 
+func (l *State) toString(index int) (s string, ok bool) {
+	if s, ok = toString(l.stack[index]); ok {
+		l.stack[index] = s
+	}
+	return
+}
+
 func numberToString(f float64) string {
 	return fmt.Sprintf("%.14g", f)
 }

@@ -5,8 +5,8 @@ package lua
 import (
 	"math"
 	"strconv"
-
 	"testing"
+	"unicode"
 )
 
 func TestStringCompare(t *testing.T) {
@@ -21,6 +21,16 @@ func TestStringLength(t *testing.T) {
 	s := "hello\x00world"
 	if len(s) != 11 {
 		t.Error("go doesn't count embedded nulls in string length")
+	}
+}
+
+func TestIsControl(t *testing.T) {
+	t.Skip()
+	for i := 0; i < 256; i++ {
+		control := i < 0x20 || i == 0x7f
+		if lib := unicode.Is(unicode.Cc, rune(i)); control != lib {
+			t.Errorf("%x: is control? %s", i, lib)
+		}
 	}
 }
 
