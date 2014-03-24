@@ -26,12 +26,12 @@ func TestProtectedCall(t *testing.T) {
 
 func TestLua(t *testing.T) {
 	tests := []string{
-		"fib",
-		"bitwise",
-		"math",
-		"goto",
-		"closure",
 		"attrib",
+		"bitwise",
+		"closure",
+		"fib",
+		"goto",
+		"math",
 		"strings",
 		// "events",
 		// "vararg",
@@ -40,23 +40,33 @@ func TestLua(t *testing.T) {
 		t.Log(v)
 		l := NewState()
 		OpenLibraries(l)
-		PushBoolean(l, true)
-		PushValue(l, 1)
-		PushValue(l, 1)
-		SetGlobal(l, "_port")
-		SetGlobal(l, "_no32")
-		SetGlobal(l, "_noformatA")
-		// SetHooker(l, func(state *State, ar *Debug) {
-		// 	ci := state.callInfo.(*luaCallInfo)
-		// 	p := state.stack[ci.function()].(*luaClosure).prototype
-		// 	println(stack(state.stack[ci.base():state.top]))
-		// 	println(ci.code[ci.savedPC].String(), p.source, p.lineInfo[ci.savedPC])
-		// }, MaskCount, 1)
+		for _, s := range []string{"_port", "_no32", "_noformatA"} {
+			PushBoolean(l, true)
+			SetGlobal(l, s)
+		}
+		//		SetHooker(l, func(state *State, ar *Debug) {
+		//			ci := state.callInfo.(*luaCallInfo)
+		//			p := state.stack[ci.function()].(*luaClosure).prototype
+		//			println(stack(state.stack[ci.base():state.top]))
+		//			println(ci.code[ci.savedPC].String(), p.source, p.lineInfo[ci.savedPC])
+		//		}, MaskCount, 1)
 		LoadFile(l, "fixtures/"+v+".lua", "text")
 		if err := ProtectedCall(l, 0, 0, 0); err != nil {
 			t.Errorf("'%s' failed: %s", v, err.Error())
 		}
 	}
+}
+
+func TestVarArgMeta(t *testing.T) {
+	s := `function f(t, ...) return t, {...} end
+		local a = setmetatable({}, {__call = f})
+		local x, y = a(table.unpack{"a", 1})
+		assert(#x == 0)
+		assert(#y == 2 and y[1] == "a" and y[2] == 1)`
+	l := NewState()
+	OpenLibraries(l)
+	LoadString(l, s)
+	Call(l, 0, 0)
 }
 
 func TestCanRemoveNilObjectFromStack(t *testing.T) {

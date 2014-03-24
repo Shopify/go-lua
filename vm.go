@@ -30,8 +30,9 @@ func (l *State) tableAt(t value, key value) value {
 		} else if tm = l.tagMethodByObject(t, tmIndex); tm == nil {
 			l.typeError(t, "index")
 		}
-		if f, ok := tm.(*luaClosure); ok {
-			return l.callTagMethod(f, t, key)
+		switch tm.(type) {
+		case closure, *goFunction:
+			return l.callTagMethod(tm, t, key)
 		}
 		t = tm
 	}
@@ -59,14 +60,11 @@ func (l *State) setTableAt(t value, key value, val value) {
 			l.typeError(t, "index")
 		}
 		switch tm.(type) {
-		case closure:
-		case *goFunction:
-		default:
-			t = tm
-			continue
+		case closure, *goFunction:
+			l.callTagMethodV(tm, t, key, val)
+			return
 		}
-		l.callTagMethodV(tm, t, key, val)
-		return
+		t = tm
 	}
 	l.runtimeError("loop in setTable")
 }
@@ -85,22 +83,22 @@ func (l *State) objectLength(v value) value {
 			l.typeError(v, "get length of")
 		}
 	}
-	return l.callTagMethod(tm.(*luaClosure), v, v)
+	return l.callTagMethod(tm, v, v)
 }
 
-func (l *State) equalTagMethod(mt1, mt2 *table, event tm) (c *luaClosure) {
+func (l *State) equalTagMethod(mt1, mt2 *table, event tm) value {
 	if tm1 := l.fastTagMethod(mt1, event); tm1 == nil { // no metamethod
 	} else if mt1 == mt2 { // same metatables => same metamethods
-		c = tm1.(*luaClosure)
+		return tm1
 	} else if tm2 := l.fastTagMethod(mt2, event); tm2 == nil { // no metamethod
 	} else if tm1 == tm2 { // same metamethods
-		c = tm1.(*luaClosure)
+		return tm1
 	}
-	return
+	return nil
 }
 
 func (l *State) equalObjects(t1, t2 value) bool {
-	var tm *luaClosure
+	var tm value
 	switch t1 := t1.(type) {
 	case *userData:
 		if t1 == t2 {
@@ -153,8 +151,8 @@ func (l *State) lessOrEqual(left, right value) bool {
 		return ls <= rs
 	} else if result, ok := l.callOrderTagMethod(left, right, tmLE); ok {
 		return result
-	} else if result, ok := l.callOrderTagMethod(left, right, tmLT); ok {
-		return result
+	} else if result, ok := l.callOrderTagMethod(right, left, tmLT); ok {
+		return !result
 	}
 	l.orderError(left, right)
 	return false
@@ -300,6 +298,10 @@ func (l *State) execute() {
 		closure = l.stack[ci.function()].(*luaClosure)
 		constants = closure.prototype.constants
 	}
+	protect := func(v value) value {
+		frame = ci.frame
+		return v
+	}
 	newFrame()
 	for {
 		if l.hookMask&(MaskLine|MaskCount) != 0 {
@@ -326,11 +328,9 @@ func (l *State) execute() {
 		case opGetUpValue:
 			frame[i.a()] = closure.upValue(i.b())
 		case opGetTableUp:
-			frame[i.a()] = l.tableAt(closure.upValue(i.b()), k(i.c()))
-			frame = ci.frame
+			frame[i.a()] = protect(l.tableAt(closure.upValue(i.b()), k(i.c())))
 		case opGetTable:
-			frame[i.a()] = l.tableAt(frame[i.b()], k(i.c()))
-			frame = ci.frame
+			frame[i.a()] = protect(l.tableAt(frame[i.b()], k(i.c())))
 		case opSetTableUp:
 			l.setTableAt(closure.upValue(i.a()), k(i.b()), k(i.c()))
 			frame = ci.frame
@@ -349,8 +349,7 @@ func (l *State) execute() {
 			clear(frame[a+1:])
 		case opSelf:
 			a, t := i.a(), frame[i.b()]
-			frame[a+1], frame[a] = t, l.tableAt(t, k(i.c()))
-			frame = ci.frame
+			frame[a+1], frame[a] = t, protect(l.tableAt(t, k(i.c())))
 		case opAdd:
 			arithOp(add, tmAdd)
 		case opSub:
@@ -368,14 +367,12 @@ func (l *State) execute() {
 			case float64:
 				frame[i.a()] = -b
 			default:
-				frame[i.a()] = l.arith(b, b, tmUnaryMinus)
-				frame = ci.frame
+				frame[i.a()] = protect(l.arith(b, b, tmUnaryMinus))
 			}
 		case opNot:
 			frame[i.a()] = isFalse(frame[i.b()])
 		case opLength:
-			frame[i.a()] = l.objectLength(frame[i.b()])
-			frame = ci.frame
+			frame[i.a()] = protect(l.objectLength(frame[i.b()]))
 		case opConcat:
 			a, b, c := i.a(), i.b(), i.c()
 			l.top = ci.stackIndex(c + 1) // mark the end of concat operands
@@ -543,8 +540,10 @@ func (l *State) execute() {
 			if b < 0 {
 				b = n // get all var arguments
 				l.checkStack(n)
-				frame = ci.frame
 				l.top = ci.base() + a + n
+				frame = l.stack[ci.base():l.top]
+				ci.setTop(l.top)
+				ci.frame = frame
 			}
 			for j := 0; j < b; j++ {
 				if j < n {
