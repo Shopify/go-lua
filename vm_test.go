@@ -40,12 +40,14 @@ func TestLua(t *testing.T) {
 		"attrib",
 		"bitwise",
 		"closure",
+		"events",
 		"fib",
 		"goto",
+		"locals",
 		"math",
+		//"sort",
 		"strings",
-		"events",
-		// "vararg",
+		//"vararg",
 	}
 	for _, v := range tests {
 		t.Log(v)
