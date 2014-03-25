@@ -177,10 +177,10 @@ func (l *State) concat(total int) {
 		}
 		if !ok {
 			concatTagMethod()
-		} else if s1, ok := l.toString(l.top-1); !ok {
+		} else if s1, ok := l.toString(l.top - 1); !ok {
 			concatTagMethod()
 		} else if len(s1) == 0 {
-			v, _ := l.toString(l.top-2)
+			v, _ := l.toString(l.top - 2)
 			put(2, v)
 		} else if s2, ok = t(2).(string); ok && len(s2) == 0 {
 			put(2, t(1))
@@ -188,7 +188,7 @@ func (l *State) concat(total int) {
 			// at least 2 non-empty strings; scarf as many as possible
 			ss := []string{s1}
 			for ; n <= total; n++ {
-				if s, ok := l.toString(l.top-n); ok {
+				if s, ok := l.toString(l.top - n); ok {
 					ss = append(ss, s)
 				} else {
 					break
@@ -405,8 +405,10 @@ func (l *State) execute() {
 				condJump(!isFalse(frame[i.a()]))
 			}
 		case opTestSet:
-			b := frame[i.b()]
-			if test, t := i.c() != 0, !isFalse(b); test && t || !t {
+			if b, c := frame[i.b()], i.c(); c == 0 && isFalse(b) {
+				frame[i.a()] = b
+				jump(ci.step())
+			} else if c != 0 && !isFalse(b) {
 				frame[i.a()] = b
 				jump(ci.step())
 			} else {
@@ -441,12 +443,14 @@ func (l *State) execute() {
 				oci := nci.previous().(*luaCallInfo)       // caller frame
 				nfn, ofn := nci.function(), oci.function() // called & caller function
 				// last stack slot filled by 'precall'
-				lim := l.stack[nfn].(*luaClosure).prototype.parameterCount
+				lim := nci.base() + l.stack[nfn].(*luaClosure).prototype.parameterCount
 				if len(closure.prototype.prototypes) > 0 { // close all upvalues from previous call
 					l.close(oci.base())
 				}
 				// move new frame into old one
-				copy(l.stack[ofn:ofn+lim+1], l.stack[nfn:nfn+lim+1])
+				for i := 0; nfn+i < lim; i++ {
+					l.stack[ofn+i] = l.stack[nfn+i]
+				}
 				base := ofn + (nci.base() - nfn) // correct base
 				oci.setTop(ofn + (l.top - nfn))  // correct top
 				oci.frame = l.stack[base:oci.top()]

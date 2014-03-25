@@ -63,7 +63,7 @@ func scanFormat(l *State, fs string) string {
 		Errorf(l, "invalid format (width or precision too long)")
 	}
 	i++
-	return "%"+fs[:i]
+	return "%" + fs[:i]
 }
 
 func formatHelper(l *State, fs string, argCount int) string {
@@ -78,7 +78,7 @@ func formatHelper(l *State, fs string, argCount int) string {
 				ArgumentError(l, arg, "no value")
 			}
 			f := scanFormat(l, fs[i:])
-			switch i += len(f)-2; fs[i] {
+			switch i += len(f) - 2; fs[i] {
 			case 'c':
 				// Ensure each character is represented by a single byte, while preserving format modifiers.
 				c := CheckInteger(l, arg)
@@ -92,9 +92,9 @@ func formatHelper(l *State, fs string, argCount int) string {
 				ArgumentCheck(l, -1 < diff && diff < 1, arg, "not a number in proper range")
 				fmt.Fprintf(&b, f, ni)
 			case 'u': // The fmt package doesn't support %u.
-				f = f[:len(f)-1]+"d"
+				f = f[:len(f)-1] + "d"
 				fallthrough
-			case 'o',  'x', 'X':
+			case 'o', 'x', 'X':
 				n := CheckNumber(l, arg)
 				ni := uint(n)
 				diff := n - float64(ni)
@@ -190,7 +190,7 @@ var stringLibrary = []RegistryFunction{
 			PushString(l, strings.Repeat(s, n))
 		} else {
 			var b bytes.Buffer
-			b.Grow(n * len(s) + (n-1) * len(sep))
+			b.Grow(n*len(s) + (n-1)*len(sep))
 			b.WriteString(s)
 			for ; n > 1; n-- {
 				b.WriteString(sep)

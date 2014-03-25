@@ -62,8 +62,11 @@ func stack(s []value) string {
 }
 
 func isFalse(s value) bool {
+	if s == nil {
+		return true
+	}
 	b, isBool := s.(bool)
-	return s == nil || isBool && !b
+	return isBool && !b
 }
 
 type localVariable struct {

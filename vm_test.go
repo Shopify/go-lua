@@ -5,10 +5,21 @@ import (
 	"testing"
 )
 
-func TestConcat(t *testing.T) {
+func testString(t *testing.T, s string)  { testStringHelper(t, s, false) }
+func traceString(t *testing.T, s string) { testStringHelper(t, s, true) }
+
+func testStringHelper(t *testing.T, s string, trace bool) {
 	l := NewState()
-	BaseOpen(l)
-	LoadString(l, "print('hello'..'world')")
+	OpenLibraries(l)
+	LoadString(l, s)
+	if trace {
+		SetHooker(l, func(state *State, ar *Debug) {
+			ci := state.callInfo.(*luaCallInfo)
+			p := state.stack[ci.function()].(*luaClosure).prototype
+			println(stack(state.stack[ci.base():state.top]))
+			println(ci.code[ci.savedPC].String(), p.source, p.lineInfo[ci.savedPC])
+		}, MaskCount, 1)
+	}
 	Call(l, 0, 0)
 }
 
@@ -33,7 +44,7 @@ func TestLua(t *testing.T) {
 		"goto",
 		"math",
 		"strings",
-		// "events",
+		"events",
 		// "vararg",
 	}
 	for _, v := range tests {
@@ -63,10 +74,7 @@ func TestVarArgMeta(t *testing.T) {
 		local x, y = a(table.unpack{"a", 1})
 		assert(#x == 0)
 		assert(#y == 2 and y[1] == "a" and y[2] == 1)`
-	l := NewState()
-	OpenLibraries(l)
-	LoadString(l, s)
-	Call(l, 0, 0)
+	testString(t, s)
 }
 
 func TestCanRemoveNilObjectFromStack(t *testing.T) {
@@ -105,23 +113,6 @@ func TestTableNext(t *testing.T) {
 	if count != 4 {
 		t.Errorf("incorrect iteration count %d in Next()", count)
 	}
-}
-
-func TestTableUnpack(t *testing.T) {
-	l := NewState()
-	OpenLibraries(l)
-	LoadString(l, "local x, y = table.unpack({-10,0}); assert(x == -10 and y == 0)")
-	Call(l, 0, 0)
-}
-
-func TestBase(t *testing.T) {
-	s := `
-    print("hello world\n")
-    assert(true)`
-	l := NewState()
-	BaseOpen(l)
-	LoadString(l, s)
-	Call(l, 0, 0)
 }
 
 func TestError(t *testing.T) {
