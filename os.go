@@ -26,7 +26,7 @@ var osLibrary = []RegistryFunction{
 	{"clock", func(l *State) int {
 		var rusage syscall.Rusage
 		_ = syscall.Getrusage(syscall.RUSAGE_SELF, &rusage) // ignore errors
-		PushNumber(l, float64(rusage.Utime.Sec+rusage.Stime.Sec))
+		PushNumber(l, float64(rusage.Utime.Sec+rusage.Stime.Sec)+float64(rusage.Utime.Usec+rusage.Stime.Usec)/1000000.0)
 		return 1
 	}},
 	// {"date", os_date},

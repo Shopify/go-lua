@@ -85,7 +85,10 @@ func formatHelper(l *State, fs string, argCount int) string {
 				fmt.Fprintf(&b, f, 'x')
 				buf := b.Bytes()
 				buf[len(buf)-1] = byte(c)
-			case 'd', 'i':
+			case 'i': // The fmt package doesn't support %i.
+				f = f[:len(f)-1] + "d"
+				fallthrough
+			case 'd':
 				n := CheckNumber(l, arg)
 				ni := int(n)
 				diff := n - float64(ni)
