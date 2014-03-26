@@ -14,6 +14,9 @@ type sortHelper struct {
 func (h sortHelper) Len() int { return h.n }
 
 func (h sortHelper) Swap(i, j int) {
+	// Convert Go to Lua indices
+	i++
+	j++
 	RawGetInt(h.l, 1, i)
 	RawGetInt(h.l, 1, j)
 	RawSetInt(h.l, 1, i)
@@ -21,6 +24,9 @@ func (h sortHelper) Swap(i, j int) {
 }
 
 func (h sortHelper) Less(i, j int) bool {
+	// Convert Go to Lua indices
+	i++
+	j++
 	if h.hasFunction {
 		PushValue(h.l, 2)
 		RawGetInt(h.l, 1, i)
@@ -145,7 +151,12 @@ var tableLibrary = []RegistryFunction{
 			CheckType(l, 2, TypeFunction)
 		}
 		SetTop(l, 2)
-		sort.Sort(sortHelper{l, n, hasFunction})
+		h := sortHelper{l, n, hasFunction}
+		sort.Sort(h)
+		// Check result is sorted.
+		if n > 0 && h.Less(n-1, 0) {
+			Errorf(l, "invalid order function for sorting")
+		}
 		return 0
 	}},
 }

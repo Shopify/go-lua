@@ -45,7 +45,7 @@ func TestLua(t *testing.T) {
 		"goto",
 		"locals",
 		"math",
-		//"sort",
+		"sort",
 		"strings",
 		//"vararg",
 	}
@@ -67,6 +67,24 @@ func TestLua(t *testing.T) {
 		if err := ProtectedCall(l, 0, 0, 0); err != nil {
 			t.Errorf("'%s' failed: %s", v, err.Error())
 		}
+	}
+}
+
+func BenchmarkSort(b *testing.B) {
+	l := NewState()
+	OpenLibraries(l)
+	s := `a = {}
+		for i=1,%d do
+			a[i] = math.random()
+		end`
+	LoadString(l, fmt.Sprintf(s, b.N))
+	if err := ProtectedCall(l, 0, 0, 0); err != nil {
+		b.Error(err.Error())
+	}
+	LoadString(l, "table.sort(a)")
+	b.ResetTimer()
+	if err := ProtectedCall(l, 0, 0, 0); err != nil {
+		b.Error(err.Error())
 	}
 }
 

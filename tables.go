@@ -9,6 +9,7 @@ type table struct {
 	hash      map[value]value
 	metaTable *table
 	flags     byte
+	occupancy int
 }
 
 func newTable() *table                     { return &table{hash: make(map[value]value)} }
@@ -45,8 +46,19 @@ func (t *table) atInt(k int) value {
 }
 
 func (t *table) putAtInt(k int, v value) {
-	if 0 < k && k <= len(t.array) {
+	updateArray := func() {
+		if old := t.array[k-1]; old == nil && v != nil {
+			t.occupancy++
+		} else if old != nil && v == nil {
+			t.occupancy--
+		}
 		t.array[k-1] = v
+	}
+	if 0 < k && k <= len(t.array) {
+		updateArray()
+	} else if k > 0 && t.occupancy >= len(t.array)>>1 { // TODO temporary hack
+		t.extendArray(k)
+		updateArray()
 	} else {
 		t.hash[float64(k)] = v
 	}
