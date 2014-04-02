@@ -56,8 +56,8 @@ func (t *table) putAtInt(k int, v value) {
 	}
 	if 0 < k && k <= len(t.array) {
 		updateArray()
-	} else if k > 0 && t.occupancy >= len(t.array)>>1 { // TODO temporary hack
-		t.extendArray(k)
+	} else if k > 0 && t.occupancy >= len(t.array)>>1 {
+		t.extendArray(max(k, t.occupancy*2))
 		updateArray()
 	} else {
 		t.hash[float64(k)] = v

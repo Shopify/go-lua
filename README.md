@@ -10,8 +10,8 @@ The motivation is to enable simple scripting of Go applications. Two immediate t
 Status
 ------
 
-The core VM and compiler has been ported and tested. The compiler is able to correctly process all Lua source files from the [Lua test suite](http://www.lua.org/tests/5.2/). The VM has been tested to correctly execute `bitwise.lua`, `math.lua`, `attrib.lua` and most of `goto.lua` and `closure.lua`.
+The core VM and compiler has been ported and tested. The compiler is able to correctly process all Lua source files from the [Lua test suite](http://www.lua.org/tests/5.2/). The VM has been tested to correctly execute over a third of the Lua test cases.
 
-The following Lua libraries are implemented: `base`, `bit32`, `math`, along with parts of `string` and `table`.
+Most core Lua libraries are at least partially implemented. Prominent exceptions are regular expressions, coroutines and `string.dump`.
 
 Weak reference tables are not and will not be supported. go-lua uses the Go heap for Lua objects, and Go does not support weak references.

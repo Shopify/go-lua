@@ -545,9 +545,11 @@ func (l *State) execute() {
 				b = n // get all var arguments
 				l.checkStack(n)
 				l.top = ci.base() + a + n
-				frame = l.stack[ci.base():l.top]
-				ci.setTop(l.top)
-				ci.frame = frame
+				if ci.top() < l.top {
+					ci.setTop(l.top)
+					ci.frame = l.stack[ci.base():ci.top()]
+				}
+				frame = ci.frame
 			}
 			for j := 0; j < b; j++ {
 				if j < n {
