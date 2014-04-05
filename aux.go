@@ -8,6 +8,74 @@ import (
 	"strings"
 )
 
+func functionName(l *State, d *Debug) string {
+	switch {
+	case d.NameKind != "":
+		return fmt.Sprintf("function '%s'", d.Name)
+	case d.What == "main":
+		return "main chunk"
+	case d.What == "Go":
+		if pushGlobalFunctionName(l, d) {
+			s, _ := ToString(l, -1)
+			Pop(l, 1)
+			return fmt.Sprintf("function '%s'", s)
+		} else {
+			return "?"
+		}
+	}
+	return fmt.Sprintf("function <%s:%d>", d.ShortSource, d.LineDefined)
+}
+
+func countLevels(l *State) int {
+	var d Debug
+	li, le := 1, 1
+	for Stack(l, le, &d) {
+		li = le
+		le *= 2
+	}
+	for li < le {
+		m := (li + le)/2
+		if Stack(l, m, &d) {
+			li = m + 1
+		} else {
+			le = m
+		}
+	}
+	return le - 1
+}
+
+func Traceback(l, l1 *State, message string, level int) {
+	const levels1, levels2 = 12, 10
+	levels := countLevels(l1)
+	mark := 0
+	if levels > levels1+levels2 {
+		mark = levels1
+	}
+	buf := message
+	if buf != "" {
+		buf += "\n"
+	}
+	buf += "stack traceback:"
+	var d Debug
+	for Stack(l1, level, &d) {
+		if level++; level == mark {
+			buf += "\n\t..."
+			level = levels - levels2
+		} else {
+			Info(l1, "Slnt", &d)
+			buf += "\n\t" + d.ShortSource + ":"
+			if d.CurrentLine > 0 {
+				buf += fmt.Sprintf("%d:", d.CurrentLine)
+			}
+			buf += " in " + functionName(l, &d)
+			if d.IsTailCall {
+				buf += "\n\t(...tail calls...)"
+			}
+		}
+	}
+	PushString(l, buf)
+}
+
 func MetaField(l *State, index int, event string) bool {
 	if !MetaTable(l, index) {
 		return false

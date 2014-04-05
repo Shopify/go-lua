@@ -124,7 +124,7 @@ func (l *State) callBinaryTagMethod(p1, p2 value, event tm) (value, bool) {
 	if tm == nil {
 		return nil, false
 	}
-	return l.callTagMethod(tm.(*luaClosure), p1, p2), true
+	return l.callTagMethod(tm, p1, p2), true
 }
 
 func (l *State) callOrderTagMethod(left, right value, event tm) (bool, bool) {
@@ -220,7 +220,7 @@ func (l *State) traceExecution() {
 		l.hook(HookCount, -1)
 	}
 	if mask&MaskLine != 0 {
-		p := l.stack[callInfo.function()].(*luaClosure).prototype
+		p := l.prototype(callInfo)
 		npc := callInfo.savedPC - 1
 		newline := p.lineInfo[npc]
 		if npc == 0 || callInfo.savedPC <= l.oldPC || newline != p.lineInfo[l.oldPC-1] {

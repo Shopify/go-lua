@@ -12,4 +12,5 @@ const (
 	firstPseudoIndex = -maxStack - 1000
 	maxUpValue       = math.MaxUint8
 	idSize           = 60
+	apiCheck         = false
 )

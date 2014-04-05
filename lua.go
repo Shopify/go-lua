@@ -90,7 +90,7 @@ type Debug struct {
 	Name                                      string
 	NameKind                                  string // "global", "local", "field", "method"
 	What                                      string // "Lua", "Go", "main", "tail"
-	Source                                    string
+	Source, ShortSource                       string
 	CurrentLine, LineDefined, LastLineDefined int
 	UpValueCount, ParameterCount              int
 	IsVarArg, IsTailCall                      bool
@@ -198,29 +198,30 @@ func (l *State) adjustResults(resultCount int) {
 	}
 }
 
-func apiCheck(condition bool, message string) {
-	if !condition {
-		panic(message)
-	}
-}
-
 func (l *State) apiIncrementTop() {
 	l.top++
-	apiCheck(l.top <= l.callInfo.top(), "stack overflow")
+	if apiCheck && l.top > l.callInfo.top() {
+		panic("stack overflow")
+	}
 }
 
 func (l *State) apiPush(v value) {
 	l.push(v)
-	apiCheck(l.top <= l.callInfo.top(), "stack overflow")
+	if apiCheck && l.top > l.callInfo.top() {
+		panic("stack overflow")
+	}
 }
 
 func (l *State) checkElementCount(n int) {
-	apiCheck(n < l.top-l.callInfo.function(), "not enough elements in the stack")
+	if apiCheck && n >= l.top-l.callInfo.function() {
+		panic("not enough elements in the stack")
+	}
 }
 
 func (l *State) checkResults(argCount, resultCount int) {
-	apiCheck(resultCount == MultipleReturns || l.callInfo.top()-l.top >= resultCount-argCount,
-		"results from function overflow current stack size")
+	if apiCheck && resultCount != MultipleReturns && l.callInfo.top()-l.top < resultCount-argCount {
+		panic("results from function overflow current stack size")
+	}
 }
 
 // Context is called y a continuation function to retrieve the status of the
@@ -243,9 +244,13 @@ func Context(l *State) (int, bool, error) {
 //
 // http://www.lua.org/manual/5.2/manual.html#lua_callk
 func CallWithContinuation(l *State, argCount, resultCount, context int, continuation Function) {
-	apiCheck(continuation == nil || !l.callInfo.isLua(), "cannot use continuations inside hooks")
+	if apiCheck && continuation != nil && l.callInfo.isLua() {
+		panic("cannot use continuations inside hooks")
+	}
 	l.checkElementCount(argCount + 1)
-	apiCheck(!l.shouldYield, "cannot do calls on non-normal thread")
+	if apiCheck && l.shouldYield {
+		panic("cannot do calls on non-normal thread")
+	}
 	l.checkResults(argCount, resultCount)
 	f := l.top - (argCount + 1)
 	if continuation != nil && l.nonYieldableCallCount == 0 { // need to prepare continuation?
@@ -295,9 +300,13 @@ func ProtectedCall(l *State, argCount, resultCount, errorFunction int) error {
 //
 // http://www.lua.org/manual/5.2/manual.html#lua_pcallk
 func ProtectedCallWithContinuation(l *State, argCount, resultCount, errorFunction, context int, continuation Function) (err error) {
-	apiCheck(continuation == nil || !l.callInfo.isLua(), "cannot use continuations inside hooks")
+	if apiCheck && continuation != nil && l.callInfo.isLua() {
+		panic("cannot use continuations inside hooks")
+	}
 	l.checkElementCount(argCount + 1)
-	apiCheck(!l.shouldYield, "cannot do calls on non-normal thread")
+	if apiCheck && l.shouldYield {
+		panic("cannot do calls on non-normal thread")
+	}
 	l.checkResults(argCount, resultCount)
 	if errorFunction != 0 {
 		apiCheckStackIndex(errorFunction, l.indexToValue(errorFunction))
@@ -357,7 +366,9 @@ func NewState() *State {
 }
 
 func apiCheckStackIndex(index int, v value) {
-	apiCheck(v != none && !isPseudoIndex(index), fmt.Sprintf("index %d not in the stack", index))
+	if apiCheck && (v == none || isPseudoIndex(index)) {
+		panic(fmt.Sprintf("index %d not in the stack", index))
+	}
 }
 
 // SetField does the equivalent of `table[key]=v`, where `table` is the value
@@ -381,22 +392,18 @@ func (l *State) indexToValue(index int) value {
 	switch callInfo := l.callInfo; {
 	case index > 0:
 		// TODO are these checks necessary? Can we just return l.callInfo[index]?
-		apiCheck(index <= callInfo.top()-(callInfo.function()+1), "unacceptable index")
+		// apiCheck(index <= callInfo.top()-(callInfo.function()+1), "unacceptable index")
 		if i := callInfo.function() + index; i < l.top {
 			return l.stack[i]
 		}
 		return none
 	case !isPseudoIndex(index): // negative index
-		apiCheck(index != 0 && -index <= l.top-(callInfo.function()+1), "invalid index")
+		// TODO apiCheck(index != 0 && -index <= l.top-(callInfo.function()+1), "invalid index")
 		return l.stack[l.top+index]
 	case index == RegistryIndex:
 		return l.global.registry
 	default: // upvalues
 		i := RegistryIndex - index
-		apiCheck(i <= maxUpValue+1, "upvalue index too large")
-		if _, ok := l.stack[callInfo.function()].(*goFunction); ok {
-			return none // light Go functions have no upvalues
-		}
 		if closure := l.stack[callInfo.function()].(*goClosure); i <= len(closure.upValues) {
 			return closure.upValues[i-1]
 		}
@@ -407,24 +414,18 @@ func (l *State) indexToValue(index int) value {
 func (l *State) setIndexToValue(index int, v value) {
 	switch callInfo := l.callInfo; {
 	case index > 0:
-		// TODO are these checks necessary? Can we just return l.callInfo[index]?
-		apiCheck(index <= callInfo.top()-(callInfo.function()+1), "unacceptable index")
+		// TODO are these checks necessary? Can we just return l.callInfo[index-1]?
 		if i := callInfo.function() + index; i < l.top {
 			l.stack[i] = v
 		} else {
 			panic("unacceptable index")
 		}
 	case !isPseudoIndex(index): // negative index
-		apiCheck(index != 0 && -index <= l.top-(callInfo.function()+1), "invalid index")
 		l.stack[l.top+index] = v
 	case index == RegistryIndex:
 		l.global.registry = v.(*table)
 	default: // upvalues
 		i := RegistryIndex - index
-		apiCheck(i <= maxUpValue+1, "upvalue index too large")
-		if _, ok := l.stack[callInfo.function()].(*goFunction); ok {
-			panic("light Go functions have no upvalues")
-		}
 		if closure := l.stack[callInfo.function()].(*goClosure); i <= len(closure.upValues) {
 			closure.upValues[i-1] = v
 		} else {
@@ -455,13 +456,17 @@ func AbsIndex(l *State, index int) int {
 func SetTop(l *State, index int) {
 	f := l.callInfo.function()
 	if index >= 0 {
-		apiCheck(index <= l.stackLast-(f+1), "new top too large")
+		if apiCheck && index > l.stackLast-(f+1) {
+			panic("new top too large")
+		}
 		i := l.top
 		for l.top = f + 1 + index; i < l.top; i++ {
 			l.stack[i] = nil
 		}
 	} else {
-		apiCheck(-(index+1) <= l.top-(f+1), "invalid new top")
+		if apiCheck && -(index+1) > l.top-(f+1) {
+			panic("invalid new top")
+		}
 		l.top += index + 1 // 'subtract' index (index is negative)
 	}
 }
@@ -646,7 +651,7 @@ func Compare(l *State, index1, index2 int, op ComparisonOperator) bool {
 		case OpLE:
 			return l.lessOrEqual(o1, o2)
 		default:
-			apiCheck(false, "invalid option")
+			panic("invalid option")
 		}
 	}
 	return false
@@ -896,8 +901,7 @@ func Field(l *State, index int, name string) {
 //
 // http://www.lua.org/manual/5.2/manual.html#lua_rawget
 func RawGet(l *State, index int) {
-	t, ok := l.indexToValue(index).(*table)
-	apiCheck(ok, "table expected")
+	t := l.indexToValue(index).(*table)
 	l.stack[l.top-1] = t.at(l.stack[l.top-1])
 }
 
@@ -907,8 +911,7 @@ func RawGet(l *State, index int) {
 //
 // http://www.lua.org/manual/5.2/manual.html#lua_rawgeti
 func RawGetInt(l *State, index, key int) {
-	t, ok := l.indexToValue(index).(*table)
-	apiCheck(ok, "table expected")
+	t := l.indexToValue(index).(*table)
 	l.apiPush(t.atInt(key))
 }
 
@@ -918,8 +921,7 @@ func RawGetInt(l *State, index, key int) {
 //
 // http://www.lua.org/manual/5.2/manual.html#lua_rawgetp
 func RawGetValue(l *State, index int, p interface{}) {
-	t, ok := l.indexToValue(index).(*table)
-	apiCheck(ok, "table expected")
+	t := l.indexToValue(index).(*table)
 	l.apiPush(t.at(p))
 }
 
@@ -963,8 +965,7 @@ func MetaTable(l *State, index int) bool {
 //
 // http://www.lua.org/manual/5.2/manual.html#lua_getuservalue
 func UserValue(l *State, index int) {
-	d, ok := l.indexToValue(index).(*userData)
-	apiCheck(ok, "userdata expected")
+	d := l.indexToValue(index).(*userData)
 	l.apiPush(d.env)
 }
 
@@ -1000,8 +1001,7 @@ func SetTable(l *State, index int) {
 // http://www.lua.org/manual/5.2/manual.html#lua_rawset
 func RawSet(l *State, index int) {
 	l.checkElementCount(2)
-	t, ok := l.indexToValue(index).(*table)
-	apiCheck(ok, "table expected")
+	t := l.indexToValue(index).(*table)
 	t.put(l, l.stack[l.top-2], l.stack[l.top-1])
 	t.invalidateTagMethodCache()
 	l.top -= 2
@@ -1016,8 +1016,7 @@ func RawSet(l *State, index int) {
 // http://www.lua.org/manual/5.2/manual.html#lua_rawseti
 func RawSetInt(l *State, index, key int) {
 	l.checkElementCount(1)
-	t, ok := l.indexToValue(index).(*table)
-	apiCheck(ok, "table expected")
+	t := l.indexToValue(index).(*table)
 	t.putAtInt(key, l.stack[l.top-1])
 	l.top--
 }
@@ -1028,13 +1027,11 @@ func RawSetInt(l *State, index, key int) {
 // http://www.lua.org/manual/5.2/manual.html#lua_setuservalue
 func SetUserValue(l *State, index int) {
 	l.checkElementCount(1)
-	d, ok := l.indexToValue(index).(*userData)
-	apiCheck(ok, "userdata expected")
+	d := l.indexToValue(index).(*userData)
 	if l.stack[l.top-1] == nil {
 		d.env = nil
 	} else {
-		t, ok := l.stack[l.top-1].(*table)
-		apiCheck(ok, "table expected")
+		t := l.stack[l.top-1].(*table)
 		d.env = t
 	}
 	l.top--
@@ -1047,7 +1044,9 @@ func SetUserValue(l *State, index int) {
 func SetMetaTable(l *State, index int) {
 	l.checkElementCount(1)
 	mt, ok := l.stack[l.top-1].(*table)
-	apiCheck(ok || l.stack[l.top-1] == nil, "table expected")
+	if apiCheck && !ok && l.stack[l.top-1] != nil {
+		panic("table expected")
+	}
 	switch v := l.indexToValue(index).(type) {
 	case *table:
 		v.metaTable = mt
@@ -1084,8 +1083,7 @@ func Error(l *State) {
 //
 // http://www.lua.org/manual/5.2/manual.html#lua_next
 func Next(l *State, index int) bool {
-	t, ok := l.indexToValue(index).(*table)
-	apiCheck(ok, "table expected")
+	t := l.indexToValue(index).(*table)
 	if l.next(t, l.top-1) {
 		l.apiIncrementTop()
 		return true
@@ -1185,10 +1183,7 @@ func SetUpValue(l *State, function, index int) (name string, ok bool) {
 }
 
 func (l *State) upValue(f, n int) **upValue {
-	fun, ok := l.indexToValue(f).(*luaClosure)
-	apiCheck(ok, "Lua function expected")
-	apiCheck(1 <= n && n <= len(fun.prototype.upValues), "invalid upvalue index")
-	return &fun.upValues[n-1]
+	return &l.indexToValue(f).(*luaClosure).upValues[n-1]
 }
 
 func UpValueId(l *State, f, n int) interface{} {
@@ -1196,11 +1191,9 @@ func UpValueId(l *State, f, n int) interface{} {
 	case *luaClosure:
 		return *l.upValue(f, n)
 	case *goClosure:
-		apiCheck(1 <= n && n <= fun.upValueCount(), "invalid upvalue index")
 		return &fun.upValues[n-1]
 	}
-	apiCheck(false, "closure expected")
-	panic("unreachable")
+	panic("closure expected")
 }
 
 func UpValueJoin(l *State, f1, n1, f2, n2 int) {

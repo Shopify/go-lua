@@ -178,6 +178,7 @@ func functionInfo(d *Debug, f closure) {
 			d.What = "main"
 		}
 	}
+	d.ShortSource = chunkID(d.Source)
 }
 
 func (l *State) functionName(ci callInfo) (name, kind string) {
@@ -246,7 +247,7 @@ func Info(l *State, what string, d *Debug) bool {
 			f = fun
 		case *goFunction:
 		default:
-			apiCheck(false, "function expected")
+			panic("function expected")
 		}
 		what = what[1:] // skip the '>'
 		l.top--         // pop function
@@ -484,7 +485,17 @@ var debugLibrary = []RegistryFunction{
 		return 1
 	}},
 	{"setupvalue", upValueHelper(SetUpValue, 1)},
-	// {"traceback", db_traceback},
+	{"traceback", func(l *State) int {
+		i, l1 := threadArg(l)
+		if s, ok := ToString(l, i+1); !ok && !IsNoneOrNil(l, i+1) {
+			PushValue(l, i+1)
+		} else if l == l1 {
+			Traceback(l, l, s, OptInteger(l, i+2, 1))
+		} else {
+			Traceback(l, l1, s, OptInteger(l, i+2, 0))
+		}
+		return 1
+	}},
 }
 
 func DebugOpen(l *State) int {
