@@ -6,11 +6,11 @@ import (
 )
 
 func (l *State) resetHookCount() { l.hookCount = l.baseHookCount }
-func (l *State) prototype(ci callInfo) *prototype {
-	return l.stack[ci.function()].(*luaClosure).prototype
+func (l *State) prototype(ci *callInfo) *prototype {
+	return l.stack[ci.function].(*luaClosure).prototype
 }
-func (l *State) currentLine(ci callInfo) int {
-	return int(l.prototype(ci).lineInfo[ci.(*luaCallInfo).savedPC])
+func (l *State) currentLine(ci *callInfo) int {
+	return int(l.prototype(ci).lineInfo[ci.savedPC])
 }
 
 func chunkID(source string) string {
@@ -35,8 +35,8 @@ func chunkID(source string) string {
 
 func (l *State) runtimeError(message string) {
 	l.push(message)
-	if l.callInfo.isLua() {
-		line, source := l.currentLine(l.callInfo), l.prototype(l.callInfo).source
+	if ci := l.callInfo; ci.isLua() {
+		line, source := l.currentLine(ci), l.prototype(ci).source
 		if source == "" {
 			source = "?"
 		} else {
@@ -49,8 +49,8 @@ func (l *State) runtimeError(message string) {
 
 func (l *State) typeError(v value, operation string) {
 	typeName := TypeName(l, l.valueToType(v))
-	if l.callInfo.isLua() {
-		c := l.stack[l.callInfo.function()].(*luaClosure)
+	if ci := l.callInfo; ci.isLua() {
+		c := l.stack[ci.function].(*luaClosure)
 		var kind, name string
 		isUpValue := func() bool {
 			for i, uv := range c.upValues {
@@ -63,7 +63,7 @@ func (l *State) typeError(v value, operation string) {
 		}
 		frameIndex := 0
 		isInStack := func() bool {
-			for i, e := range l.callInfo.(*luaCallInfo).frame {
+			for i, e := range ci.frame {
 				if e == v {
 					frameIndex = i
 					return true
@@ -72,7 +72,7 @@ func (l *State) typeError(v value, operation string) {
 			return false
 		}
 		if !isUpValue() && isInStack() {
-			kind, name = c.prototype.objectName(frameIndex, l.callInfo.(*luaCallInfo).savedPC)
+			kind, name = c.prototype.objectName(frameIndex, ci.savedPC)
 		}
 		if kind != "" {
 			l.runtimeError(fmt.Sprintf("attempt to %s %s '%s' (a %s value)", operation, kind, name, typeName))
@@ -135,7 +135,7 @@ func SetHooker(l *State, f Hook, mask byte, count int) {
 	if f == nil || mask == 0 {
 		f, mask = nil, 0
 	}
-	if ci, ok := l.callInfo.(*luaCallInfo); ok {
+	if ci := l.callInfo; ci.isLua() {
 		l.oldPC = ci.savedPC
 	}
 	l.hooker, l.baseHookCount = f, count
@@ -153,7 +153,7 @@ func Stack(l *State, level int, d *Debug) (ok bool) {
 		return // invalid (negative) level
 	}
 	callInfo := l.callInfo
-	for ; level > 0 && callInfo != &l.baseCallInfo; level, callInfo = level-1, callInfo.previous() {
+	for ; level > 0 && callInfo != &l.baseCallInfo; level, callInfo = level-1, callInfo.previous {
 	}
 	if level == 0 && callInfo != &l.baseCallInfo { // level found?
 		d.callInfo, ok = callInfo, true
@@ -181,10 +181,10 @@ func functionInfo(d *Debug, f closure) {
 	d.ShortSource = chunkID(d.Source)
 }
 
-func (l *State) functionName(ci callInfo) (name, kind string) {
+func (l *State) functionName(ci *callInfo) (name, kind string) {
 	var tm tm
 	p := l.prototype(ci)
-	pc := ci.(*luaCallInfo).savedPC
+	pc := ci.savedPC
 	switch i := p.code[pc]; i.opCode() {
 	case opCall, opTailCall:
 		return p.objectName(i.a(), pc)
@@ -239,7 +239,7 @@ func (l *State) collectValidLines(f closure) {
 func Info(l *State, what string, d *Debug) bool {
 	var f closure
 	var fun value
-	var callInfo callInfo
+	var callInfo *callInfo
 	if what[0] == '>' {
 		fun = l.stack[l.top-1]
 		switch fun := fun.(type) {
@@ -253,7 +253,7 @@ func Info(l *State, what string, d *Debug) bool {
 		l.top--         // pop function
 	} else {
 		callInfo = d.callInfo
-		fun = l.stack[callInfo.function()]
+		fun = l.stack[callInfo.function]
 		switch fun := fun.(type) {
 		case closure:
 			f = fun
@@ -286,11 +286,11 @@ func Info(l *State, what string, d *Debug) bool {
 				d.ParameterCount = lf.prototype.parameterCount
 			}
 		case 't':
-			d.IsTailCall = callInfo != nil && callInfo.callStatus()&callStatusTail != 0
+			d.IsTailCall = callInfo != nil && callInfo.isCallStatus(callStatusTail)
 		case 'n':
 			// calling function is a known Lua function?
-			if callInfo != nil && !callInfo.isCallStatus(callStatusTail) && callInfo.previous().isLua() {
-				d.Name, d.NameKind = l.functionName(callInfo.previous())
+			if callInfo != nil && !callInfo.isCallStatus(callStatusTail) && callInfo.previous.isLua() {
+				d.Name, d.NameKind = l.functionName(callInfo.previous)
 			} else {
 				d.NameKind = ""
 			}

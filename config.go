@@ -13,4 +13,5 @@ const (
 	maxUpValue       = math.MaxUint8
 	idSize           = 60
 	apiCheck         = false
+	internalCheck    = false
 )

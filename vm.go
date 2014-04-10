@@ -7,11 +7,12 @@ import (
 )
 
 func (l *State) arith(rb, rc value, op tm) value {
-	b, bok := l.toNumber(rb)
-	c, cok := l.toNumber(rc)
-	if bok && cok {
-		return arith(Operator(op-tmAdd)+OpAdd, b, c)
-	} else if result, ok := l.callBinaryTagMethod(rb, rc, op); ok {
+	if b, ok := l.toNumber(rb); ok {
+		if c, ok := l.toNumber(rc); ok {
+			return arith(Operator(op-tmAdd)+OpAdd, b, c)
+		}
+	}
+	if result, ok := l.callBinaryTagMethod(rb, rc, op); ok {
 		return result
 	}
 	l.arithError(rb, rc)
@@ -44,14 +45,12 @@ func (l *State) setTableAt(t value, key value, val value) {
 	for loop := 0; loop < maxTagLoop; loop++ {
 		var tm value
 		if table, ok := t.(*table); ok {
-			if oldValue := table.at(key); oldValue != nil {
+			if table.tryPut(l, key, val) {
 				// previous non-nil value ==> metamethod irrelevant
+				table.invalidateTagMethodCache()
+				return
 			} else if tm = l.fastTagMethod(table.metaTable, tmNewIndex); tm == nil {
 				// no metamethod
-			} else {
-				ok = false
-			}
-			if ok {
 				table.put(l, key, val)
 				table.invalidateTagMethodCache()
 				return
@@ -133,11 +132,16 @@ func (l *State) callOrderTagMethod(left, right value, event tm) (bool, bool) {
 }
 
 func (l *State) lessThan(left, right value) bool {
-	if lf, rf, ok := pairAsNumbers(left, right); ok {
-		return lf < rf
-	} else if ls, rs, ok := pairAsStrings(left, right); ok {
-		return ls < rs
-	} else if result, ok := l.callOrderTagMethod(left, right, tmLT); ok {
+	if lf, ok := left.(float64); ok {
+		if rf, ok := right.(float64); ok {
+			return lf < rf
+		}
+	} else if ls, ok := left.(string); ok {
+		if rs, ok := right.(string); ok {
+			return ls < rs
+		}
+	}
+	if result, ok := l.callOrderTagMethod(left, right, tmLT); ok {
 		return result
 	}
 	l.orderError(left, right)
@@ -145,11 +149,16 @@ func (l *State) lessThan(left, right value) bool {
 }
 
 func (l *State) lessOrEqual(left, right value) bool {
-	if lf, rf, ok := pairAsNumbers(left, right); ok {
-		return lf <= rf
-	} else if ls, rs, ok := pairAsStrings(left, right); ok {
-		return ls <= rs
-	} else if result, ok := l.callOrderTagMethod(left, right, tmLE); ok {
+	if lf, ok := left.(float64); ok {
+		if rf, ok := right.(float64); ok {
+			return lf <= rf
+		}
+	} else if ls, ok := left.(string); ok {
+		if rs, ok := right.(string); ok {
+			return ls <= rs
+		}
+	}
+	if result, ok := l.callOrderTagMethod(left, right, tmLE); ok {
 		return result
 	} else if result, ok := l.callOrderTagMethod(right, left, tmLT); ok {
 		return !result
@@ -206,7 +215,7 @@ func (l *State) concat(total int) {
 }
 
 func (l *State) traceExecution() {
-	callInfo := l.callInfo.(*luaCallInfo)
+	callInfo := l.callInfo
 	mask := l.hookMask
 	countHook := mask&MaskCount != 0 && l.hookCount == 0
 	if countHook {
@@ -234,22 +243,443 @@ func (l *State) traceExecution() {
 		}
 		callInfo.savedPC--
 		callInfo.setCallStatus(callStatusHookYielded)
-		callInfo.function_ = l.top - 1
+		callInfo.function = l.top - 1
 		panic("Not implemented - use goroutines to emulate yield")
 	}
 }
 
-func (l *State) execute() {
+type engine struct {
+	frame     []value
+	closure   *luaClosure
+	constants []value
+	callInfo  *callInfo
+	l         *State
+}
+
+func (e *engine) k(field int) value {
+	if 0 != field&bitRK { // OPT: Inline isConstant(field).
+		return e.constants[field & ^bitRK] // OPT: Inline constantIndex(field).
+	}
+	return e.frame[field]
+}
+
+func (e *engine) jump(i instruction) {
+	if a := i.a(); a > 0 {
+		e.l.close(e.callInfo.stackIndex(a - 1))
+	}
+	e.callInfo.jump(i.sbx())
+}
+
+func (e *engine) condJump(cond bool) {
+	if cond {
+		e.jump(e.callInfo.step())
+	} else {
+		e.callInfo.skip()
+	}
+}
+
+func (e *engine) expectNext(expected opCode) instruction {
+	i := e.callInfo.step() // go to next instruction
+	if op := i.opCode(); op != expected {
+		panic(fmt.Sprintf("expected opcode %s, got %s", opNames[expected], opNames[op]))
+	}
+	return i
+}
+
+func clear(r []value) {
+	for i := range r {
+		r[i] = nil
+	}
+}
+
+func (e *engine) newFrame() {
+	ci := e.callInfo
+	// if internalCheck {
+	// 	e.l.assert(ci == e.l.callInfo.variant)
+	// }
+	e.frame = ci.frame
+	e.closure = e.l.stack[ci.function].(*luaClosure)
+	e.constants = e.closure.prototype.constants
+}
+
+func (e *engine) protect(v value) value {
+	e.frame = e.callInfo.frame
+	return v
+}
+
+var jumpTable []func(*engine, instruction)
+
+func init() {
+	jumpTable = []func(*engine, instruction){
+		func(e *engine, i instruction) { e.frame[i.a()] = e.frame[i.b()] },      // opMove
+		func(e *engine, i instruction) { e.frame[i.a()] = e.constants[i.bx()] }, // opLoadConstant
+		func(e *engine, i instruction) { // opLoadConstantEx
+			e.frame[i.a()] = e.constants[e.expectNext(opExtraArg).ax()]
+		},
+		func(e *engine, i instruction) { // opLoadBool
+			e.frame[i.a()] = i.b() != 0
+			if i.c() != 0 {
+				e.callInfo.skip()
+			}
+		},
+		func(e *engine, i instruction) { a, b := i.a(), i.b(); clear(e.frame[a : a+b+1]) }, // opLoadNil
+		func(e *engine, i instruction) { e.frame[i.a()] = e.closure.upValue(i.b()) },       // opGetUpValue
+		func(e *engine, i instruction) { // opGetTableUp
+			e.frame[i.a()] = e.protect(e.l.tableAt(e.closure.upValue(i.b()), e.k(i.c())))
+		},
+		func(e *engine, i instruction) { // opGetTable
+			e.frame[i.a()] = e.protect(e.l.tableAt(e.frame[i.b()], e.k(i.c())))
+		},
+		func(e *engine, i instruction) { // opSetTableUp
+			e.l.setTableAt(e.closure.upValue(i.a()), e.k(i.b()), e.k(i.c()))
+			e.frame = e.callInfo.frame
+		},
+		func(e *engine, i instruction) { e.closure.setUpValue(i.b(), e.frame[i.a()]) }, // opSetUpValue
+		func(e *engine, i instruction) { // opSetTable
+			e.l.setTableAt(e.frame[i.a()], e.k(i.b()), e.k(i.c()))
+			e.frame = e.callInfo.frame
+		},
+		func(e *engine, i instruction) { // opNewTable
+			a := i.a()
+			if b, c := float8(i.b()), float8(i.c()); b != 0 || c != 0 {
+				e.frame[a] = newTableWithSize(intFromFloat8(b), intFromFloat8(c))
+			} else {
+				e.frame[a] = newTable()
+			}
+			clear(e.frame[a+1:])
+		},
+		func(e *engine, i instruction) { // opSelf
+			a, t := i.a(), e.frame[i.b()]
+			e.frame[a+1], e.frame[a] = t, e.protect(e.l.tableAt(t, e.k(i.c())))
+		},
+		func(e *engine, i instruction) { // opAdd
+			b := e.k(i.b())
+			c := e.k(i.c())
+			if nb, ok := b.(float64); ok {
+				if nc, ok := c.(float64); ok {
+					e.frame[i.a()] = nb + nc
+					return
+				}
+			}
+			e.frame[i.a()] = e.protect(e.l.arith(b, c, tmAdd))
+		},
+		func(e *engine, i instruction) { // opSub
+			b := e.k(i.b())
+			c := e.k(i.c())
+			if nb, ok := b.(float64); ok {
+				if nc, ok := c.(float64); ok {
+					e.frame[i.a()] = nb - nc
+					return
+				}
+			}
+			e.frame[i.a()] = e.protect(e.l.arith(b, c, tmSub))
+		},
+		func(e *engine, i instruction) { // opMul
+			b := e.k(i.b())
+			c := e.k(i.c())
+			if nb, ok := b.(float64); ok {
+				if nc, ok := c.(float64); ok {
+					e.frame[i.a()] = nb * nc
+					return
+				}
+			}
+			e.frame[i.a()] = e.protect(e.l.arith(b, c, tmMul))
+		},
+		func(e *engine, i instruction) { // opDiv
+			b := e.k(i.b())
+			c := e.k(i.c())
+			if nb, ok := b.(float64); ok {
+				if nc, ok := c.(float64); ok {
+					e.frame[i.a()] = nb / nc
+					return
+				}
+			}
+			e.frame[i.a()] = e.protect(e.l.arith(b, c, tmDiv))
+		},
+		func(e *engine, i instruction) { // opMod
+			b := e.k(i.b())
+			c := e.k(i.c())
+			if nb, ok := b.(float64); ok {
+				if nc, ok := c.(float64); ok {
+					e.frame[i.a()] = math.Mod(nb, nc)
+					return
+				}
+			}
+			e.frame[i.a()] = e.protect(e.l.arith(b, c, tmMod))
+		},
+		func(e *engine, i instruction) { // opPow
+			b := e.k(i.b())
+			c := e.k(i.c())
+			if nb, ok := b.(float64); ok {
+				if nc, ok := c.(float64); ok {
+					e.frame[i.a()] = math.Pow(nb, nc)
+					return
+				}
+			}
+			e.frame[i.a()] = e.protect(e.l.arith(b, c, tmPow))
+		},
+		func(e *engine, i instruction) { // opUnaryMinus
+			switch b := e.frame[i.b()].(type) {
+			case float64:
+				e.frame[i.a()] = -b
+			default:
+				e.frame[i.a()] = e.protect(e.l.arith(b, b, tmUnaryMinus))
+			}
+		},
+		func(e *engine, i instruction) { e.frame[i.a()] = isFalse(e.frame[i.b()]) }, // opNot
+		func(e *engine, i instruction) { // opLength
+			e.frame[i.a()] = e.protect(e.l.objectLength(e.frame[i.b()]))
+		},
+		func(e *engine, i instruction) { // opConcat
+			a, b, c := i.a(), i.b(), i.c()
+			e.l.top = e.callInfo.stackIndex(c + 1) // mark the end of concat operands
+			e.l.concat(c - b + 1)
+			e.frame = e.callInfo.frame
+			e.frame[a] = e.frame[b]
+			if a >= b { // limit of live values
+				clear(e.frame[a+1:])
+			} else {
+				clear(e.frame[b:])
+			}
+		},
+		func(e *engine, i instruction) { e.jump(i) }, // opJump
+		func(e *engine, i instruction) { // opEqual
+			test := i.a() != 0
+			e.condJump(e.l.equalObjects(e.k(i.b()), e.k(i.c())) == test)
+			e.frame = e.callInfo.frame
+		},
+		func(e *engine, i instruction) { // opLessThan
+			test := i.a() != 0
+			e.condJump(e.l.lessThan(e.k(i.b()), e.k(i.c())) == test)
+			e.frame = e.callInfo.frame
+		},
+		func(e *engine, i instruction) { // opLessOrEqual
+			test := i.a() != 0
+			e.condJump(e.l.lessOrEqual(e.k(i.b()), e.k(i.c())) == test)
+			e.frame = e.callInfo.frame
+		},
+		func(e *engine, i instruction) { // opTest
+			if i.c() == 0 {
+				e.condJump(isFalse(e.frame[i.a()]))
+			} else {
+				e.condJump(!isFalse(e.frame[i.a()]))
+			}
+		},
+		func(e *engine, i instruction) { // opTestSet
+			if b, c := e.frame[i.b()], i.c(); c == 0 && isFalse(b) {
+				e.frame[i.a()] = b
+				e.jump(e.callInfo.step())
+			} else if c != 0 && !isFalse(b) {
+				e.frame[i.a()] = b
+				e.jump(e.callInfo.step())
+			} else {
+				e.callInfo.skip()
+			}
+		},
+		func(e *engine, i instruction) { // opCall
+			a, b, c := i.a(), i.b(), i.c()
+			if b != 0 {
+				e.l.top = e.callInfo.stackIndex(a + b)
+			} // else previous instruction set top
+			if n := c - 1; e.l.preCall(e.callInfo.stackIndex(a), n) { // go function
+				if n >= 0 {
+					e.l.top = e.callInfo.top // adjust results
+				}
+				e.frame = e.callInfo.frame
+			} else { // lua function
+				e.callInfo = e.l.callInfo
+				e.callInfo.setCallStatus(callStatusReentry)
+				e.newFrame()
+			}
+		},
+		func(e *engine, i instruction) { // opTailCall
+			a, b, c := i.a(), i.b(), i.c()
+			if b != 0 {
+				e.l.top = e.callInfo.stackIndex(a + b)
+			} // else previous instruction set top
+			e.l.assert(c-1 == MultipleReturns)
+			if e.l.preCall(e.callInfo.stackIndex(a), MultipleReturns) { // go function
+				e.frame = e.callInfo.frame
+			} else {
+				// tail call: put called frame (n) in place of caller one (o)
+				nci := e.l.callInfo                    // called frame
+				oci := nci.previous                    // caller frame
+				nfn, ofn := nci.function, oci.function // called & caller function
+				// last stack slot filled by 'precall'
+				lim := nci.base() + e.l.stack[nfn].(*luaClosure).prototype.parameterCount
+				if len(e.closure.prototype.prototypes) > 0 { // close all upvalues from previous call
+					e.l.close(oci.base())
+				}
+				// move new frame into old one
+				for i := 0; nfn+i < lim; i++ {
+					e.l.stack[ofn+i] = e.l.stack[nfn+i]
+				}
+				base := ofn + (nci.base() - nfn)  // correct base
+				oci.setTop(ofn + (e.l.top - nfn)) // correct top
+				oci.frame = e.l.stack[base:oci.top]
+				oci.savedPC = nci.savedPC
+				oci.setCallStatus(callStatusTail) // function was tail called
+				e.l.top, e.l.callInfo, e.callInfo = oci.top, oci, oci
+				e.l.assert(e.l.top == oci.base()+e.l.stack[ofn].(*luaClosure).prototype.maxStackSize)
+				e.l.assert(&oci.frame[0] == &e.l.stack[oci.base()] && len(oci.frame) == oci.top-oci.base())
+				e.newFrame()
+			}
+		},
+		func(e *engine, i instruction) { panic("unreachable") }, // opReturn
+		func(e *engine, i instruction) { // opForLoop
+			a := i.a()
+			index, limit, step := e.frame[a+0].(float64), e.frame[a+1].(float64), e.frame[a+2].(float64)
+			if index += step; (0 < step && index <= limit) || (step <= 0 && limit <= index) {
+				e.callInfo.jump(i.sbx())
+				e.frame[a+0] = index // update internal index...
+				e.frame[a+3] = index // ... and external index
+			}
+		},
+		func(e *engine, i instruction) { // opForPrep
+			a := i.a()
+			if init, ok := e.l.toNumber(e.frame[a+0]); !ok {
+				e.l.runtimeError("'for' initial value must be a number")
+			} else if limit, ok := e.l.toNumber(e.frame[a+1]); !ok {
+				e.l.runtimeError("'for' limit must be a number")
+			} else if step, ok := e.l.toNumber(e.frame[a+2]); !ok {
+				e.l.runtimeError("'for' step must be a number")
+			} else {
+				e.frame[a+0], e.frame[a+1], e.frame[a+2] = init-step, limit, step
+				e.callInfo.jump(i.sbx())
+			}
+		},
+		func(e *engine, i instruction) { // opTForCall
+			a := i.a()
+			callBase := a + 3
+			copy(e.frame[callBase:callBase+3], e.frame[a:a+3])
+			callBase += e.callInfo.base()
+			e.l.top = callBase + 3 // function + 2 args (state and index)
+			e.l.call(callBase, i.c(), true)
+			e.frame, e.l.top = e.callInfo.frame, e.callInfo.top
+			i = e.expectNext(opTForLoop)         // go to next instruction
+			if a := i.a(); e.frame[a+1] != nil { // continue loop?
+				e.frame[a] = e.frame[a+1] // save control variable
+				e.callInfo.jump(i.sbx())  // jump back
+			}
+		},
+		func(e *engine, i instruction) { // opTForLoop:
+			if a := i.a(); e.frame[a+1] != nil { // continue loop?
+				e.frame[a] = e.frame[a+1] // save control variable
+				e.callInfo.jump(i.sbx())  // jump back
+			}
+		},
+		func(e *engine, i instruction) { // opSetList:
+			a, n, c := i.a(), i.b(), i.c()
+			if n == 0 {
+				n = e.l.top - e.callInfo.stackIndex(a) - 1
+			}
+			if c == 0 {
+				c = e.expectNext(opExtraArg).ax()
+			}
+			h := e.frame[a].(*table)
+			start := (c - 1) * listItemsPerFlush
+			last := start + n
+			if last > len(h.array) {
+				h.extendArray(last)
+			}
+			copy(h.array[start:last], e.frame[a+1:a+1+n])
+			e.l.top = e.callInfo.top
+		},
+		func(e *engine, i instruction) { // opClosure
+			a, p := i.a(), &e.closure.prototype.prototypes[i.bx()]
+			if ncl := cached(p, e.closure.upValues, e.callInfo.base()); ncl == nil { // no match?
+				e.frame[a] = e.l.newClosure(p, e.closure.upValues, e.callInfo.base()) // create a new one
+			} else {
+				e.frame[a] = ncl
+			}
+			clear(e.frame[a+1:])
+		},
+		func(e *engine, i instruction) { // opVarArg
+			ci := e.callInfo
+			a, b := i.a(), i.b()-1
+			n := ci.base() - ci.function - e.closure.prototype.parameterCount - 1
+			if b < 0 {
+				b = n // get all var arguments
+				e.l.checkStack(n)
+				e.l.top = ci.base() + a + n
+				if ci.top < e.l.top {
+					ci.setTop(e.l.top)
+					ci.frame = e.l.stack[ci.base():ci.top]
+				}
+				e.frame = ci.frame
+			}
+			for j := 0; j < b; j++ {
+				if j < n {
+					e.frame[a+j] = e.l.stack[ci.base()-n+j]
+				} else {
+					e.frame[a+j] = nil
+				}
+			}
+		},
+		func(e *engine, i instruction) { // opExtraArg
+			panic(fmt.Sprintf("unexpected opExtraArg instruction, '%s'", i.String()))
+		},
+	}
+}
+
+func (l *State) execute() { l.executeFunctionTable() }
+
+func (l *State) executeFunctionTable() {
+	ci := l.callInfo
+	closure, _ := l.stack[ci.function].(*luaClosure)
+	e := engine{callInfo: ci, frame: ci.frame, closure: closure, constants: closure.prototype.constants, l: l}
+	for {
+		if l.hookMask&(MaskLine|MaskCount) != 0 {
+			if l.hookCount--; l.hookCount == 0 || l.hookMask&MaskLine != 0 {
+				l.traceExecution()
+				e.frame = e.callInfo.frame
+			}
+		}
+		i := e.callInfo.step()
+		if op := i.opCode(); op == opReturn {
+			a := i.a()
+			if b := i.b(); b != 0 {
+				l.top = e.callInfo.stackIndex(a + b - 1)
+			}
+			if len(e.closure.prototype.prototypes) > 0 {
+				l.close(e.callInfo.base())
+			}
+			n := l.postCall(e.callInfo.stackIndex(a))
+			if !e.callInfo.isCallStatus(callStatusReentry) { // ci still the called one?
+				return // external invocation: return
+			}
+			e.callInfo = l.callInfo
+			if n {
+				l.top = e.callInfo.top
+			}
+			l.assert(e.callInfo.code[e.callInfo.savedPC-1].opCode() == opCall)
+			e.newFrame()
+		} else {
+			jumpTable[i.opCode()](&e, i)
+		}
+	}
+}
+
+func k(field int, constants []value, frame []value) value {
+	if 0 != field&bitRK { // OPT: Inline isConstant(field).
+		return constants[field & ^bitRK] // OPT: Inline constantIndex(field).
+	}
+	return frame[field]
+}
+
+func newFrame(l *State, ci *callInfo) (frame []value, closure *luaClosure, constants []value) {
+	// TODO l.assert(ci == l.callInfo)
+	frame = ci.frame
+	closure, _ = l.stack[ci.function].(*luaClosure)
+	constants = closure.prototype.constants
+	return
+}
+
+func (l *State) executeSwitch() {
 	var frame []value
 	var closure *luaClosure
 	var constants []value
-	ci := l.callInfo.(*luaCallInfo)
-	k := func(field int) value {
-		if isConstant(field) {
-			return constants[constantIndex(field)]
-		}
-		return frame[field]
-	}
+	ci := l.callInfo
 	jump := func(i instruction) {
 		if a := i.a(); a > 0 {
 			l.close(ci.stackIndex(a - 1))
@@ -270,39 +700,7 @@ func (l *State) execute() {
 		}
 		return i
 	}
-	add := func(a, b float64) float64 { return a + b }
-	sub := func(a, b float64) float64 { return a - b }
-	mul := func(a, b float64) float64 { return a * b }
-	div := func(a, b float64) float64 { return a / b }
-	var i instruction
-	arithOp := func(op func(float64, float64) float64, tm tm) {
-		b := k(i.b())
-		c := k(i.c())
-		nb, bok := b.(float64)
-		nc, cok := c.(float64)
-		if bok && cok {
-			frame[i.a()] = op(nb, nc)
-		} else {
-			frame[i.a()] = l.arith(b, c, tm)
-			frame = ci.frame
-		}
-	}
-	clear := func(r []value) {
-		for i := range r {
-			r[i] = nil
-		}
-	}
-	newFrame := func() {
-		l.assert(ci == l.callInfo)
-		frame = ci.frame
-		closure = l.stack[ci.function()].(*luaClosure)
-		constants = closure.prototype.constants
-	}
-	protect := func(v value) value {
-		frame = ci.frame
-		return v
-	}
-	newFrame()
+	frame, closure, constants = newFrame(l, ci)
 	for {
 		if l.hookMask&(MaskLine|MaskCount) != 0 {
 			if l.hookCount--; l.hookCount == 0 || l.hookMask&MaskLine != 0 {
@@ -310,7 +708,7 @@ func (l *State) execute() {
 				frame = ci.frame
 			}
 		}
-		switch i = ci.step(); i.opCode() {
+		switch i := ci.step(); i.opCode() {
 		case opMove:
 			frame[i.a()] = frame[i.b()]
 		case opLoadConstant:
@@ -328,16 +726,20 @@ func (l *State) execute() {
 		case opGetUpValue:
 			frame[i.a()] = closure.upValue(i.b())
 		case opGetTableUp:
-			frame[i.a()] = protect(l.tableAt(closure.upValue(i.b()), k(i.c())))
+			tmp := l.tableAt(closure.upValue(i.b()), k(i.c(), constants, frame))
+			frame = ci.frame
+			frame[i.a()] = tmp
 		case opGetTable:
-			frame[i.a()] = protect(l.tableAt(frame[i.b()], k(i.c())))
+			tmp := l.tableAt(frame[i.b()], k(i.c(), constants, frame))
+			frame = ci.frame
+			frame[i.a()] = tmp
 		case opSetTableUp:
-			l.setTableAt(closure.upValue(i.a()), k(i.b()), k(i.c()))
+			l.setTableAt(closure.upValue(i.a()), k(i.b(), constants, frame), k(i.c(), constants, frame))
 			frame = ci.frame
 		case opSetUpValue:
 			closure.setUpValue(i.b(), frame[i.a()])
 		case opSetTable:
-			l.setTableAt(frame[i.a()], k(i.b()), k(i.c()))
+			l.setTableAt(frame[i.a()], k(i.b(), constants, frame), k(i.c(), constants, frame))
 			frame = ci.frame
 		case opNewTable:
 			a := i.a()
@@ -349,30 +751,96 @@ func (l *State) execute() {
 			clear(frame[a+1:])
 		case opSelf:
 			a, t := i.a(), frame[i.b()]
-			frame[a+1], frame[a] = t, protect(l.tableAt(t, k(i.c())))
+			tmp := l.tableAt(t, k(i.c(), constants, frame))
+			frame = ci.frame
+			frame[a+1], frame[a] = t, tmp
 		case opAdd:
-			arithOp(add, tmAdd)
+			b := k(i.b(), constants, frame)
+			c := k(i.c(), constants, frame)
+			if nb, ok := b.(float64); ok {
+				if nc, ok := c.(float64); ok {
+					frame[i.a()] = nb + nc
+					break
+				}
+			}
+			tmp := l.arith(b, c, tmAdd)
+			frame = ci.frame
+			frame[i.a()] = tmp
 		case opSub:
-			arithOp(sub, tmSub)
+			b := k(i.b(), constants, frame)
+			c := k(i.c(), constants, frame)
+			if nb, ok := b.(float64); ok {
+				if nc, ok := c.(float64); ok {
+					frame[i.a()] = nb - nc
+					break
+				}
+			}
+			tmp := l.arith(b, c, tmSub)
+			frame = ci.frame
+			frame[i.a()] = tmp
 		case opMul:
-			arithOp(mul, tmMul)
+			b := k(i.b(), constants, frame)
+			c := k(i.c(), constants, frame)
+			if nb, ok := b.(float64); ok {
+				if nc, ok := c.(float64); ok {
+					frame[i.a()] = nb * nc
+					break
+				}
+			}
+			tmp := l.arith(b, c, tmMul)
+			frame = ci.frame
+			frame[i.a()] = tmp
 		case opDiv:
-			arithOp(div, tmDiv)
+			b := k(i.b(), constants, frame)
+			c := k(i.c(), constants, frame)
+			if nb, ok := b.(float64); ok {
+				if nc, ok := c.(float64); ok {
+					frame[i.a()] = nb / nc
+					break
+				}
+			}
+			tmp := l.arith(b, c, tmDiv)
+			frame = ci.frame
+			frame[i.a()] = tmp
 		case opMod:
-			arithOp(math.Mod, tmMod)
+			b := k(i.b(), constants, frame)
+			c := k(i.c(), constants, frame)
+			if nb, ok := b.(float64); ok {
+				if nc, ok := c.(float64); ok {
+					frame[i.a()] = math.Mod(nb, nc)
+					break
+				}
+			}
+			tmp := l.arith(b, c, tmMod)
+			frame = ci.frame
+			frame[i.a()] = tmp
 		case opPow:
-			arithOp(math.Pow, tmPow)
+			b := k(i.b(), constants, frame)
+			c := k(i.c(), constants, frame)
+			if nb, ok := b.(float64); ok {
+				if nc, ok := c.(float64); ok {
+					frame[i.a()] = math.Pow(nb, nc)
+					break
+				}
+			}
+			tmp := l.arith(b, c, tmPow)
+			frame = ci.frame
+			frame[i.a()] = tmp
 		case opUnaryMinus:
 			switch b := frame[i.b()].(type) {
 			case float64:
 				frame[i.a()] = -b
 			default:
-				frame[i.a()] = protect(l.arith(b, b, tmUnaryMinus))
+				tmp := l.arith(b, b, tmUnaryMinus)
+				frame = ci.frame
+				frame[i.a()] = tmp
 			}
 		case opNot:
 			frame[i.a()] = isFalse(frame[i.b()])
 		case opLength:
-			frame[i.a()] = protect(l.objectLength(frame[i.b()]))
+			tmp := l.objectLength(frame[i.b()])
+			frame = ci.frame
+			frame[i.a()] = tmp
 		case opConcat:
 			a, b, c := i.a(), i.b(), i.c()
 			l.top = ci.stackIndex(c + 1) // mark the end of concat operands
@@ -388,15 +856,15 @@ func (l *State) execute() {
 			jump(i)
 		case opEqual:
 			test := i.a() != 0
-			condJump(l.equalObjects(k(i.b()), k(i.c())) == test)
+			condJump(l.equalObjects(k(i.b(), constants, frame), k(i.c(), constants, frame)) == test)
 			frame = ci.frame
 		case opLessThan:
 			test := i.a() != 0
-			condJump(l.lessThan(k(i.b()), k(i.c())) == test)
+			condJump(l.lessThan(k(i.b(), constants, frame), k(i.c(), constants, frame)) == test)
 			frame = ci.frame
 		case opLessOrEqual:
 			test := i.a() != 0
-			condJump(l.lessOrEqual(k(i.b()), k(i.c())) == test)
+			condJump(l.lessOrEqual(k(i.b(), constants, frame), k(i.c(), constants, frame)) == test)
 			frame = ci.frame
 		case opTest:
 			if i.c() == 0 {
@@ -421,13 +889,13 @@ func (l *State) execute() {
 			} // else previous instruction set top
 			if n := c - 1; l.preCall(ci.stackIndex(a), n) { // go function
 				if n >= 0 {
-					l.top = ci.top() // adjust results
+					l.top = ci.top // adjust results
 				}
 				frame = ci.frame
 			} else { // lua function
-				ci = l.callInfo.(*luaCallInfo)
+				ci = l.callInfo
 				ci.setCallStatus(callStatusReentry)
-				newFrame()
+				frame, closure, constants = newFrame(l, ci)
 			}
 		case opTailCall:
 			a, b, c := i.a(), i.b(), i.c()
@@ -439,9 +907,9 @@ func (l *State) execute() {
 				frame = ci.frame
 			} else {
 				// tail call: put called frame (n) in place of caller one (o)
-				nci := l.callInfo.(*luaCallInfo)           // called frame
-				oci := nci.previous().(*luaCallInfo)       // caller frame
-				nfn, ofn := nci.function(), oci.function() // called & caller function
+				nci := l.callInfo                      // called frame
+				oci := nci.previous                    // caller frame
+				nfn, ofn := nci.function, oci.function // called & caller function
 				// last stack slot filled by 'precall'
 				lim := nci.base() + l.stack[nfn].(*luaClosure).prototype.parameterCount
 				if len(closure.prototype.prototypes) > 0 { // close all upvalues from previous call
@@ -453,13 +921,13 @@ func (l *State) execute() {
 				}
 				base := ofn + (nci.base() - nfn) // correct base
 				oci.setTop(ofn + (l.top - nfn))  // correct top
-				oci.frame = l.stack[base:oci.top()]
+				oci.frame = l.stack[base:oci.top]
 				oci.savedPC = nci.savedPC
 				oci.setCallStatus(callStatusTail) // function was tail called
-				l.top, l.callInfo, ci = oci.top(), oci, oci
+				l.top, l.callInfo, ci = oci.top, oci, oci
 				l.assert(l.top == oci.base()+l.stack[ofn].(*luaClosure).prototype.maxStackSize)
-				l.assert(&oci.frame[0] == &l.stack[oci.base()] && len(oci.frame) == oci.top()-oci.base())
-				newFrame()
+				l.assert(&oci.frame[0] == &l.stack[oci.base()] && len(oci.frame) == oci.top-oci.base())
+				frame, closure, constants = newFrame(l, ci)
 			}
 		case opReturn:
 			a := i.a()
@@ -473,12 +941,12 @@ func (l *State) execute() {
 			if !ci.isCallStatus(callStatusReentry) { // ci still the called one?
 				return // external invocation: return
 			}
-			ci = l.callInfo.(*luaCallInfo)
+			ci = l.callInfo
 			if n {
-				l.top = ci.top()
+				l.top = ci.top
 			}
 			l.assert(ci.code[ci.savedPC-1].opCode() == opCall)
-			newFrame()
+			frame, closure, constants = newFrame(l, ci)
 		case opForLoop:
 			a := i.a()
 			index, limit, step := frame[a+0].(float64), frame[a+1].(float64), frame[a+2].(float64)
@@ -506,7 +974,7 @@ func (l *State) execute() {
 			callBase += ci.base()
 			l.top = callBase + 3 // function + 2 args (state and index)
 			l.call(callBase, i.c(), true)
-			frame, l.top = ci.frame, ci.top()
+			frame, l.top = ci.frame, ci.top
 			i = expectNext(opTForLoop) // go to next instruction
 			fallthrough
 		case opTForLoop:
@@ -529,7 +997,7 @@ func (l *State) execute() {
 				h.extendArray(last)
 			}
 			copy(h.array[start:last], frame[a+1:a+1+n])
-			l.top = ci.top()
+			l.top = ci.top
 		case opClosure:
 			a, p := i.a(), &closure.prototype.prototypes[i.bx()]
 			if ncl := cached(p, closure.upValues, ci.base()); ncl == nil { // no match?
@@ -540,14 +1008,14 @@ func (l *State) execute() {
 			clear(frame[a+1:])
 		case opVarArg:
 			a, b := i.a(), i.b()-1
-			n := ci.base() - ci.function() - closure.prototype.parameterCount - 1
+			n := ci.base() - ci.function - closure.prototype.parameterCount - 1
 			if b < 0 {
 				b = n // get all var arguments
 				l.checkStack(n)
 				l.top = ci.base() + a + n
-				if ci.top() < l.top {
+				if ci.top < l.top {
 					ci.setTop(l.top)
-					ci.frame = l.stack[ci.base():ci.top()]
+					ci.frame = l.stack[ci.base():ci.top]
 				}
 				frame = ci.frame
 			}

@@ -14,8 +14,8 @@ func testStringHelper(t *testing.T, s string, trace bool) {
 	LoadString(l, s)
 	if trace {
 		SetHooker(l, func(state *State, ar *Debug) {
-			ci := state.callInfo.(*luaCallInfo)
-			p := state.stack[ci.function()].(*luaClosure).prototype
+			ci := state.callInfo
+			p := state.prototype(ci)
 			println(stack(state.stack[ci.base():state.top]))
 			println(ci.code[ci.savedPC].String(), p.source, p.lineInfo[ci.savedPC])
 		}, MaskCount, 1)
@@ -27,7 +27,7 @@ func TestProtectedCall(t *testing.T) {
 	l := NewState()
 	OpenLibraries(l)
 	SetHooker(l, func(state *State, ar *Debug) {
-		ci := state.callInfo.(*luaCallInfo)
+		ci := state.callInfo
 		_ = stack(state.stack[ci.base():state.top])
 		_ = ci.code[ci.savedPC].String()
 	}, MaskCount, 1)
@@ -47,7 +47,7 @@ func TestLua(t *testing.T) {
 		"math",
 		"sort",
 		"strings",
-		//"vararg",
+		// "vararg",
 	}
 	for _, v := range tests {
 		t.Log(v)
@@ -57,20 +57,25 @@ func TestLua(t *testing.T) {
 			PushBoolean(l, true)
 			SetGlobal(l, s)
 		}
-		//		SetHooker(l, func(state *State, ar *Debug) {
-		//			ci := state.callInfo.(*luaCallInfo)
-		//			p := state.stack[ci.function()].(*luaClosure).prototype
-		//			println(stack(state.stack[ci.base():state.top]))
-		//			println(ci.code[ci.savedPC].String(), p.source, p.lineInfo[ci.savedPC])
-		//		}, MaskCount, 1)
+		// SetHooker(l, func(state *State, ar *Debug) {
+		// 	ci := state.callInfo.(*luaCallInfo)
+		// 	p := state.prototype(ci)
+		// 	println(stack(state.stack[ci.base():state.top]))
+		// 	println(ci.code[ci.savedPC].String(), p.source, p.lineInfo[ci.savedPC])
+		// }, MaskCount, 1)
+		Global(l, "debug")
+		Field(l, -1, "traceback")
+		traceback := Top(l)
+		// t.Logf("%#v", ToValue(l, traceback))
 		LoadFile(l, "fixtures/"+v+".lua", "text")
-		if err := ProtectedCall(l, 0, 0, 0); err != nil {
+		// Call(l, 0, 0)
+		if err := ProtectedCall(l, 0, 0, traceback); err != nil {
 			t.Errorf("'%s' failed: %s", v, err.Error())
 		}
 	}
 }
 
-func BenchmarkSort(b *testing.B) {
+func benchmarkSort(b *testing.B, program string) {
 	l := NewState()
 	OpenLibraries(l)
 	s := `a = {}
@@ -81,11 +86,16 @@ func BenchmarkSort(b *testing.B) {
 	if err := ProtectedCall(l, 0, 0, 0); err != nil {
 		b.Error(err.Error())
 	}
-	LoadString(l, "table.sort(a)")
+	LoadString(l, program)
 	b.ResetTimer()
 	if err := ProtectedCall(l, 0, 0, 0); err != nil {
 		b.Error(err.Error())
 	}
+}
+
+func BenchmarkSort(b *testing.B) { benchmarkSort(b, "table.sort(a)") }
+func BenchmarkSort2(b *testing.B) {
+	benchmarkSort(b, "i = 0; table.sort(a, function(x,y) i=i+1; return y<x end)")
 }
 
 func TestVarArgMeta(t *testing.T) {

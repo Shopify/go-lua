@@ -37,21 +37,28 @@ type goFunction struct {
 	Function
 }
 
-func (c *luaClosure) upValue(i int) value       { return c.upValues[i].value() }
-func (c *luaClosure) setUpValue(i int, v value) { c.upValues[i].setValue(v) }
-func (c *luaClosure) upValueCount() int         { return len(c.upValues) }
-func (c *goClosure) upValue(i int) value        { return c.upValues[i] }
-func (c *goClosure) setUpValue(i int, v value)  { c.upValues[i] = v }
-func (c *goClosure) upValueCount() int          { return len(c.upValues) }
-func (l *State) newUpValue() *upValue           { return &upValue{home: nil} }
+func (c *luaClosure) upValue(i int) value {
+	uv := c.upValues[i]
+	if home, ok := uv.home.(stackLocation); ok {
+		return home.state.stack[home.index]
+	}
+	return uv.home
+}
 
-func (uv *upValue) setValue(v value) {
+func (c *luaClosure) setUpValue(i int, v value) {
+	uv := c.upValues[i]
 	if home, ok := uv.home.(stackLocation); ok {
 		home.state.stack[home.index] = v
 	} else {
 		uv.home = v
 	}
 }
+
+func (c *luaClosure) upValueCount() int        { return len(c.upValues) }
+func (c *goClosure) upValue(i int) value       { return c.upValues[i] }
+func (c *goClosure) setUpValue(i int, v value) { c.upValues[i] = v }
+func (c *goClosure) upValueCount() int         { return len(c.upValues) }
+func (l *State) newUpValue() *upValue          { return &upValue{home: nil} }
 
 func (uv *upValue) value() value {
 	if home, ok := uv.home.(stackLocation); ok {
@@ -109,112 +116,90 @@ func (l *State) close(level int) {
 }
 
 // information about a call
-type callInfo interface {
-	next() callInfo
-	previous() callInfo
-	push(callInfo) callInfo
-	function() int
-	top() int
-	setTop(int)
-	isLua() bool
-	callStatus() callStatus
-	setCallStatus(callStatus)
-	clearCallStatus(callStatus)
-	isCallStatus(callStatus) bool
-	resultCount() int
-}
-
-type commonCallInfo struct {
-	function_, top_, resultCount_ int
-	previous_, next_              callInfo
-	callStatus_                   callStatus
+type callInfo struct {
+	function, top, resultCount int
+	previous, next             *callInfo
+	callStatus                 callStatus
+	*luaCallInfo
+	*goCallInfo
 }
 
 type luaCallInfo struct {
-	commonCallInfo
 	frame   []value
 	savedPC pc
 	code    []instruction
 }
 
 type goCallInfo struct {
-	commonCallInfo
 	context, extra, oldErrorFunction int
 	continuation                     Function
 	oldAllowHook, shouldYield        bool
 	error                            error
 }
 
-func (ci *commonCallInfo) top() int                          { return ci.top_ }
-func (ci *commonCallInfo) setTop(top int)                    { ci.top_ = top }
-func (ci *commonCallInfo) next() callInfo                    { return ci.next_ }
-func (ci *commonCallInfo) previous() callInfo                { return ci.previous_ }
-func (ci *commonCallInfo) function() int                     { return ci.function_ }
-func (ci *commonCallInfo) resultCount() int                  { return ci.resultCount_ }
-func (ci *commonCallInfo) callStatus() callStatus            { return ci.callStatus_ }
-func (ci *commonCallInfo) setCallStatus(flag callStatus)     { ci.callStatus_ |= flag }
-func (ci *commonCallInfo) clearCallStatus(flag callStatus)   { ci.callStatus_ &^= flag }
-func (ci *commonCallInfo) isCallStatus(flag callStatus) bool { return ci.callStatus_&flag != 0 }
-func (ci *luaCallInfo) isLua() bool                          { return true }
-func (ci *luaCallInfo) stackIndex(slot int) int              { return ci.top() - len(ci.frame) + slot }
-func (ci *luaCallInfo) base() int                            { return ci.stackIndex(0) }
-func (ci *luaCallInfo) skip()                                { ci.savedPC++ }
-func (ci *luaCallInfo) jump(offset int)                      { ci.savedPC += pc(offset) }
-func (ci *goCallInfo) isLua() bool                           { return false }
+func (ci *callInfo) setCallStatus(flag callStatus)     { ci.callStatus |= flag }
+func (ci *callInfo) clearCallStatus(flag callStatus)   { ci.callStatus &^= flag }
+func (ci *callInfo) isCallStatus(flag callStatus) bool { return ci.callStatus&flag != 0 }
+func (ci *callInfo) isLua() bool                       { return ci.luaCallInfo != nil }
 
-func (ci *commonCallInfo) push(nci callInfo) callInfo {
-	ci.next_ = nci
-	return nci
+func (ci *callInfo) stackIndex(slot int) int { return ci.top - len(ci.frame) + slot }
+func (ci *callInfo) base() int               { return ci.top - len(ci.frame) }
+func (ci *callInfo) skip()                   { ci.savedPC++ }
+func (ci *callInfo) jump(offset int)         { ci.savedPC += pc(offset) }
+
+func (ci *callInfo) setTop(top int) {
+	if ci.luaCallInfo != nil {
+		diff := top - ci.top
+		ci.frame = ci.frame[:len(ci.frame)+diff]
+	}
+	ci.top = top
 }
 
-func (ci *commonCallInfo) initialize(l *State, function, top, resultCount int, callStatus callStatus) {
-	ci.function_ = function
-	ci.top_ = top
-	l.assert(ci.top() <= l.stackLast)
-	ci.resultCount_ = resultCount
-	ci.callStatus_ = callStatus
-}
-
-func (ci *luaCallInfo) setTop(top int) {
-	diff := top - ci.top()
-	ci.frame = ci.frame[:len(ci.frame)+diff]
-	ci.commonCallInfo.setTop(top)
-}
-
-func (ci *luaCallInfo) frameIndex(stackSlot int) int {
-	if stackSlot < ci.top()-len(ci.frame) || ci.top() <= stackSlot {
+func (ci *callInfo) frameIndex(stackSlot int) int {
+	if stackSlot < ci.top-len(ci.frame) || ci.top <= stackSlot {
 		panic("frameIndex called with out-of-range stackSlot")
 	}
-	return stackSlot - ci.top() + len(ci.frame)
+	return stackSlot - ci.top + len(ci.frame)
 }
 
-func (l *State) pushLuaFrame(function, base, resultCount int, p *prototype) *luaCallInfo {
-	ci, _ := l.callInfo.next().(*luaCallInfo)
+func (l *State) pushLuaFrame(function, base, resultCount int, p *prototype) *callInfo {
+	ci := l.callInfo.next
 	if ci == nil {
-		ci = &luaCallInfo{}
-		ci.previous_ = l.callInfo
-		l.callInfo = l.callInfo.push(ci)
+		ci = &callInfo{previous: l.callInfo, luaCallInfo: &luaCallInfo{code: p.code}}
+		l.callInfo.next = ci
+	} else if ci.luaCallInfo == nil {
+		ci.goCallInfo = nil
+		ci.luaCallInfo = &luaCallInfo{code: p.code}
 	} else {
-		l.callInfo = ci
+		ci.savedPC = 0
+		ci.code = p.code
 	}
-	ci.initialize(l, function, base+p.maxStackSize, resultCount, callStatusLua)
-	ci.frame = l.stack[base:ci.top()]
-	ci.savedPC = 0
-	ci.code = p.code
-	l.top = ci.top()
+	ci.function = function
+	ci.top = base + p.maxStackSize
+	// TODO l.assert(ci.top <= l.stackLast)
+	ci.resultCount = resultCount
+	ci.callStatus = callStatusLua
+	ci.frame = l.stack[base:ci.top]
+	l.callInfo = ci
+	l.top = ci.top
 	return ci
 }
 
 func (l *State) pushGoFrame(function, resultCount int) {
-	ci, _ := l.callInfo.next().(*goCallInfo)
+	ci := l.callInfo.next
 	if ci == nil {
-		ci = &goCallInfo{}
-		ci.previous_ = l.callInfo
-		l.callInfo = l.callInfo.push(ci)
-	} else {
-		l.callInfo = ci
+		ci = &callInfo{previous: l.callInfo, goCallInfo: &goCallInfo{}}
+		l.callInfo.next = ci
+	} else if ci.goCallInfo == nil {
+		ci.goCallInfo = &goCallInfo{}
+		ci.luaCallInfo = nil
 	}
-	ci.initialize(l, function, l.top+MinStack, resultCount, 0)
+	ci.function = function
+	ci.top = l.top + MinStack
+	// TODO l.assert(ci.top <= l.stackLast)
+	ci.resultCount = resultCount
+	ci.callStatus = 0
+	l.callInfo = ci
 }
 
 func (ci *luaCallInfo) step() instruction {
@@ -331,9 +316,9 @@ func (l *State) preCall(function int, resultCount int) bool {
 	panic("unreachable")
 }
 
-func (l *State) callHook(ci *luaCallInfo) {
+func (l *State) callHook(ci *callInfo) {
 	ci.savedPC++ // hooks assume 'pc' is already incremented
-	if pci, ok := ci.previous().(*luaCallInfo); ok && pci.code[pci.savedPC-1].opCode() == opTailCall {
+	if pci := ci.previous; pci.isLua() && pci.code[pci.savedPC-1].opCode() == opTailCall {
 		ci.setCallStatus(callStatusTail)
 		l.hook(HookTailCall, -1)
 	} else {
@@ -361,8 +346,8 @@ func (l *State) postCall(firstResult int) bool {
 	if l.hookMask&MaskReturn != 0 {
 		l.hook(HookReturn, -1)
 	}
-	result, wanted, i := ci.function(), ci.resultCount(), 0
-	l.callInfo = ci.previous() // back to caller
+	result, wanted, i := ci.function, ci.resultCount, 0
+	l.callInfo = ci.previous // back to caller
 	// TODO this is obscure - I don't fully understand the control flow, but it works
 	for i = wanted; i != 0 && firstResult < l.top; i-- {
 		l.stack[result] = l.stack[firstResult]
@@ -375,7 +360,7 @@ func (l *State) postCall(firstResult int) bool {
 	}
 	l.top = result
 	if l.hookMask&(MaskReturn|MaskLine) != 0 {
-		l.oldPC = l.callInfo.(*luaCallInfo).savedPC // oldPC for caller function
+		l.oldPC = l.callInfo.savedPC // oldPC for caller function
 	}
 	return wanted != MultipleReturns
 }
@@ -436,13 +421,13 @@ func (l *State) hook(event, line int) {
 	if l.hooker == nil || !l.allowHook {
 		return
 	}
-	ci := l.callInfo.(*luaCallInfo)
+	ci := l.callInfo
 	top := l.top
-	ciTop := ci.top()
+	ciTop := ci.top
 	ar := Debug{Event: event, CurrentLine: line, callInfo: ci}
 	l.checkStack(MinStack)
 	ci.setTop(l.top + MinStack)
-	l.assert(ci.top() <= l.stackLast)
+	l.assert(ci.top <= l.stackLast)
 	l.allowHook = false // can't hook calls inside a hook
 	ci.setCallStatus(callStatusHooked)
 	l.hooker(l, &ar)
@@ -457,10 +442,9 @@ func (l *State) initializeStack() {
 	l.stack = make([]value, basicStackSize)
 	l.stackLast = basicStackSize - extraStack
 	l.top++
-	ci := &l.baseCallInfo
-	ci.frame = l.stack[:0]
-	ci.setTop(l.top + MinStack)
-	l.callInfo = ci
+	l.baseCallInfo.luaCallInfo = &luaCallInfo{frame: l.stack[:0]}
+	l.baseCallInfo.setTop(l.top + MinStack)
+	l.callInfo = &l.baseCallInfo
 }
 
 func (l *State) checkStack(n int) {
@@ -474,11 +458,11 @@ func (l *State) reallocStack(newSize int) {
 	l.assert(l.stackLast == len(l.stack)-extraStack)
 	l.stack = append(l.stack, make([]value, newSize-len(l.stack))...)
 	l.stackLast = len(l.stack) - extraStack
-	_ = l.callInfo.push(nil)
-	for ci := l.callInfo; ci != nil; ci = ci.previous() {
-		if lci, ok := ci.(*luaCallInfo); ok {
-			top := lci.top()
-			lci.frame = l.stack[top-len(lci.frame) : top]
+	l.callInfo.next = nil
+	for ci := l.callInfo; ci != nil; ci = ci.previous {
+		if ci.isLua() {
+			top := ci.top
+			ci.frame = l.stack[top-len(ci.frame) : top]
 		}
 	}
 }

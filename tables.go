@@ -45,20 +45,21 @@ func (t *table) atInt(k int) value {
 	return t.hash[float64(k)]
 }
 
-func (t *table) putAtInt(k int, v value) {
-	updateArray := func() {
-		if old := t.array[k-1]; old == nil && v != nil {
-			t.occupancy++
-		} else if old != nil && v == nil {
-			t.occupancy--
-		}
-		t.array[k-1] = v
+func (t *table) updateArray(k int, v value) {
+	if old := t.array[k-1]; old == nil && v != nil {
+		t.occupancy++
+	} else if old != nil && v == nil {
+		t.occupancy--
 	}
+	t.array[k-1] = v
+}
+
+func (t *table) putAtInt(k int, v value) {
 	if 0 < k && k <= len(t.array) {
-		updateArray()
+		t.updateArray(k, v)
 	} else if k > 0 && t.occupancy >= len(t.array)>>1 {
 		t.extendArray(max(k, t.occupancy*2))
-		updateArray()
+		t.updateArray(k, v)
 	} else {
 		t.hash[float64(k)] = v
 	}
@@ -69,11 +70,14 @@ func (t *table) at(k value) value {
 	case nil:
 		return nil
 	case float64:
-		if i := int(k); float64(i) == k {
-			return t.atInt(i)
+		if i := int(k); float64(i) == k { // OPT: Inlined copy of atInt.
+			if 0 < i && i <= len(t.array) {
+				return t.array[i-1]
+			}
+			return t.hash[k]
 		}
 	case string:
-		return t.atString(k)
+		return t.hash[k]
 	}
 	return t.hash[k]
 }
@@ -95,6 +99,34 @@ func (t *table) put(l *State, k, v value) {
 	default:
 		t.hash[k] = v
 	}
+}
+
+// OPT: tryPut is an optimized variant of the at/put pair used by setTableAt to avoid hashing the key twice.
+func (t *table) tryPut(l *State, k, v value) bool {
+	switch k := k.(type) {
+	case nil:
+	case float64:
+		if i := int(k); float64(i) == k && 0 < i && i <= len(t.array) && t.array[i-1] != nil {
+			t.updateArray(i, v)
+			return true
+		} else if math.IsNaN(k) {
+			return false
+		} else if t.hash[k] != nil {
+			t.hash[k] = v
+			return true
+		}
+	case string:
+		if t.hash[k] != nil {
+			t.hash[k] = v
+			return true
+		}
+	default:
+		if t.hash[k] != nil {
+			t.hash[k] = v
+			return true
+		}
+	}
+	return false
 }
 
 func (t *table) unboundSearch(j int) int {

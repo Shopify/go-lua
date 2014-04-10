@@ -310,14 +310,18 @@ func toString(r value) (string, bool) {
 	return "", false
 }
 
-func pairAsNumbers(p1, p2 value) (float64, float64, bool) {
-	f1, ok1 := p1.(float64)
-	f2, ok2 := p2.(float64)
-	return f1, f2, ok1 && ok2
+func pairAsNumbers(p1, p2 value) (f1, f2 float64, ok bool) {
+	if f1, ok = p1.(float64); !ok {
+		return
+	}
+	f2, ok = p2.(float64)
+	return
 }
 
-func pairAsStrings(p1, p2 value) (string, string, bool) {
-	s1, ok1 := p1.(string)
-	s2, ok2 := p2.(string)
-	return s1, s2, ok1 && ok2
+func pairAsStrings(p1, p2 value) (s1, s2 string, ok bool) {
+	if s1, ok = p1.(string); !ok {
+		return
+	}
+	s2, ok = p2.(string)
+	return
 }

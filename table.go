@@ -32,13 +32,15 @@ func (h sortHelper) Less(i, j int) bool {
 		RawGetInt(h.l, 1, i)
 		RawGetInt(h.l, 1, j)
 		Call(h.l, 2, 1)
-		defer Pop(h.l, 1)
-		return ToBoolean(h.l, -1)
+		b := ToBoolean(h.l, -1)
+		Pop(h.l, 1)
+		return b
 	}
 	RawGetInt(h.l, 1, i)
 	RawGetInt(h.l, 1, j)
-	defer Pop(h.l, 2)
-	return Compare(h.l, -2, -1, OpLT)
+	b := Compare(h.l, -2, -1, OpLT)
+	Pop(h.l, 2)
+	return b
 }
 
 var tableLibrary = []RegistryFunction{

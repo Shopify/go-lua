@@ -133,19 +133,27 @@ func mask1(n, p uint) instruction { return ^(^instruction(0) << n) << p }
 // creates a mask with 'n' 0 bits at position 'p'
 func mask0(n, p uint) instruction { return ^mask1(n, p) }
 
-func (i instruction) opCode() opCode         { return opCode(i >> posOp & mask1(sizeOp, 0)) }
+func (i instruction) opCode() opCode         { return opCode(i >> posOp & (1<<sizeOp - 1)) }
 func (i instruction) arg(pos, size uint) int { return int(i >> pos & mask1(size, 0)) }
 func (i *instruction) setOpCode(op opCode)   { i.setArg(posOp, sizeOp, int(op)) }
 func (i *instruction) setArg(pos, size uint, arg int) {
 	*i = *i&mask0(size, pos) | instruction(arg)<<pos&mask1(size, pos)
 }
 
-func (i instruction) a() int   { return i.arg(posA, sizeA) }
-func (i instruction) b() int   { return i.arg(posB, sizeB) }
-func (i instruction) c() int   { return i.arg(posC, sizeC) }
-func (i instruction) bx() int  { return i.arg(posBx, sizeBx) }
-func (i instruction) ax() int  { return i.arg(posAx, sizeAx) }
-func (i instruction) sbx() int { return i.bx() - maxArgSBx }
+// Note: the gc optimizer cannot inline through multiple function calls. Manually inline for now.
+// func (i instruction) a() int   { return i.arg(posA, sizeA) }
+// func (i instruction) b() int   { return i.arg(posB, sizeB) }
+// func (i instruction) c() int   { return i.arg(posC, sizeC) }
+// func (i instruction) bx() int  { return i.arg(posBx, sizeBx) }
+// func (i instruction) ax() int  { return i.arg(posAx, sizeAx) }
+// func (i instruction) sbx() int { return i.bx() - maxArgSBx }
+
+func (i instruction) a() int   { return int(i >> posA & maxArgA) }
+func (i instruction) b() int   { return int(i >> posB & maxArgB) }
+func (i instruction) c() int   { return int(i >> posC & maxArgC) }
+func (i instruction) bx() int  { return int(i >> posBx & maxArgBx) }
+func (i instruction) ax() int  { return int(i >> posAx & maxArgAx) }
+func (i instruction) sbx() int { return int(i>>posBx&maxArgBx) - maxArgSBx }
 
 func (i *instruction) setA(arg int)   { i.setArg(posA, sizeA, arg) }
 func (i *instruction) setB(arg int)   { i.setArg(posB, sizeB, arg) }
