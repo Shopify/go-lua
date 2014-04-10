@@ -21,7 +21,7 @@ Lessons
 
 `defer` in Go has a non-zero cost, and should not be used for normal control flow in performance-sensitive code paths.
 
-The `gc` Go compiler does not compile (large) `switch` statements to jump tables. It instead compiles to either cascaded `if-else if` tests or, at best, some degree of binary search ending in an `if-else if` cascade.
+The `gc` Go compiler does not compile (large) `switch` statements to jump tables. It instead compiles to a binary search ending in a `if-else if` cascade (when less than 4 cases).
 
 The `gc` Go compiler performs very limited function call inlining. Inlining depends on the complexity of the callee function. In particular, function-call nodes in the callee function appear to have infinite cost, as do calls to panic and most calls into the language runtime (e.g. interface assertions). On the upside, function inlining is performed across files and sometimes across package boundaries.
 

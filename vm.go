@@ -622,7 +622,7 @@ func init() {
 	}
 }
 
-func (l *State) execute() { l.executeFunctionTable() }
+func (l *State) execute() { l.executeSwitch() }
 
 func (l *State) executeFunctionTable() {
 	ci := l.callInfo
@@ -675,32 +675,17 @@ func newFrame(l *State, ci *callInfo) (frame []value, closure *luaClosure, const
 	return
 }
 
+func expectNext(ci *callInfo, expected opCode) instruction {
+	i := ci.step() // go to next instruction
+	if op := i.opCode(); op != expected {
+		panic(fmt.Sprintf("expected opcode %s, got %s", opNames[expected], opNames[op]))
+	}
+	return i
+}
+
 func (l *State) executeSwitch() {
-	var frame []value
-	var closure *luaClosure
-	var constants []value
 	ci := l.callInfo
-	jump := func(i instruction) {
-		if a := i.a(); a > 0 {
-			l.close(ci.stackIndex(a - 1))
-		}
-		ci.jump(i.sbx())
-	}
-	condJump := func(cond bool) {
-		if cond {
-			jump(ci.step())
-		} else {
-			ci.skip()
-		}
-	}
-	expectNext := func(expected opCode) instruction {
-		i := ci.step() // go to next instruction
-		if op := i.opCode(); op != expected {
-			panic(fmt.Sprintf("expected opcode %s, got %s", opNames[expected], opNames[op]))
-		}
-		return i
-	}
-	frame, closure, constants = newFrame(l, ci)
+	frame, closure, constants := newFrame(l, ci)
 	for {
 		if l.hookMask&(MaskLine|MaskCount) != 0 {
 			if l.hookCount--; l.hookCount == 0 || l.hookMask&MaskLine != 0 {
@@ -714,7 +699,7 @@ func (l *State) executeSwitch() {
 		case opLoadConstant:
 			frame[i.a()] = constants[i.bx()]
 		case opLoadConstantEx:
-			frame[i.a()] = constants[expectNext(opExtraArg).ax()]
+			frame[i.a()] = constants[expectNext(ci, opExtraArg).ax()]
 		case opLoadBool:
 			frame[i.a()] = i.b() != 0
 			if i.c() != 0 {
@@ -853,32 +838,67 @@ func (l *State) executeSwitch() {
 				clear(frame[b:])
 			}
 		case opJump:
-			jump(i)
+			if a := i.a(); a > 0 {
+				l.close(ci.stackIndex(a - 1))
+			}
+			ci.jump(i.sbx())
 		case opEqual:
 			test := i.a() != 0
-			condJump(l.equalObjects(k(i.b(), constants, frame), k(i.c(), constants, frame)) == test)
+			if l.equalObjects(k(i.b(), constants, frame), k(i.c(), constants, frame)) == test {
+				i := ci.step()
+				if a := i.a(); a > 0 {
+					l.close(ci.stackIndex(a - 1))
+				}
+				ci.jump(i.sbx())
+			} else {
+				ci.skip()
+			}
 			frame = ci.frame
 		case opLessThan:
 			test := i.a() != 0
-			condJump(l.lessThan(k(i.b(), constants, frame), k(i.c(), constants, frame)) == test)
+			if l.lessThan(k(i.b(), constants, frame), k(i.c(), constants, frame)) == test {
+				i := ci.step()
+				if a := i.a(); a > 0 {
+					l.close(ci.stackIndex(a - 1))
+				}
+				ci.jump(i.sbx())
+			} else {
+				ci.skip()
+			}
 			frame = ci.frame
 		case opLessOrEqual:
 			test := i.a() != 0
-			condJump(l.lessOrEqual(k(i.b(), constants, frame), k(i.c(), constants, frame)) == test)
+			if l.lessOrEqual(k(i.b(), constants, frame), k(i.c(), constants, frame)) == test {
+				i := ci.step()
+				if a := i.a(); a > 0 {
+					l.close(ci.stackIndex(a - 1))
+				}
+				ci.jump(i.sbx())
+			} else {
+				ci.skip()
+			}
 			frame = ci.frame
 		case opTest:
-			if i.c() == 0 {
-				condJump(isFalse(frame[i.a()]))
+			test := i.c() == 0
+			if isFalse(frame[i.a()]) == test {
+				i := ci.step()
+				if a := i.a(); a > 0 {
+					l.close(ci.stackIndex(a - 1))
+				}
+				ci.jump(i.sbx())
 			} else {
-				condJump(!isFalse(frame[i.a()]))
+				ci.skip()
 			}
 		case opTestSet:
-			if b, c := frame[i.b()], i.c(); c == 0 && isFalse(b) {
+			b := frame[i.b()]
+			test := i.c() == 0
+			if isFalse(b) == test {
 				frame[i.a()] = b
-				jump(ci.step())
-			} else if c != 0 && !isFalse(b) {
-				frame[i.a()] = b
-				jump(ci.step())
+				i := ci.step()
+				if a := i.a(); a > 0 {
+					l.close(ci.stackIndex(a - 1))
+				}
+				ci.jump(i.sbx())
 			} else {
 				ci.skip()
 			}
@@ -975,7 +995,7 @@ func (l *State) executeSwitch() {
 			l.top = callBase + 3 // function + 2 args (state and index)
 			l.call(callBase, i.c(), true)
 			frame, l.top = ci.frame, ci.top
-			i = expectNext(opTForLoop) // go to next instruction
+			i = expectNext(ci, opTForLoop) // go to next instruction
 			fallthrough
 		case opTForLoop:
 			if a := i.a(); frame[a+1] != nil { // continue loop?
@@ -988,7 +1008,7 @@ func (l *State) executeSwitch() {
 				n = l.top - ci.stackIndex(a) - 1
 			}
 			if c == 0 {
-				c = expectNext(opExtraArg).ax()
+				c = expectNext(ci, opExtraArg).ax()
 			}
 			h := frame[a].(*table)
 			start := (c - 1) * listItemsPerFlush
