@@ -263,21 +263,6 @@ func (e *engine) k(field int) value {
 	return e.frame[field]
 }
 
-func (e *engine) jump(i instruction) {
-	if a := i.a(); a > 0 {
-		e.l.close(e.callInfo.stackIndex(a - 1))
-	}
-	e.callInfo.jump(i.sbx())
-}
-
-func (e *engine) condJump(cond bool) {
-	if cond {
-		e.jump(e.callInfo.step())
-	} else {
-		e.callInfo.skip()
-	}
-}
-
 func (e *engine) expectNext(expected opCode) instruction {
 	i := e.callInfo.step() // go to next instruction
 	if op := i.opCode(); op != expected {
@@ -302,44 +287,120 @@ func (e *engine) newFrame() {
 	e.constants = e.closure.prototype.constants
 }
 
-func (e *engine) protect(v value) value {
-	e.frame = e.callInfo.frame
-	return v
+func (e *engine) hooked() bool { return e.l.hookMask&(MaskLine|MaskCount) != 0 }
+
+func (e *engine) hook() {
+	if e.l.hookCount--; e.l.hookCount == 0 || e.l.hookMask&MaskLine != 0 {
+		e.l.traceExecution()
+		e.frame = e.callInfo.frame
+	}
 }
 
-var jumpTable []func(*engine, instruction)
+type engineOp func(*engine, instruction) (engineOp, instruction)
+
+var jumpTable []engineOp
 
 func init() {
-	jumpTable = []func(*engine, instruction){
-		func(e *engine, i instruction) { e.frame[i.a()] = e.frame[i.b()] },      // opMove
-		func(e *engine, i instruction) { e.frame[i.a()] = e.constants[i.bx()] }, // opLoadConstant
-		func(e *engine, i instruction) { // opLoadConstantEx
-			e.frame[i.a()] = e.constants[e.expectNext(opExtraArg).ax()]
+	jumpTable = []engineOp{
+		func(e *engine, i instruction) (engineOp, instruction) { // opMove
+			e.frame[i.a()] = e.frame[i.b()]
+			if e.hooked() {
+				e.hook()
+			}
+			i = e.callInfo.step()
+			return jumpTable[i.opCode()], i
 		},
-		func(e *engine, i instruction) { // opLoadBool
+		func(e *engine, i instruction) (engineOp, instruction) { // opLoadConstant
+			e.frame[i.a()] = e.constants[i.bx()]
+			if e.hooked() {
+				e.hook()
+			}
+			i = e.callInfo.step()
+			return jumpTable[i.opCode()], i
+		},
+		func(e *engine, i instruction) (engineOp, instruction) { // opLoadConstantEx
+			e.frame[i.a()] = e.constants[e.expectNext(opExtraArg).ax()]
+			if e.hooked() {
+				e.hook()
+			}
+			i = e.callInfo.step()
+			return jumpTable[i.opCode()], i
+		},
+		func(e *engine, i instruction) (engineOp, instruction) { // opLoadBool
 			e.frame[i.a()] = i.b() != 0
 			if i.c() != 0 {
 				e.callInfo.skip()
 			}
+			if e.hooked() {
+				e.hook()
+			}
+			i = e.callInfo.step()
+			return jumpTable[i.opCode()], i
 		},
-		func(e *engine, i instruction) { a, b := i.a(), i.b(); clear(e.frame[a : a+b+1]) }, // opLoadNil
-		func(e *engine, i instruction) { e.frame[i.a()] = e.closure.upValue(i.b()) },       // opGetUpValue
-		func(e *engine, i instruction) { // opGetTableUp
-			e.frame[i.a()] = e.protect(e.l.tableAt(e.closure.upValue(i.b()), e.k(i.c())))
+		func(e *engine, i instruction) (engineOp, instruction) { // opLoadNil
+			a, b := i.a(), i.b()
+			clear(e.frame[a : a+b+1])
+			if e.hooked() {
+				e.hook()
+			}
+			i = e.callInfo.step()
+			return jumpTable[i.opCode()], i
 		},
-		func(e *engine, i instruction) { // opGetTable
-			e.frame[i.a()] = e.protect(e.l.tableAt(e.frame[i.b()], e.k(i.c())))
+		func(e *engine, i instruction) (engineOp, instruction) { // opGetUpValue
+			e.frame[i.a()] = e.closure.upValue(i.b())
+			if e.hooked() {
+				e.hook()
+			}
+			i = e.callInfo.step()
+			return jumpTable[i.opCode()], i
 		},
-		func(e *engine, i instruction) { // opSetTableUp
+		func(e *engine, i instruction) (engineOp, instruction) { // opGetTableUp
+			tmp := e.l.tableAt(e.closure.upValue(i.b()), e.k(i.c()))
+			e.frame = e.callInfo.frame
+			e.frame[i.a()] = tmp
+			if e.hooked() {
+				e.hook()
+			}
+			i = e.callInfo.step()
+			return jumpTable[i.opCode()], i
+		},
+		func(e *engine, i instruction) (engineOp, instruction) { // opGetTable
+			tmp := e.l.tableAt(e.frame[i.b()], e.k(i.c()))
+			e.frame = e.callInfo.frame
+			e.frame[i.a()] = tmp
+			if e.hooked() {
+				e.hook()
+			}
+			i = e.callInfo.step()
+			return jumpTable[i.opCode()], i
+		},
+		func(e *engine, i instruction) (engineOp, instruction) { // opSetTableUp
 			e.l.setTableAt(e.closure.upValue(i.a()), e.k(i.b()), e.k(i.c()))
 			e.frame = e.callInfo.frame
+			if e.hooked() {
+				e.hook()
+			}
+			i = e.callInfo.step()
+			return jumpTable[i.opCode()], i
 		},
-		func(e *engine, i instruction) { e.closure.setUpValue(i.b(), e.frame[i.a()]) }, // opSetUpValue
-		func(e *engine, i instruction) { // opSetTable
+		func(e *engine, i instruction) (engineOp, instruction) { // opSetUpValue
+			e.closure.setUpValue(i.b(), e.frame[i.a()])
+			if e.hooked() {
+				e.hook()
+			}
+			i = e.callInfo.step()
+			return jumpTable[i.opCode()], i
+		},
+		func(e *engine, i instruction) (engineOp, instruction) { // opSetTable
 			e.l.setTableAt(e.frame[i.a()], e.k(i.b()), e.k(i.c()))
 			e.frame = e.callInfo.frame
+			if e.hooked() {
+				e.hook()
+			}
+			i = e.callInfo.step()
+			return jumpTable[i.opCode()], i
 		},
-		func(e *engine, i instruction) { // opNewTable
+		func(e *engine, i instruction) (engineOp, instruction) { // opNewTable
 			a := i.a()
 			if b, c := float8(i.b()), float8(i.c()); b != 0 || c != 0 {
 				e.frame[a] = newTableWithSize(intFromFloat8(b), intFromFloat8(c))
@@ -347,90 +408,189 @@ func init() {
 				e.frame[a] = newTable()
 			}
 			clear(e.frame[a+1:])
+			if e.hooked() {
+				e.hook()
+			}
+			i = e.callInfo.step()
+			return jumpTable[i.opCode()], i
 		},
-		func(e *engine, i instruction) { // opSelf
+		func(e *engine, i instruction) (engineOp, instruction) { // opSelf
 			a, t := i.a(), e.frame[i.b()]
-			e.frame[a+1], e.frame[a] = t, e.protect(e.l.tableAt(t, e.k(i.c())))
+			tmp := e.l.tableAt(t, e.k(i.c()))
+			e.frame = e.callInfo.frame
+			e.frame[a+1], e.frame[a] = t, tmp
+			if e.hooked() {
+				e.hook()
+			}
+			i = e.callInfo.step()
+			return jumpTable[i.opCode()], i
 		},
-		func(e *engine, i instruction) { // opAdd
+		func(e *engine, i instruction) (engineOp, instruction) { // opAdd
 			b := e.k(i.b())
 			c := e.k(i.c())
 			if nb, ok := b.(float64); ok {
 				if nc, ok := c.(float64); ok {
 					e.frame[i.a()] = nb + nc
-					return
+					if e.hooked() {
+						e.hook()
+					}
+					i = e.callInfo.step()
+					return jumpTable[i.opCode()], i
 				}
 			}
-			e.frame[i.a()] = e.protect(e.l.arith(b, c, tmAdd))
+			tmp := e.l.arith(b, c, tmAdd)
+			e.frame = e.callInfo.frame
+			e.frame[i.a()] = tmp
+			if e.hooked() {
+				e.hook()
+			}
+			i = e.callInfo.step()
+			return jumpTable[i.opCode()], i
 		},
-		func(e *engine, i instruction) { // opSub
+		func(e *engine, i instruction) (engineOp, instruction) { // opSub
 			b := e.k(i.b())
 			c := e.k(i.c())
 			if nb, ok := b.(float64); ok {
 				if nc, ok := c.(float64); ok {
 					e.frame[i.a()] = nb - nc
-					return
+					if e.hooked() {
+						e.hook()
+					}
+					i = e.callInfo.step()
+					return jumpTable[i.opCode()], i
 				}
 			}
-			e.frame[i.a()] = e.protect(e.l.arith(b, c, tmSub))
+			tmp := e.l.arith(b, c, tmSub)
+			e.frame = e.callInfo.frame
+			e.frame[i.a()] = tmp
+			if e.hooked() {
+				e.hook()
+			}
+			i = e.callInfo.step()
+			return jumpTable[i.opCode()], i
 		},
-		func(e *engine, i instruction) { // opMul
+		func(e *engine, i instruction) (engineOp, instruction) { // opMul
 			b := e.k(i.b())
 			c := e.k(i.c())
 			if nb, ok := b.(float64); ok {
 				if nc, ok := c.(float64); ok {
 					e.frame[i.a()] = nb * nc
-					return
+					if e.hooked() {
+						e.hook()
+					}
+					i = e.callInfo.step()
+					return jumpTable[i.opCode()], i
 				}
 			}
-			e.frame[i.a()] = e.protect(e.l.arith(b, c, tmMul))
+			tmp := e.l.arith(b, c, tmMul)
+			e.frame = e.callInfo.frame
+			e.frame[i.a()] = tmp
+			if e.hooked() {
+				e.hook()
+			}
+			i = e.callInfo.step()
+			return jumpTable[i.opCode()], i
 		},
-		func(e *engine, i instruction) { // opDiv
+		func(e *engine, i instruction) (engineOp, instruction) { // opDiv
 			b := e.k(i.b())
 			c := e.k(i.c())
 			if nb, ok := b.(float64); ok {
 				if nc, ok := c.(float64); ok {
 					e.frame[i.a()] = nb / nc
-					return
+					if e.hooked() {
+						e.hook()
+					}
+					i = e.callInfo.step()
+					return jumpTable[i.opCode()], i
 				}
 			}
-			e.frame[i.a()] = e.protect(e.l.arith(b, c, tmDiv))
+			tmp := e.l.arith(b, c, tmDiv)
+			e.frame = e.callInfo.frame
+			e.frame[i.a()] = tmp
+			if e.hooked() {
+				e.hook()
+			}
+			i = e.callInfo.step()
+			return jumpTable[i.opCode()], i
 		},
-		func(e *engine, i instruction) { // opMod
+		func(e *engine, i instruction) (engineOp, instruction) { // opMod
 			b := e.k(i.b())
 			c := e.k(i.c())
 			if nb, ok := b.(float64); ok {
 				if nc, ok := c.(float64); ok {
 					e.frame[i.a()] = math.Mod(nb, nc)
-					return
+					if e.hooked() {
+						e.hook()
+					}
+					i = e.callInfo.step()
+					return jumpTable[i.opCode()], i
 				}
 			}
-			e.frame[i.a()] = e.protect(e.l.arith(b, c, tmMod))
+			tmp := e.l.arith(b, c, tmMod)
+			e.frame = e.callInfo.frame
+			e.frame[i.a()] = tmp
+			if e.hooked() {
+				e.hook()
+			}
+			i = e.callInfo.step()
+			return jumpTable[i.opCode()], i
 		},
-		func(e *engine, i instruction) { // opPow
+		func(e *engine, i instruction) (engineOp, instruction) { // opPow
 			b := e.k(i.b())
 			c := e.k(i.c())
 			if nb, ok := b.(float64); ok {
 				if nc, ok := c.(float64); ok {
 					e.frame[i.a()] = math.Pow(nb, nc)
-					return
+					if e.hooked() {
+						e.hook()
+					}
+					i = e.callInfo.step()
+					return jumpTable[i.opCode()], i
 				}
 			}
-			e.frame[i.a()] = e.protect(e.l.arith(b, c, tmPow))
+			tmp := e.l.arith(b, c, tmPow)
+			e.frame = e.callInfo.frame
+			e.frame[i.a()] = tmp
+			if e.hooked() {
+				e.hook()
+			}
+			i = e.callInfo.step()
+			return jumpTable[i.opCode()], i
 		},
-		func(e *engine, i instruction) { // opUnaryMinus
+		func(e *engine, i instruction) (engineOp, instruction) { // opUnaryMinus
 			switch b := e.frame[i.b()].(type) {
 			case float64:
 				e.frame[i.a()] = -b
 			default:
-				e.frame[i.a()] = e.protect(e.l.arith(b, b, tmUnaryMinus))
+				tmp := e.l.arith(b, b, tmUnaryMinus)
+				e.frame = e.callInfo.frame
+				e.frame[i.a()] = tmp
 			}
+			if e.hooked() {
+				e.hook()
+			}
+			i = e.callInfo.step()
+			return jumpTable[i.opCode()], i
 		},
-		func(e *engine, i instruction) { e.frame[i.a()] = isFalse(e.frame[i.b()]) }, // opNot
-		func(e *engine, i instruction) { // opLength
-			e.frame[i.a()] = e.protect(e.l.objectLength(e.frame[i.b()]))
+		func(e *engine, i instruction) (engineOp, instruction) { // opNot
+			e.frame[i.a()] = isFalse(e.frame[i.b()])
+			if e.hooked() {
+				e.hook()
+			}
+			i = e.callInfo.step()
+			return jumpTable[i.opCode()], i
 		},
-		func(e *engine, i instruction) { // opConcat
+		func(e *engine, i instruction) (engineOp, instruction) { // opLength
+			tmp := e.l.objectLength(e.frame[i.b()])
+			e.frame = e.callInfo.frame
+			e.frame[i.a()] = tmp
+			if e.hooked() {
+				e.hook()
+			}
+			i = e.callInfo.step()
+			return jumpTable[i.opCode()], i
+		},
+		func(e *engine, i instruction) (engineOp, instruction) { // opConcat
 			a, b, c := i.a(), i.b(), i.c()
 			e.l.top = e.callInfo.stackIndex(c + 1) // mark the end of concat operands
 			e.l.concat(c - b + 1)
@@ -441,42 +601,117 @@ func init() {
 			} else {
 				clear(e.frame[b:])
 			}
-		},
-		func(e *engine, i instruction) { e.jump(i) }, // opJump
-		func(e *engine, i instruction) { // opEqual
-			test := i.a() != 0
-			e.condJump(e.l.equalObjects(e.k(i.b()), e.k(i.c())) == test)
-			e.frame = e.callInfo.frame
-		},
-		func(e *engine, i instruction) { // opLessThan
-			test := i.a() != 0
-			e.condJump(e.l.lessThan(e.k(i.b()), e.k(i.c())) == test)
-			e.frame = e.callInfo.frame
-		},
-		func(e *engine, i instruction) { // opLessOrEqual
-			test := i.a() != 0
-			e.condJump(e.l.lessOrEqual(e.k(i.b()), e.k(i.c())) == test)
-			e.frame = e.callInfo.frame
-		},
-		func(e *engine, i instruction) { // opTest
-			if i.c() == 0 {
-				e.condJump(isFalse(e.frame[i.a()]))
-			} else {
-				e.condJump(!isFalse(e.frame[i.a()]))
+			if e.hooked() {
+				e.hook()
 			}
+			i = e.callInfo.step()
+			return jumpTable[i.opCode()], i
 		},
-		func(e *engine, i instruction) { // opTestSet
-			if b, c := e.frame[i.b()], i.c(); c == 0 && isFalse(b) {
-				e.frame[i.a()] = b
-				e.jump(e.callInfo.step())
-			} else if c != 0 && !isFalse(b) {
-				e.frame[i.a()] = b
-				e.jump(e.callInfo.step())
+		func(e *engine, i instruction) (engineOp, instruction) { // opJump
+			if a := i.a(); a > 0 {
+				e.l.close(e.callInfo.stackIndex(a - 1))
+			}
+			e.callInfo.jump(i.sbx())
+			if e.hooked() {
+				e.hook()
+			}
+			i = e.callInfo.step()
+			return jumpTable[i.opCode()], i
+		},
+		func(e *engine, i instruction) (engineOp, instruction) { // opEqual
+			test := i.a() != 0
+			result := e.l.equalObjects(e.k(i.b()), e.k(i.c()))
+			if result == test {
+				i := e.callInfo.step()
+				if a := i.a(); a > 0 {
+					e.l.close(e.callInfo.stackIndex(a - 1))
+				}
+				e.callInfo.jump(i.sbx())
 			} else {
 				e.callInfo.skip()
 			}
+			e.frame = e.callInfo.frame
+			if e.hooked() {
+				e.hook()
+			}
+			i = e.callInfo.step()
+			return jumpTable[i.opCode()], i
 		},
-		func(e *engine, i instruction) { // opCall
+		func(e *engine, i instruction) (engineOp, instruction) { // opLessThan
+			test := i.a() != 0
+			result := e.l.lessThan(e.k(i.b()), e.k(i.c()))
+			if result == test {
+				i := e.callInfo.step()
+				if a := i.a(); a > 0 {
+					e.l.close(e.callInfo.stackIndex(a - 1))
+				}
+				e.callInfo.jump(i.sbx())
+			} else {
+				e.callInfo.skip()
+			}
+			e.frame = e.callInfo.frame
+			if e.hooked() {
+				e.hook()
+			}
+			i = e.callInfo.step()
+			return jumpTable[i.opCode()], i
+		},
+		func(e *engine, i instruction) (engineOp, instruction) { // opLessOrEqual
+			test := i.a() != 0
+			result := e.l.lessOrEqual(e.k(i.b()), e.k(i.c()))
+			if result == test {
+				i := e.callInfo.step()
+				if a := i.a(); a > 0 {
+					e.l.close(e.callInfo.stackIndex(a - 1))
+				}
+				e.callInfo.jump(i.sbx())
+			} else {
+				e.callInfo.skip()
+			}
+			e.frame = e.callInfo.frame
+			if e.hooked() {
+				e.hook()
+			}
+			i = e.callInfo.step()
+			return jumpTable[i.opCode()], i
+		},
+		func(e *engine, i instruction) (engineOp, instruction) { // opTest
+			test := i.c() == 0
+			if isFalse(e.frame[i.a()]) == test {
+				i := e.callInfo.step()
+				if a := i.a(); a > 0 {
+					e.l.close(e.callInfo.stackIndex(a - 1))
+				}
+				e.callInfo.jump(i.sbx())
+			} else {
+				e.callInfo.skip()
+			}
+			if e.hooked() {
+				e.hook()
+			}
+			i = e.callInfo.step()
+			return jumpTable[i.opCode()], i
+		},
+		func(e *engine, i instruction) (engineOp, instruction) { // opTestSet
+			b := e.frame[i.b()]
+			test := i.c() == 0
+			if isFalse(b) == test {
+				e.frame[i.a()] = b
+				i := e.callInfo.step()
+				if a := i.a(); a > 0 {
+					e.l.close(e.callInfo.stackIndex(a - 1))
+				}
+				e.callInfo.jump(i.sbx())
+			} else {
+				e.callInfo.skip()
+			}
+			if e.hooked() {
+				e.hook()
+			}
+			i = e.callInfo.step()
+			return jumpTable[i.opCode()], i
+		},
+		func(e *engine, i instruction) (engineOp, instruction) { // opCall
 			a, b, c := i.a(), i.b(), i.c()
 			if b != 0 {
 				e.l.top = e.callInfo.stackIndex(a + b)
@@ -491,13 +726,18 @@ func init() {
 				e.callInfo.setCallStatus(callStatusReentry)
 				e.newFrame()
 			}
+			if e.hooked() {
+				e.hook()
+			}
+			i = e.callInfo.step()
+			return jumpTable[i.opCode()], i
 		},
-		func(e *engine, i instruction) { // opTailCall
-			a, b, c := i.a(), i.b(), i.c()
+		func(e *engine, i instruction) (engineOp, instruction) { // opTailCall
+			a, b := i.a(), i.b()
 			if b != 0 {
 				e.l.top = e.callInfo.stackIndex(a + b)
 			} // else previous instruction set top
-			e.l.assert(c-1 == MultipleReturns)
+			// TODO e.l.assert(i.c()-1 == MultipleReturns)
 			if e.l.preCall(e.callInfo.stackIndex(a), MultipleReturns) { // go function
 				e.frame = e.callInfo.frame
 			} else {
@@ -520,13 +760,41 @@ func init() {
 				oci.savedPC = nci.savedPC
 				oci.setCallStatus(callStatusTail) // function was tail called
 				e.l.top, e.l.callInfo, e.callInfo = oci.top, oci, oci
-				e.l.assert(e.l.top == oci.base()+e.l.stack[ofn].(*luaClosure).prototype.maxStackSize)
-				e.l.assert(&oci.frame[0] == &e.l.stack[oci.base()] && len(oci.frame) == oci.top-oci.base())
+				// TODO e.l.assert(e.l.top == oci.base()+e.l.stack[ofn].(*luaClosure).prototype.maxStackSize)
+				// TODO e.l.assert(&oci.frame[0] == &e.l.stack[oci.base()] && len(oci.frame) == oci.top-oci.base())
 				e.newFrame()
 			}
+			if e.hooked() {
+				e.hook()
+			}
+			i = e.callInfo.step()
+			return jumpTable[i.opCode()], i
 		},
-		func(e *engine, i instruction) { panic("unreachable") }, // opReturn
-		func(e *engine, i instruction) { // opForLoop
+		func(e *engine, i instruction) (engineOp, instruction) { // opReturn
+			a := i.a()
+			if b := i.b(); b != 0 {
+				e.l.top = e.callInfo.stackIndex(a + b - 1)
+			}
+			if len(e.closure.prototype.prototypes) > 0 {
+				e.l.close(e.callInfo.base())
+			}
+			n := e.l.postCall(e.callInfo.stackIndex(a))
+			if !e.callInfo.isCallStatus(callStatusReentry) { // ci still the called one?
+				return nil, i // external invocation: return
+			}
+			e.callInfo = e.l.callInfo
+			if n {
+				e.l.top = e.callInfo.top
+			}
+			// TODO l.assert(e.callInfo.code[e.callInfo.savedPC-1].opCode() == opCall)
+			e.newFrame()
+			if e.hooked() {
+				e.hook()
+			}
+			i = e.callInfo.step()
+			return jumpTable[i.opCode()], i
+		},
+		func(e *engine, i instruction) (engineOp, instruction) { // opForLoop
 			a := i.a()
 			index, limit, step := e.frame[a+0].(float64), e.frame[a+1].(float64), e.frame[a+2].(float64)
 			if index += step; (0 < step && index <= limit) || (step <= 0 && limit <= index) {
@@ -534,8 +802,13 @@ func init() {
 				e.frame[a+0] = index // update internal index...
 				e.frame[a+3] = index // ... and external index
 			}
+			if e.hooked() {
+				e.hook()
+			}
+			i = e.callInfo.step()
+			return jumpTable[i.opCode()], i
 		},
-		func(e *engine, i instruction) { // opForPrep
+		func(e *engine, i instruction) (engineOp, instruction) { // opForPrep
 			a := i.a()
 			if init, ok := e.l.toNumber(e.frame[a+0]); !ok {
 				e.l.runtimeError("'for' initial value must be a number")
@@ -547,8 +820,13 @@ func init() {
 				e.frame[a+0], e.frame[a+1], e.frame[a+2] = init-step, limit, step
 				e.callInfo.jump(i.sbx())
 			}
+			if e.hooked() {
+				e.hook()
+			}
+			i = e.callInfo.step()
+			return jumpTable[i.opCode()], i
 		},
-		func(e *engine, i instruction) { // opTForCall
+		func(e *engine, i instruction) (engineOp, instruction) { // opTForCall
 			a := i.a()
 			callBase := a + 3
 			copy(e.frame[callBase:callBase+3], e.frame[a:a+3])
@@ -561,14 +839,24 @@ func init() {
 				e.frame[a] = e.frame[a+1] // save control variable
 				e.callInfo.jump(i.sbx())  // jump back
 			}
+			if e.hooked() {
+				e.hook()
+			}
+			i = e.callInfo.step()
+			return jumpTable[i.opCode()], i
 		},
-		func(e *engine, i instruction) { // opTForLoop:
+		func(e *engine, i instruction) (engineOp, instruction) { // opTForLoop:
 			if a := i.a(); e.frame[a+1] != nil { // continue loop?
 				e.frame[a] = e.frame[a+1] // save control variable
 				e.callInfo.jump(i.sbx())  // jump back
 			}
+			if e.hooked() {
+				e.hook()
+			}
+			i = e.callInfo.step()
+			return jumpTable[i.opCode()], i
 		},
-		func(e *engine, i instruction) { // opSetList:
+		func(e *engine, i instruction) (engineOp, instruction) { // opSetList:
 			a, n, c := i.a(), i.b(), i.c()
 			if n == 0 {
 				n = e.l.top - e.callInfo.stackIndex(a) - 1
@@ -584,8 +872,13 @@ func init() {
 			}
 			copy(h.array[start:last], e.frame[a+1:a+1+n])
 			e.l.top = e.callInfo.top
+			if e.hooked() {
+				e.hook()
+			}
+			i = e.callInfo.step()
+			return jumpTable[i.opCode()], i
 		},
-		func(e *engine, i instruction) { // opClosure
+		func(e *engine, i instruction) (engineOp, instruction) { // opClosure
 			a, p := i.a(), &e.closure.prototype.prototypes[i.bx()]
 			if ncl := cached(p, e.closure.upValues, e.callInfo.base()); ncl == nil { // no match?
 				e.frame[a] = e.l.newClosure(p, e.closure.upValues, e.callInfo.base()) // create a new one
@@ -593,8 +886,13 @@ func init() {
 				e.frame[a] = ncl
 			}
 			clear(e.frame[a+1:])
+			if e.hooked() {
+				e.hook()
+			}
+			i = e.callInfo.step()
+			return jumpTable[i.opCode()], i
 		},
-		func(e *engine, i instruction) { // opVarArg
+		func(e *engine, i instruction) (engineOp, instruction) { // opVarArg
 			ci := e.callInfo
 			a, b := i.a(), i.b()-1
 			n := ci.base() - ci.function - e.closure.prototype.parameterCount - 1
@@ -615,48 +913,33 @@ func init() {
 					e.frame[a+j] = nil
 				}
 			}
+			if e.hooked() {
+				e.hook()
+			}
+			i = e.callInfo.step()
+			return jumpTable[i.opCode()], i
 		},
-		func(e *engine, i instruction) { // opExtraArg
+		func(e *engine, i instruction) (engineOp, instruction) { // opExtraArg
 			panic(fmt.Sprintf("unexpected opExtraArg instruction, '%s'", i.String()))
 		},
 	}
 }
 
-func (l *State) execute() { l.executeSwitch() }
+func (l *State) execute() { l.executeFunctionTable() }
 
 func (l *State) executeFunctionTable() {
 	ci := l.callInfo
 	closure, _ := l.stack[ci.function].(*luaClosure)
 	e := engine{callInfo: ci, frame: ci.frame, closure: closure, constants: closure.prototype.constants, l: l}
-	for {
-		if l.hookMask&(MaskLine|MaskCount) != 0 {
-			if l.hookCount--; l.hookCount == 0 || l.hookMask&MaskLine != 0 {
-				l.traceExecution()
-				e.frame = e.callInfo.frame
-			}
+	if l.hookMask&(MaskLine|MaskCount) != 0 {
+		if l.hookCount--; l.hookCount == 0 || l.hookMask&MaskLine != 0 {
+			l.traceExecution()
+			e.frame = e.callInfo.frame
 		}
-		i := e.callInfo.step()
-		if op := i.opCode(); op == opReturn {
-			a := i.a()
-			if b := i.b(); b != 0 {
-				l.top = e.callInfo.stackIndex(a + b - 1)
-			}
-			if len(e.closure.prototype.prototypes) > 0 {
-				l.close(e.callInfo.base())
-			}
-			n := l.postCall(e.callInfo.stackIndex(a))
-			if !e.callInfo.isCallStatus(callStatusReentry) { // ci still the called one?
-				return // external invocation: return
-			}
-			e.callInfo = l.callInfo
-			if n {
-				l.top = e.callInfo.top
-			}
-			l.assert(e.callInfo.code[e.callInfo.savedPC-1].opCode() == opCall)
-			e.newFrame()
-		} else {
-			jumpTable[i.opCode()](&e, i)
-		}
+	}
+	i := e.callInfo.step()
+	f := jumpTable[i.opCode()]
+	for f, i = f(&e, i); f != nil; f, i = f(&e, i) {
 	}
 }
 
@@ -918,11 +1201,11 @@ func (l *State) executeSwitch() {
 				frame, closure, constants = newFrame(l, ci)
 			}
 		case opTailCall:
-			a, b, c := i.a(), i.b(), i.c()
+			a, b := i.a(), i.b()
 			if b != 0 {
 				l.top = ci.stackIndex(a + b)
 			} // else previous instruction set top
-			l.assert(c-1 == MultipleReturns)
+			// TODO l.assert(i.c()-1 == MultipleReturns)
 			if l.preCall(ci.stackIndex(a), MultipleReturns) { // go function
 				frame = ci.frame
 			} else {
@@ -945,8 +1228,8 @@ func (l *State) executeSwitch() {
 				oci.savedPC = nci.savedPC
 				oci.setCallStatus(callStatusTail) // function was tail called
 				l.top, l.callInfo, ci = oci.top, oci, oci
-				l.assert(l.top == oci.base()+l.stack[ofn].(*luaClosure).prototype.maxStackSize)
-				l.assert(&oci.frame[0] == &l.stack[oci.base()] && len(oci.frame) == oci.top-oci.base())
+				// TODO l.assert(l.top == oci.base()+l.stack[ofn].(*luaClosure).prototype.maxStackSize)
+				// TODO l.assert(&oci.frame[0] == &l.stack[oci.base()] && len(oci.frame) == oci.top-oci.base())
 				frame, closure, constants = newFrame(l, ci)
 			}
 		case opReturn:
@@ -965,7 +1248,7 @@ func (l *State) executeSwitch() {
 			if n {
 				l.top = ci.top
 			}
-			l.assert(ci.code[ci.savedPC-1].opCode() == opCall)
+			// TODO l.assert(ci.code[ci.savedPC-1].opCode() == opCall)
 			frame, closure, constants = newFrame(l, ci)
 		case opForLoop:
 			a := i.a()
