@@ -9,7 +9,6 @@ type table struct {
 	hash          map[value]value
 	metaTable     *table
 	flags         byte
-	occupancy     int
 	iterationKeys []value
 }
 
@@ -37,7 +36,19 @@ func (l *State) fastTagMethod(table *table, event tm) value {
 	return table.tagMethod(event, l.global.tagMethodNames[event])
 }
 
-func (t *table) extendArray(last int) { t.array = append(t.array, make([]value, last-len(t.array))...) }
+func (t *table) extendArray(last int) {
+	t.array = append(t.array, make([]value, last-len(t.array))...)
+	for k, v := range t.hash {
+		if f, ok := k.(float64); ok {
+			if i := int(f); float64(i) == f {
+				if 0 < i && i <= len(t.array) {
+					t.array[i-1] = v
+					delete(t.hash, k)
+				}
+			}
+		}
+	}
+}
 
 func (t *table) atInt(k int) value {
 	if 0 < k && k <= len(t.array) {
@@ -46,21 +57,35 @@ func (t *table) atInt(k int) value {
 	return t.hash[float64(k)]
 }
 
-func (t *table) updateArray(k int, v value) {
-	if old := t.array[k-1]; old == nil && v != nil {
-		t.occupancy++
-	} else if old != nil && v == nil {
-		t.occupancy--
+func (t *table) maybeResizeArray(key int) bool {
+	// Precondition: key > len(t.array).
+	occupancy := 0
+	for _, v := range t.array {
+		if v != nil {
+			occupancy++
+		}
 	}
-	t.array[k-1] = v
+	for k, v := range t.hash {
+		if f, ok := k.(float64); ok && v != nil {
+			if i := int(f); i <= key && float64(i) == f {
+				occupancy++
+			}
+		}
+	}
+	if occupancy >= key>>1 {
+		t.extendArray(max(occupancy*2, key)) // TODO Tune growth function.
+		return true
+	}
+	return false
 }
 
 func (t *table) putAtInt(k int, v value) {
 	if 0 < k && k <= len(t.array) {
-		t.updateArray(k, v)
-	} else if k > 0 && t.occupancy >= len(t.array)>>1 {
-		t.extendArray(max(k, t.occupancy*2))
-		t.updateArray(k, v)
+		t.array[k-1] = v
+	} else if k > 0 && v != nil && t.maybeResizeArray(k) {
+		t.array[k-1] = v
+	} else if v == nil {
+		delete(t.hash, float64(k))
 	} else {
 		t.hash[float64(k)] = v
 	}
@@ -92,13 +117,23 @@ func (t *table) put(l *State, k, v value) {
 			t.putAtInt(i, v)
 		} else if math.IsNaN(k) {
 			l.runtimeError("table index is NaN")
+		} else if v == nil {
+			delete(t.hash, k)
 		} else {
 			t.hash[k] = v
 		}
 	case string:
-		t.hash[k] = v
+		if v == nil {
+			delete(t.hash, k)
+		} else {
+			t.hash[k] = v
+		}
 	default:
-		t.hash[k] = v
+		if v == nil {
+			delete(t.hash, k)
+		} else {
+			t.hash[k] = v
+		}
 	}
 }
 
@@ -108,21 +143,21 @@ func (t *table) tryPut(l *State, k, v value) bool {
 	case nil:
 	case float64:
 		if i := int(k); float64(i) == k && 0 < i && i <= len(t.array) && t.array[i-1] != nil {
-			t.updateArray(i, v)
+			t.array[i-1] = v
 			return true
 		} else if math.IsNaN(k) {
 			return false
-		} else if t.hash[k] != nil {
+		} else if t.hash[k] != nil && v != nil {
 			t.hash[k] = v
 			return true
 		}
 	case string:
-		if t.hash[k] != nil {
+		if t.hash[k] != nil && v != nil {
 			t.hash[k] = v
 			return true
 		}
 	default:
-		if t.hash[k] != nil {
+		if t.hash[k] != nil && v != nil {
 			t.hash[k] = v
 			return true
 		}
