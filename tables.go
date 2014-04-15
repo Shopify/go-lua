@@ -5,11 +5,12 @@ import (
 )
 
 type table struct {
-	array     []value
-	hash      map[value]value
-	metaTable *table
-	flags     byte
-	occupancy int
+	array         []value
+	hash          map[value]value
+	metaTable     *table
+	flags         byte
+	occupancy     int
+	iterationKeys []value
 }
 
 func newTable() *table                     { return &table{hash: make(map[value]value)} }
@@ -181,6 +182,7 @@ func arrayIndex(k value) int {
 func (l *State) next(t *table, key int) bool {
 	i, k := 0, l.stack[key]
 	if k == nil { // first iteration
+		t.iterationKeys = nil
 	} else if i = arrayIndex(k); 0 < i && i <= len(t.array) {
 	} else if _, ok := t.hash[k]; !ok {
 		l.runtimeError("invalid key to 'next'") // key not found
@@ -194,17 +196,24 @@ func (l *State) next(t *table, key int) bool {
 			return true
 		}
 	}
+	if t.iterationKeys == nil {
+		j, keys := 0, make([]value, len(t.hash))
+		for hk, _ := range t.hash {
+			keys[j] = hk
+			j++
+		}
+		t.iterationKeys = keys
+	}
 	found := k == nil
-	for hk, v := range t.hash {
+	for _, hk := range t.iterationKeys {
 		if found {
-			if v != nil {
-				l.stack[key] = hk
-				l.stack[key+1] = v
-				return true
-			}
+			l.stack[key] = hk
+			l.stack[key+1] = t.hash[hk]
+			return true
 		} else if l.equalObjects(hk, k) {
 			found = true
 		}
 	}
+	t.iterationKeys = nil
 	return false // no more elements
 }
