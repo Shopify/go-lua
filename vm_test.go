@@ -2,6 +2,7 @@ package lua
 
 import (
 	"fmt"
+	"strings"
 	"testing"
 )
 
@@ -155,8 +156,37 @@ func TestError(t *testing.T) {
 			t.Error("error handler received no arguments")
 		} else if errorMessage, ok := ToString(l, -1); !ok {
 			t.Errorf("error handler received %s instead of string", TypeNameOf(l, -1))
-		} else if errorMessage != program+":1: error" {
+		} else if errorMessage != chunkID(program)+":1: error" {
 			t.Errorf("error handler received '%s' instead of 'error'", errorMessage)
+		}
+		errorHandled = true
+		return 1
+	})
+	LoadString(l, program)
+	ProtectedCall(l, 0, 0, -2)
+	if !errorHandled {
+		t.Error("error not handled")
+	}
+}
+
+func TestErrorf(t *testing.T) {
+	l := NewState()
+	BaseOpen(l)
+	program := "-- script that is bigger than the max ID size\nhelper()\n" + strings.Repeat("--", idSize)
+	expectedErrorMessage := chunkID(program) + ":2: error"
+	PushGoFunction(l, func(l *State) int {
+		Errorf(l, "error")
+		return 0
+	})
+	SetGlobal(l, "helper")
+	errorHandled := false
+	PushGoFunction(l, func(l *State) int {
+		if Top(l) == 0 {
+			t.Error("error handler received no arguments")
+		} else if errorMessage, ok := ToString(l, -1); !ok {
+			t.Errorf("error handler received %s instead of string", TypeNameOf(l, -1))
+		} else if errorMessage != expectedErrorMessage {
+			t.Errorf("error handler received '%s' instead of '%s'", errorMessage, expectedErrorMessage)
 		}
 		errorHandled = true
 		return 1

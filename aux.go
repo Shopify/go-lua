@@ -34,7 +34,7 @@ func countLevels(l *State) int {
 		le *= 2
 	}
 	for li < le {
-		m := (li + le)/2
+		m := (li + le) / 2
 		if Stack(l, m, &d) {
 			li = m + 1
 		} else {
@@ -169,7 +169,7 @@ func Where(l *State, level int) {
 	if Stack(l, level, &activationRecord) { // check function at level
 		Info(l, "Sl", &activationRecord)      // get info about it
 		if activationRecord.CurrentLine > 0 { // is there info?
-			PushString(l, fmt.Sprintf("%s:%d: ", activationRecord.Source, activationRecord.CurrentLine))
+			PushString(l, fmt.Sprintf("%s:%d: ", activationRecord.ShortSource, activationRecord.CurrentLine))
 			return
 		}
 	}
