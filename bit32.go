@@ -7,7 +7,7 @@ import (
 const bitCount = 32
 
 func trim(x uint) uint { return x & math.MaxUint32 }
-func mask(n uint) uint { return ^((math.MaxUint32 << 1) << (n - 1)) }
+func mask(n uint) uint { return ^((math.MaxUint32 << (n - 1)) << 1) }
 
 func shift(l *State, r uint, i int) int {
 	if i < 0 {
