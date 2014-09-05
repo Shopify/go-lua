@@ -65,7 +65,7 @@ func (state *loadState) readString() (s string, err error) {
 	var size uintptr
 	var size64 uint64
 	var size32 uint32
-	if maxUint == math.MaxUint64 {
+	if uint64(maxUint) == math.MaxUint64 {
 		err = state.read(&size64)
 		size = uintptr(size64)
 	} else if maxUint == math.MaxUint32 {
