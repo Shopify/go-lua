@@ -2,9 +2,14 @@ package lua
 
 func findLoader(l *State, name string) {
 	// TODO accumulate errors?
-	if Field(l, UpValueIndex(1), "searchers"); !IsTable(l, 3) {
+	Field(l, UpValueIndex(1), "searchers")
+	if IsNil(l, 3) {
+		Errorf(l, "module '%s' not found", name)
+	}
+	if !IsTable(l, 3) {
 		Errorf(l, "'package.searchers' must be a table")
 	}
+
 	for i := 1; ; i++ {
 		if RawGetInt(l, 3, i); IsNil(l, -1) {
 			Pop(l, 1)
