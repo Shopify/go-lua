@@ -47,20 +47,22 @@ func ioFile(l *State, name string) *os.File {
 	return s.f
 }
 
-func forceOpen(l *State, name string, flag int) {
+func forceOpen(l *State, name, mode string) {
 	s := newFile(l)
-	if f, err := os.OpenFile(name, flag, 0666); err == nil {
-		s.f = f
-	} else {
+	flags, err := flags(mode)
+	if err == nil {
+		s.f, err = os.OpenFile(name, flags, 0666)
+	}
+	if err != nil {
 		Errorf(l, fmt.Sprintf("cannot open file '%s' (%s)", name, err.Error()))
 	}
 }
 
-func ioFileHelper(name string, flag int) Function {
+func ioFileHelper(name, mode string) Function {
 	return func(l *State) int {
 		if !IsNoneOrNil(l, 1) {
 			if name, ok := ToString(l, 1); ok {
-				forceOpen(l, name, flag)
+				forceOpen(l, name, mode)
 			} else {
 				toFile(l)
 				PushValue(l, 1)
@@ -196,7 +198,7 @@ func flags(m string) (f int, err error) {
 var ioLibrary = []RegistryFunction{
 	{"close", close},
 	{"flush", func(l *State) int { return FileResult(l, ioFile(l, output).Sync(), "") }},
-	{"input", ioFileHelper(input, os.O_RDONLY)},
+	{"input", ioFileHelper(input, "r")},
 	{"lines", func(l *State) int {
 		if IsNone(l, 1) {
 			PushNil(l)
@@ -207,7 +209,7 @@ var ioLibrary = []RegistryFunction{
 			toFile(l)
 			lines(l, false)
 		} else {
-			forceOpen(l, CheckString(l, 1), os.O_RDONLY)
+			forceOpen(l, CheckString(l, 1), "r")
 			Replace(l, 1)
 			lines(l, true)
 		}
@@ -224,7 +226,7 @@ var ioLibrary = []RegistryFunction{
 		}
 		return FileResult(l, err, name)
 	}},
-	{"output", ioFileHelper(output, os.O_WRONLY)},
+	{"output", ioFileHelper(output, "w")},
 	{"popen", func(l *State) int { Errorf(l, "'popen' not supported"); panic("unreachable") }},
 	{"read", func(l *State) int { return read(l, ioFile(l, input), 1) }},
 	{"tmpfile", func(l *State) int {

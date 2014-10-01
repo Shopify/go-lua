@@ -1,7 +1,7 @@
 -- The tests for 'require' assume some specific directories and libraries;
 -- better to avoid them in generic machines
 
-if not _port then --[
+-- if not _port then --[
 
 print "testing require"
 
@@ -10,15 +10,15 @@ assert(require"math" == math)
 assert(require"table" == table)
 assert(require"io" == io)
 assert(require"os" == os)
-assert(require"coroutine" == coroutine)
+-- assert(require"coroutine" == coroutine)
 
 assert(type(package.path) == "string")
-assert(type(package.cpath) == "string")
+-- assert(type(package.cpath) == "string")
 assert(type(package.loaded) == "table")
 assert(type(package.preload) == "table")
 
 assert(type(package.config) == "string")
-print("package config: "..string.gsub(package.config, "\n", "|"))
+-- print("package config: "..string.gsub(package.config, "\n", "|"))
 
 do
   -- create a path with 'max' templates,
@@ -32,9 +32,9 @@ do
   local s, err = package.searchpath("xuxu", path)
   -- search fails; check that message has an occurence of
   -- '??????????' with ? replaced by xuxu and at least 'max' lines
-  assert(not s and
-         string.find(err, string.rep("xuxu", 10)) and
-         #string.gsub(err, "[^\n]", "") >= max)
+  -- assert(not s and
+  --        string.find(err, string.rep("xuxu", 10)) and
+  --        #string.gsub(err, "[^\n]", "") >= max)
   -- path with one very long template
   local path = string.rep("?", max)
   local s, err = package.searchpath("xuxu", path)
@@ -104,7 +104,8 @@ assert(package.searchpath(".\\C.lua", D"?", "\\") == D"./C.lua")
 
 local oldpath = package.path
 
-package.path = string.gsub("D/?.lua;D/?.lc;D/?;D/??x?;D/L", "D/", DIR)
+-- package.path = string.gsub("D/?.lua;D/?.lc;D/?;D/??x?;D/L", "D/", DIR)
+package.path = D"?.lua;" .. D"?.lc;" .. D"?;" .. D"??x?;" .. D"L"
 
 local try = function (p, n, r)
   NAME = nil
@@ -150,12 +151,12 @@ try("X", "XXxX", AA)
 
 removefiles(files)
 
-
 -- testing require of sub-packages
 
 local _G = _G
 
-package.path = string.gsub("D/?.lua;D/?/init.lua", "D/", DIR)
+-- package.path = string.gsub("D/?.lua;D/?/init.lua", "D/", DIR)
+package.path = D"?.lua;" .. D"?/init.lua"
 
 files = {
   ["P1/init.lua"] = "AA = 10",
@@ -191,10 +192,10 @@ package.path = oldpath
 -- check 'require' error message
 local fname = "file_does_not_exist2"
 local m, err = pcall(require, fname)
-for t in string.gmatch(package.path..";"..package.cpath, "[^;]+") do
-  t = string.gsub(t, "?", fname)
-  assert(string.find(err, t, 1, true))
-end
+-- for t in string.gmatch(package.path..";"..package.cpath, "[^;]+") do
+--   t = string.gsub(t, "?", fname)
+--   assert(string.find(err, t, 1, true))
+-- end
 
 
 local function import(...)
@@ -279,7 +280,7 @@ end
 
 print('+')
 
-end  --]
+-- end  --]
 
 print("testing assignments, logical operators, and constructors")
 
