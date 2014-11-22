@@ -21,12 +21,15 @@ const (
 )
 
 var (
-	RuntimeError = errors.New("runtime error")
-	SyntaxError  = errors.New("syntax error")
-	MemoryError  = errors.New("memory error")
-	ErrorError   = errors.New("error within the error handler")
-	FileError    = errors.New("file error")
+	SyntaxError = errors.New("syntax error")
+	MemoryError = errors.New("memory error")
+	ErrorError  = errors.New("error within the error handler")
+	FileError   = errors.New("file error")
 )
+
+type RuntimeError string
+
+func (r RuntimeError) Error() string { return "runtime error: " + string(r) }
 
 type Type int
 

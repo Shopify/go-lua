@@ -128,7 +128,7 @@ func (l *State) errorMessage() {
 		l.top++
 		l.call(l.top-2, 1, false)
 	}
-	l.throw(fmt.Errorf("%v: %s", RuntimeError, CheckString(l, -1)))
+	l.throw(RuntimeError(CheckString(l, -1)))
 }
 
 func SetHooker(l *State, f Hook, mask byte, count int) {
