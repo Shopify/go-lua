@@ -677,7 +677,8 @@ func protectedParser(l *State, r io.Reader, name, chunkMode string) error {
 		var closure *luaClosure
 		b := bufio.NewReader(r)
 		if c, err := b.ReadByte(); err != nil {
-			// TODO
+			l.checkMode(chunkMode, "text")
+			closure = l.parse(b, name)
 		} else if c == Signature[0] {
 			l.checkMode(chunkMode, "binary")
 			b.UnreadByte()
