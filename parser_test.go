@@ -36,6 +36,14 @@ func TestParser(t *testing.T) {
 	Call(l, 0, 0)
 }
 
+func TestEmptyString(t *testing.T) {
+	l := NewState()
+	if err := LoadString(l, ""); err != nil {
+		t.Fatal(err.Error())
+	}
+	Call(l, 0, 0)
+}
+
 func TestParserExhaustively(t *testing.T) {
 	l := NewState()
 	matches, err := filepath.Glob("fixtures/*.lua")
