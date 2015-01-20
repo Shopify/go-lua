@@ -967,7 +967,11 @@ func MetaTable(l *State, index int) bool {
 // http://www.lua.org/manual/5.2/manual.html#lua_getuservalue
 func UserValue(l *State, index int) {
 	d := l.indexToValue(index).(*userData)
-	l.apiPush(d.env)
+	if d.env == nil {
+		l.apiPush(nil)
+	} else {
+		l.apiPush(d.env)
+	}
 }
 
 // SetGlobal pops a value from the stack and sets it as the new value of
