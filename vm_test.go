@@ -91,7 +91,7 @@ func TestLua(t *testing.T) {
 		LoadFile(l, "lua-tests/"+v.name+".lua", "text")
 		// Call(l, 0, 0)
 		if err := ProtectedCall(l, 0, 0, traceback); err != nil {
-			t.Errorf("'%s' failed: %s", v, err.Error())
+			t.Errorf("'%s' failed: %s", v.name, err.Error())
 		}
 	}
 }
