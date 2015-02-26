@@ -37,17 +37,19 @@ func TestProtectedCall(t *testing.T) {
 }
 
 func TestLua(t *testing.T) {
-	tests := []string{
-		"attrib",
-		"bitwise",
-		"closure",
-		"events",
-		"fib",
-		"goto",
-		"locals",
-		"math",
-		"sort",
-		"strings",
+	tests := []struct {
+		name    string
+		nonPort bool
+	}{
+		{name: "attrib", nonPort: true},
+		{name: "bitwise"},
+		{name: "closure"},
+		{name: "events"},
+		{name: "goto"},
+		{name: "locals"},
+		{name: "math"},
+		{name: "sort"},
+		{name: "strings"},
 		// "vararg",
 	}
 	for _, v := range tests {
@@ -57,6 +59,10 @@ func TestLua(t *testing.T) {
 		for _, s := range []string{"_port", "_no32", "_noformatA"} {
 			PushBoolean(l, true)
 			SetGlobal(l, s)
+		}
+		if v.nonPort {
+			PushBoolean(l, false)
+			SetGlobal(l, "_port")
 		}
 		// SetHooker(l, func(state *State, ar *Debug) {
 		// 	ci := state.callInfo.(*luaCallInfo)
@@ -68,7 +74,7 @@ func TestLua(t *testing.T) {
 		Field(l, -1, "traceback")
 		traceback := Top(l)
 		// t.Logf("%#v", ToValue(l, traceback))
-		LoadFile(l, "fixtures/"+v+".lua", "text")
+		LoadFile(l, "lua-tests/"+v.name+".lua", "text")
 		// Call(l, 0, 0)
 		if err := ProtectedCall(l, 0, 0, traceback); err != nil {
 			t.Errorf("'%s' failed: %s", v, err.Error())
