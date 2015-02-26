@@ -42,15 +42,29 @@ func TestLua(t *testing.T) {
 		nonPort bool
 	}{
 		{name: "attrib", nonPort: true},
+		// {name: "big"},
 		{name: "bitwise"},
+		// {name: "calls"},
+		// {name: "checktable"},
 		{name: "closure"},
+		// {name: "code"},
+		// {name: "constructs"},
+		// {name: "db"},
+		// {name: "errors"},
 		{name: "events"},
+		// {name: "files"},
+		// {name: "gc"},
 		{name: "goto"},
+		// {name: "literals"},
 		{name: "locals"},
+		// {name: "main"},
 		{name: "math"},
+		// {name: "nextvar"},
+		// {name: "pm"},
 		{name: "sort"},
 		{name: "strings"},
-		// "vararg",
+		// {name: "vararg"},
+		// {name: "verybig"},
 	}
 	for _, v := range tests {
 		t.Log(v)

@@ -5,6 +5,7 @@ import (
 	"encoding/binary"
 	"io"
 	"os"
+	"os/exec"
 	"testing"
 )
 
@@ -41,8 +42,16 @@ func TestCorruptTail(t *testing.T) {
 }
 
 func TestUndump(t *testing.T) {
-	// TODO this is brittle & should be replaced when we have a working compiler
-	file, err := os.Open("fixtures/checktable.bin")
+	_, err := exec.LookPath("luac")
+	if err != nil {
+		t.Skipf("testing undump requires luac: %s", err)
+	}
+	source := "lua-tests/checktable.lua"
+	binary := "lua-tests/checktable.bin"
+	if err := exec.Command("luac", "-o", binary, source).Run(); err != nil {
+		t.Fatalf("luac failed to compile %s: %s", source, err)
+	}
+	file, err := os.Open(binary)
 	if err != nil {
 		t.Fatal("couldn't open checktable.bin")
 	}
@@ -59,7 +68,7 @@ func TestUndump(t *testing.T) {
 	if p == nil {
 		t.Fatal("prototype was nil")
 	}
-	validate("@fixtures/checktable.lua", p.source, "as source file name", t)
+	validate("@lua-tests/checktable.lua", p.source, "as source file name", t)
 	validate(23, len(p.code), "instructions", t)
 	validate(8, len(p.constants), "constants", t)
 	validate(4, len(p.prototypes), "prototypes", t)

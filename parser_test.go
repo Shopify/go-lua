@@ -1,6 +1,7 @@
 package lua
 
 import (
+	"os/exec"
 	"path/filepath"
 	"reflect"
 	"runtime/debug"
@@ -45,8 +46,12 @@ func TestEmptyString(t *testing.T) {
 }
 
 func TestParserExhaustively(t *testing.T) {
+	_, err := exec.LookPath("luac")
+	if err != nil {
+		t.Skipf("exhaustively testing the parser requires luac: %s", err)
+	}
 	l := NewState()
-	matches, err := filepath.Glob("fixtures/*.lua")
+	matches, err := filepath.Glob("lua-tests/*.lua")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -66,8 +71,13 @@ func protectedTestParser(l *State, t *testing.T, source string) {
 			t.Log(string(debug.Stack()))
 		}
 	}()
+	t.Log("Compiling " + source)
+	binary := strings.TrimSuffix(source, ".lua") + ".bin"
+	if err := exec.Command("luac", "-o", binary, source).Run(); err != nil {
+		t.Fatalf("luac failed to compile %s: %s", source, err)
+	}
 	t.Log("Parsing " + source)
-	bin := load(l, t, strings.TrimSuffix(source, ".lua")+".bin")
+	bin := load(l, t, binary)
 	Pop(l, 1)
 	src := load(l, t, source)
 	Pop(l, 1)
