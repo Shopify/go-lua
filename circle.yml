@@ -1,3 +1,7 @@
 checkout:
   post:
     - git submodule update --init
+
+dependencies:
+  pre:
+    - sudo apt-get install lua5.2
