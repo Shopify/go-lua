@@ -1,0 +1,3 @@
+[submodule "lua-tests"]
+	path = lua-tests
+	url = https://github.com/Shopify/lua-tests.git
