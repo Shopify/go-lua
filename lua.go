@@ -980,8 +980,8 @@ func (l *State) Global(name string) {
 }
 
 // Field pushes onto the stack the value table[name], where table is the
-// table at on the stack at the given index. This call may trigger a
-// metamethod for the index event.
+// table on the stack at the given index. This call may trigger a
+// metamethod for the __index event.
 //
 // http://www.lua.org/manual/5.2/manual.html#lua_getfield
 func (l *State) Field(index int, name string) {
@@ -1156,7 +1156,7 @@ func (l *State) SetMetaTable(index int) {
 }
 
 // Error generates a Lua error.  The error message must be on the stack top.
-// The error can be any of any Lua type. This function panic().
+// The error can be any of any Lua type. This function will panic().
 //
 // http://www.lua.org/manual/5.2/manual.html#lua_error
 func (l *State) Error() {
@@ -1311,7 +1311,7 @@ func UpValueJoin(l *State, f1, n1, f2, n2 int) {
 
 // Call calls a function. To do so, use the following protocol: first, the
 // function to be called is pushed onto the stack; then, the arguments to the
-// function are pushed in direct order; that is, the first argument is pushed
+// function are pushed in direct order - that is, the first argument is pushed
 // first. Finally, call Call. argCount is the number of arguments that you
 // pushed onto the stack. All arguments and the function value are popped
 // from the stack when the function is called.
