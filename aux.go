@@ -241,11 +241,11 @@ func ToStringMeta(l *State, index int) (string, bool) {
 	return l.ToString(-1)
 }
 
-// NewMetaTable return 0 if the registry already has the key name. Otherwise,
+// NewMetaTable returns false if the registry already has the key name. Otherwise,
 // creates a new table to be used as a metatable for userdata, adds it to the
-// registry with key name, and returns 1.
+// registry with key name, and returns true.
 //
-// In both cases pushes onto the stack the final value associated with name in
+// In both cases it pushes onto the stack the final value associated with name in
 // the registry.
 func NewMetaTable(l *State, name string) bool {
 	if MetaTableNamed(l, name); !l.IsNil(-1) {
@@ -433,7 +433,7 @@ func SubTable(l *State, index int, name string) bool {
 }
 
 // Require calls function f with string name as an argument and sets the call
-// result in package.loaded[name], as if that function has been called
+// result in package.loaded[name], as if that function had been called
 // through require.
 //
 // If global is true, also stores the result into global name.

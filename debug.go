@@ -284,7 +284,7 @@ func (l *State) collectValidLines(f closure) {
 //
 // To get information about a function invocation, the parameter where must
 // be a valid activation record that was filled by a previous call to Stack
-// or given as argument to a hook (see Hook).
+// or given as an argument to a hook (see Hook).
 //
 // To get information about a function you push it onto the stack and start
 // the what string with the character '>'. (In that case, Info pops the
@@ -295,7 +295,7 @@ func (l *State) collectValidLines(f closure) {
 //   fmt.Printf("%d\n", d.LineDefined)
 //
 // Each character in the string what selects some fields of the Debug struct
-// to be filled or a value to be pushed on the stack
+// to be filled or a value to be pushed on the stack:
 // 	 'n': fills in the field Name and NameKind
 // 	 'S': fills in the fields Source, ShortSource, LineDefined, LastLineDefined, and What
 // 	 'l': fills in the field CurrentLine

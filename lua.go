@@ -11,7 +11,7 @@ import (
 // MultipleReturns is the argument for argCount or resultCount in ProtectedCall and Call.
 const MultipleReturns = -1
 
-// Debug.Event and SetHooker mask argument values.
+// Debug.Event and SetDebugHook mask argument values.
 const (
 	HookCall, MaskCall = iota, 1 << iota
 	HookReturn, MaskReturn
@@ -76,7 +76,7 @@ const (
 	OpLE                           // Compares for less or equal (<=).
 )
 
-// Lua provides a registry, a predefined table that can be used by any Go code
+// Lua provides a registry, a predefined table, that can be used by any Go code
 // to store whatever Lua values it needs to store. The registry table is always
 // located at pseudo-index RegistryIndex, which is a valid index. Any Go
 // library can store data into this table, but it should take care to choose
@@ -139,7 +139,7 @@ type Debug struct {
 	// called to find a suitable name. If it cannot find a name, then Name is "".
 	Name string
 
-	// NameKind is explains the name field. The value of NameKind can be "global",
+	// NameKind explains the name field. The value of NameKind can be "global",
 	// "local", "method", "field", "upvalue", or "" (the empty string), according
 	// to how the function was called. (Lua uses the empty string when no other
 	// option seems to apply.)
@@ -188,7 +188,7 @@ type Debug struct {
 	callInfo *callInfo
 }
 
-// A Hook is a callback function that can be registered with SetHooker to trace various VM events.
+// A Hook is a callback function that can be registered with SetDebugHook to trace various VM events.
 type Hook func(state *State, activationRecord Debug)
 
 // A Function is a Go function intended to be called from Lua.
