@@ -8,16 +8,16 @@ import (
 	"strings"
 )
 
-func functionName(l *State, d *Debug) string {
+func functionName(l *State, d Debug) string {
 	switch {
 	case d.NameKind != "":
 		return fmt.Sprintf("function '%s'", d.Name)
 	case d.What == "main":
 		return "main chunk"
 	case d.What == "Go":
-		if pushGlobalFunctionName(l, d) {
-			s, _ := ToString(l, -1)
-			Pop(l, 1)
+		if pushGlobalFunctionName(l, d.callInfo) {
+			s, _ := l.ToString(-1)
+			l.Pop(1)
 			return fmt.Sprintf("function '%s'", s)
 		} else {
 			return "?"
@@ -27,15 +27,14 @@ func functionName(l *State, d *Debug) string {
 }
 
 func countLevels(l *State) int {
-	var d Debug
 	li, le := 1, 1
-	for Stack(l, le, &d) {
+	for _, ok := Stack(l, le); ok; _, ok = Stack(l, le) {
 		li = le
 		le *= 2
 	}
 	for li < le {
 		m := (li + le) / 2
-		if Stack(l, m, &d) {
+		if _, ok := Stack(l, m); ok {
 			li = m + 1
 		} else {
 			le = m
@@ -44,6 +43,9 @@ func countLevels(l *State) int {
 	return le - 1
 }
 
+// Traceback creates and pushes a traceback of the stack l1. If message is not
+// nil it is appended at the beginning of the traceback. The level parameter
+// tells at which level to start the traceback.
 func Traceback(l, l1 *State, message string, level int) {
 	const levels1, levels2 = 12, 10
 	levels := countLevels(l1)
@@ -56,37 +58,39 @@ func Traceback(l, l1 *State, message string, level int) {
 		buf += "\n"
 	}
 	buf += "stack traceback:"
-	var d Debug
-	for Stack(l1, level, &d) {
+	for f, ok := Stack(l1, level); ok; f, ok = Stack(l1, level) {
 		if level++; level == mark {
 			buf += "\n\t..."
 			level = levels - levels2
 		} else {
-			Info(l1, "Slnt", &d)
+			d, _ := Info(l1, "Slnt", f)
 			buf += "\n\t" + d.ShortSource + ":"
 			if d.CurrentLine > 0 {
 				buf += fmt.Sprintf("%d:", d.CurrentLine)
 			}
-			buf += " in " + functionName(l, &d)
+			buf += " in " + functionName(l, d)
 			if d.IsTailCall {
 				buf += "\n\t(...tail calls...)"
 			}
 		}
 	}
-	PushString(l, buf)
+	l.PushString(buf)
 }
 
+// MetaField pushes onto the stack the field event from the metatable of the
+// object at index. If the object does not have a metatable, or if the
+// metatable does not have this field, returns false and pushes nothing.
 func MetaField(l *State, index int, event string) bool {
-	if !MetaTable(l, index) {
+	if !l.MetaTable(index) {
 		return false
 	}
-	PushString(l, event)
-	RawGet(l, -2)
-	if IsNil(l, -1) {
-		Pop(l, 2) // remove metatable and metafield
+	l.PushString(event)
+	l.RawGet(-2)
+	if l.IsNil(-1) {
+		l.Pop(2) // remove metatable and metafield
 		return false
 	}
-	Remove(l, -2) // remove only metatable
+	l.Remove(-2) // remove only metatable
 	return true
 }
 
@@ -98,58 +102,58 @@ func MetaField(l *State, index int, event string) bool {
 // returned by the call. If there is no metatable or no metamethod, this
 // function returns false (without pushing any value on the stack).
 func CallMeta(l *State, index int, event string) bool {
-	index = AbsIndex(l, index)
+	index = l.AbsIndex(index)
 	if !MetaField(l, index, event) {
 		return false
 	}
-	PushValue(l, index)
-	Call(l, 1, 1)
+	l.PushValue(index)
+	l.Call(1, 1)
 	return true
 }
 
 // ArgumentError raises an error with a standard message that includes extraMessage as a comment.
 //
 // This function never returns. It is an idiom to use it in Go functions as
-//  ArgumentError(l, args, "message")
+//  lua.ArgumentError(l, args, "message")
 //  panic("unreachable")
 func ArgumentError(l *State, argCount int, extraMessage string) {
-	var activationRecord Debug
-	if !Stack(l, 0, &activationRecord) { // no stack frame?
+	f, ok := Stack(l, 0)
+	if !ok { // no stack frame?
 		Errorf(l, "bad argument #%d (%s)", argCount, extraMessage)
 		return
 	}
-	Info(l, "n", &activationRecord)
-	if activationRecord.NameKind == "method" {
+	d, _ := Info(l, "n", f)
+	if d.NameKind == "method" {
 		argCount--         // do not count 'self'
 		if argCount == 0 { // error is in the self argument itself?
-			Errorf(l, "calling '%s' on bad self (%s)", activationRecord.Name, extraMessage)
+			Errorf(l, "calling '%s' on bad self (%s)", d.Name, extraMessage)
 			return
 		}
 	}
-	if activationRecord.Name == "" {
-		if pushGlobalFunctionName(l, &activationRecord) {
-			activationRecord.Name, _ = ToString(l, -1)
+	if d.Name == "" {
+		if pushGlobalFunctionName(l, f) {
+			d.Name, _ = l.ToString(-1)
 		} else {
-			activationRecord.Name = "?"
+			d.Name = "?"
 		}
 	}
-	Errorf(l, "bad argument #%d to '%s' (%s)", argCount, activationRecord.Name, extraMessage)
+	Errorf(l, "bad argument #%d to '%s' (%s)", argCount, d.Name, extraMessage)
 }
 
 func findField(l *State, objectIndex, level int) bool {
-	if level == 0 || !IsTable(l, -1) {
+	if level == 0 || !l.IsTable(-1) {
 		return false
 	}
-	for PushNil(l); Next(l, -2); Pop(l, 1) { // for each pair in table
-		if IsString(l, -2) { // ignore non-string keys
-			if RawEqual(l, objectIndex, -1) { // found object?
-				Pop(l, 1) // remove value (but keep name)
+	for l.PushNil(); l.Next(-2); l.Pop(1) { // for each pair in table
+		if l.IsString(-2) { // ignore non-string keys
+			if l.RawEqual(objectIndex, -1) { // found object?
+				l.Pop(1) // remove value (but keep name)
 				return true
 			} else if findField(l, objectIndex, level-1) { // try recursively
-				Remove(l, -2) // remove table (but keep name)
-				PushString(l, ".")
-				Insert(l, -2) // place "." between the two names
-				Concat(l, 3)
+				l.Remove(-2) // remove table (but keep name)
+				l.PushString(".")
+				l.Insert(-2) // place "." between the two names
+				l.Concat(3)
 				return true
 			}
 		}
@@ -157,62 +161,84 @@ func findField(l *State, objectIndex, level int) bool {
 	return false
 }
 
-func pushGlobalFunctionName(l *State, activationRecord *Debug) bool {
-	top := Top(l)
-	Info(l, "f", activationRecord) // push function
-	PushGlobalTable(l)
+func pushGlobalFunctionName(l *State, f Frame) bool {
+	top := l.Top()
+	Info(l, "f", f) // push function
+	l.PushGlobalTable()
 	if findField(l, top+1, 2) {
-		Copy(l, -1, top+1) // move name to proper place
-		Pop(l, 2)          // remove pushed values
+		l.Copy(-1, top+1) // move name to proper place
+		l.Pop(2)          // remove pushed values
 		return true
 	}
-	SetTop(l, top) // remove function and global table
+	l.SetTop(top) // remove function and global table
 	return false
 }
 
 func typeError(l *State, argCount int, typeName string) {
-	ArgumentError(l, argCount, PushString(l, typeName+" expected, got "+TypeNameOf(l, argCount)))
+	ArgumentError(l, argCount, l.PushString(typeName+" expected, got "+TypeNameOf(l, argCount)))
 }
 
-func tagError(l *State, argCount int, tag Type) { typeError(l, argCount, TypeName(l, tag)) }
+func tagError(l *State, argCount int, tag Type) { typeError(l, argCount, tag.String()) }
 
+// Where pushes onto the stack a string identifying the current position of
+// the control at level in the call stack. Typically this string has the
+// following format:
+//   chunkname:currentline:
+// Level 0 is the running function, level 1 is the function that called the
+// running function, etc.
+//
+// This function is used to build a prefix for error messages.
 func Where(l *State, level int) {
-	var activationRecord Debug
-	if Stack(l, level, &activationRecord) { // check function at level
-		Info(l, "Sl", &activationRecord)      // get info about it
-		if activationRecord.CurrentLine > 0 { // is there info?
-			PushString(l, fmt.Sprintf("%s:%d: ", activationRecord.ShortSource, activationRecord.CurrentLine))
+	if f, ok := Stack(l, level); ok { // check function at level
+		ar, _ := Info(l, "Sl", f) // get info about it
+		if ar.CurrentLine > 0 {   // is there info?
+			l.PushString(fmt.Sprintf("%s:%d: ", ar.ShortSource, ar.CurrentLine))
 			return
 		}
 	}
-	PushString(l, "") // else, no information available...
+	l.PushString("") // else, no information available...
 }
 
+// Errorf raises an error. The error message format is given by format plus
+// any extra arguments, following the same rules as PushFString. It also adds
+// at the beginning of the message the file name and the line number where
+// the error occurred, if this information is available.
+//
+// This function never returns. It is an idiom to use it in Go functions as:
+//   lua.Errorf(l, args)
+//   panic("unreachable")
 func Errorf(l *State, format string, a ...interface{}) {
 	Where(l, 1)
-	PushFString(l, format, a...)
-	Concat(l, 2)
-	Error(l)
+	l.PushFString(format, a...)
+	l.Concat(2)
+	l.Error()
 }
 
+// ToStringMeta converts any Lua value at the given index to a Go string in a
+// reasonable format. The resulting string is pushed onto the stack and also
+// returned by the function.
+//
+// If the value has a metatable with a "__tostring" field, then ToStringMeta
+// calls the corresponding metamethod with the value as argument, and uses
+// the result of the call as its result.
 func ToStringMeta(l *State, index int) (string, bool) {
 	if !CallMeta(l, index, "__tostring") {
-		switch TypeOf(l, index) {
+		switch l.TypeOf(index) {
 		case TypeNumber, TypeString:
-			PushValue(l, index)
+			l.PushValue(index)
 		case TypeBoolean:
-			if ToBoolean(l, index) {
-				PushString(l, "true")
+			if l.ToBoolean(index) {
+				l.PushString("true")
 			} else {
-				PushString(l, "false")
+				l.PushString("false")
 			}
 		case TypeNil:
-			PushString(l, "nil")
+			l.PushString("nil")
 		default:
-			PushFString(l, "%s: %p", TypeNameOf(l, index), ToValue(l, index))
+			l.PushFString("%s: %p", TypeNameOf(l, index), l.ToValue(index))
 		}
 	}
-	return ToString(l, -1)
+	return l.ToString(-1)
 }
 
 // NewMetaTable return 0 if the registry already has the key name. Otherwise,
@@ -222,32 +248,32 @@ func ToStringMeta(l *State, index int) (string, bool) {
 // In both cases pushes onto the stack the final value associated with name in
 // the registry.
 func NewMetaTable(l *State, name string) bool {
-	if MetaTableNamed(l, name); !IsNil(l, -1) {
+	if MetaTableNamed(l, name); !l.IsNil(-1) {
 		return false
 	}
-	Pop(l, 1)
-	NewTable(l)
-	PushValue(l, -1)
-	SetField(l, RegistryIndex, name)
+	l.Pop(1)
+	l.NewTable()
+	l.PushValue(-1)
+	l.SetField(RegistryIndex, name)
 	return true
 }
 
 func MetaTableNamed(l *State, name string) {
-	Field(l, RegistryIndex, name)
+	l.Field(RegistryIndex, name)
 }
 
 func SetMetaTableNamed(l *State, name string) {
 	MetaTableNamed(l, name)
-	SetMetaTable(l, -2)
+	l.SetMetaTable(-2)
 }
 
 func TestUserData(l *State, index int, name string) interface{} {
-	if d := ToUserData(l, index); d != nil {
-		if MetaTable(l, index) {
-			if MetaTableNamed(l, name); !RawEqual(l, -1, -2) {
+	if d := l.ToUserData(index); d != nil {
+		if l.MetaTable(index) {
+			if MetaTableNamed(l, name); !l.RawEqual(-1, -2) {
 				d = nil
 			}
-			Pop(l, 2)
+			l.Pop(2)
 			return d
 		}
 	}
@@ -267,14 +293,14 @@ func CheckUserData(l *State, index int, name string) interface{} {
 
 // CheckType checks whether the function argument at index has type t. See Type for the encoding of types for t.
 func CheckType(l *State, index int, t Type) {
-	if TypeOf(l, index) != t {
+	if l.TypeOf(index) != t {
 		tagError(l, index, t)
 	}
 }
 
 // CheckAny checks whether the function has an argument of any type (including nil) at position index.
 func CheckAny(l *State, index int) {
-	if TypeOf(l, index) == TypeNone {
+	if l.TypeOf(index) == TypeNone {
 		ArgumentError(l, index, "value expected")
 	}
 }
@@ -286,23 +312,28 @@ func ArgumentCheck(l *State, cond bool, index int, extraMessage string) {
 	}
 }
 
+// CheckString checks whether the function argument at index is a string and returns this string.
+//
+// This function uses ToString to get its result, so all conversions and caveats of that function apply here.
 func CheckString(l *State, index int) string {
-	if s, ok := ToString(l, index); ok {
+	if s, ok := l.ToString(index); ok {
 		return s
 	}
 	tagError(l, index, TypeString)
 	panic("unreachable")
 }
 
+// OptString returns the string at index if it is a string. If this argument is
+// absent or is nil, returns def. Otherwise, raises an error.
 func OptString(l *State, index int, def string) string {
-	if IsNoneOrNil(l, index) {
+	if l.IsNoneOrNil(index) {
 		return def
 	}
 	return CheckString(l, index)
 }
 
 func CheckNumber(l *State, index int) float64 {
-	n, ok := ToNumber(l, index)
+	n, ok := l.ToNumber(index)
 	if !ok {
 		tagError(l, index, TypeNumber)
 	}
@@ -310,14 +341,14 @@ func CheckNumber(l *State, index int) float64 {
 }
 
 func OptNumber(l *State, index int, def float64) float64 {
-	if IsNoneOrNil(l, index) {
+	if l.IsNoneOrNil(index) {
 		return def
 	}
 	return CheckNumber(l, index)
 }
 
 func CheckInteger(l *State, index int) int {
-	i, ok := ToInteger(l, index)
+	i, ok := l.ToInteger(index)
 	if !ok {
 		tagError(l, index, TypeNumber)
 	}
@@ -325,14 +356,14 @@ func CheckInteger(l *State, index int) int {
 }
 
 func OptInteger(l *State, index, def int) int {
-	if IsNoneOrNil(l, index) {
+	if l.IsNoneOrNil(index) {
 		return def
 	}
 	return CheckInteger(l, index)
 }
 
 func CheckUnsigned(l *State, index int) uint {
-	i, ok := ToUnsigned(l, index)
+	i, ok := l.ToUnsigned(index)
 	if !ok {
 		tagError(l, index, TypeNumber)
 	}
@@ -340,32 +371,30 @@ func CheckUnsigned(l *State, index int) uint {
 }
 
 func OptUnsigned(l *State, index int, def uint) uint {
-	if IsNoneOrNil(l, index) {
+	if l.IsNoneOrNil(index) {
 		return def
 	}
 	return CheckUnsigned(l, index)
 }
 
-func TypeNameOf(l *State, index int) string {
-	return TypeName(l, TypeOf(l, index))
-}
+func TypeNameOf(l *State, index int) string { return l.TypeOf(index).String() }
 
 func SetFunctions(l *State, functions []RegistryFunction, upValueCount uint8) {
 	uvCount := int(upValueCount)
 	CheckStackWithMessage(l, uvCount, "too many upvalues")
 	for _, r := range functions { // fill the table with given functions
 		for i := 0; i < uvCount; i++ { // copy upvalues to the top
-			PushValue(l, -uvCount)
+			l.PushValue(-uvCount)
 		}
-		PushGoClosure(l, r.Function, upValueCount) // closure with those upvalues
-		SetField(l, -(uvCount + 2), r.Name)
+		l.PushGoClosure(r.Function, upValueCount) // closure with those upvalues
+		l.SetField(-(uvCount + 2), r.Name)
 	}
-	Pop(l, uvCount) // remove upvalues
+	l.Pop(uvCount) // remove upvalues
 }
 
 func CheckStackWithMessage(l *State, space int, message string) {
 	// keep some extra space to run error routines, if needed
-	if !CheckStack(l, space+MinStack) {
+	if !l.CheckStack(space + MinStack) {
 		if message != "" {
 			Errorf(l, "stack overflow (%s)", message)
 		} else {
@@ -386,38 +415,45 @@ func CheckOption(l *State, index int, def string, list []string) int {
 			return i
 		}
 	}
-	ArgumentError(l, index, PushFString(l, "invalid option '%s'", name))
+	ArgumentError(l, index, l.PushFString("invalid option '%s'", name))
 	panic("unreachable")
 }
 
 func SubTable(l *State, index int, name string) bool {
-	Field(l, index, name)
-	if IsTable(l, -1) {
+	l.Field(index, name)
+	if l.IsTable(-1) {
 		return true // table already there
 	}
-	Pop(l, 1) // remove previous result
-	index = AbsIndex(l, index)
-	NewTable(l)
-	PushValue(l, -1)         // copy to be left at top
-	SetField(l, index, name) // assign new table to field
-	return false             // did not find table there
+	l.Pop(1) // remove previous result
+	index = l.AbsIndex(index)
+	l.NewTable()
+	l.PushValue(-1)         // copy to be left at top
+	l.SetField(index, name) // assign new table to field
+	return false            // did not find table there
 }
 
+// Require calls function f with string name as an argument and sets the call
+// result in package.loaded[name], as if that function has been called
+// through require.
+//
+// If global is true, also stores the result into global name.
+//
+// Leaves a copy of that result on the stack.
 func Require(l *State, name string, f Function, global bool) {
-	PushGoFunction(l, f)
-	PushString(l, name) // argument to f
-	Call(l, 1, 1)       // open module
+	l.PushGoFunction(f)
+	l.PushString(name) // argument to f
+	l.Call(1, 1)       // open module
 	SubTable(l, RegistryIndex, "_LOADED")
-	PushValue(l, -2)      // make copy of module (call result)
-	SetField(l, -2, name) // _LOADED[name] = module
-	Pop(l, 1)             // remove _LOADED table
+	l.PushValue(-2)      // make copy of module (call result)
+	l.SetField(-2, name) // _LOADED[name] = module
+	l.Pop(1)             // remove _LOADED table
 	if global {
-		PushValue(l, -1)   // copy of module
-		SetGlobal(l, name) // _G[name] = module
+		l.PushValue(-1)   // copy of module
+		l.SetGlobal(name) // _G[name] = module
 	}
 }
 
-func NewLibraryTable(l *State, functions []RegistryFunction) { CreateTable(l, 0, len(functions)) }
+func NewLibraryTable(l *State, functions []RegistryFunction) { l.CreateTable(0, len(functions)) }
 
 func NewLibrary(l *State, functions []RegistryFunction) {
 	NewLibraryTable(l, functions)
@@ -442,18 +478,18 @@ func skipComment(r *bufio.Reader) (bool, error) {
 
 func LoadFile(l *State, fileName, mode string) error {
 	var f *os.File
-	fileNameIndex := Top(l) + 1
+	fileNameIndex := l.Top() + 1
 	fileError := func(what string) error {
-		fileName, _ := ToString(l, fileNameIndex)
-		PushFString(l, "cannot %s %s", what, fileName[1:])
-		Remove(l, fileNameIndex)
+		fileName, _ := l.ToString(fileNameIndex)
+		l.PushFString("cannot %s %s", what, fileName[1:])
+		l.Remove(fileNameIndex)
 		return FileError
 	}
 	if fileName == "" {
-		PushString(l, "=stdin")
+		l.PushString("=stdin")
 		f = os.Stdin
 	} else {
-		PushString(l, "@"+fileName)
+		l.PushString("@" + fileName)
 		var err error
 		if f, err = os.Open(fileName); err != nil {
 			return fileError("open")
@@ -461,35 +497,40 @@ func LoadFile(l *State, fileName, mode string) error {
 	}
 	r := bufio.NewReader(f)
 	if skipped, err := skipComment(r); err != nil {
-		SetTop(l, fileNameIndex)
+		l.SetTop(fileNameIndex)
 		return fileError("read")
 	} else if skipped {
 		r = bufio.NewReader(io.MultiReader(strings.NewReader("\n"), r))
 	}
-	s, _ := ToString(l, -1)
-	err := Load(l, r, s, mode)
+	s, _ := l.ToString(-1)
+	err := l.Load(r, s, mode)
 	if f != os.Stdin {
 		_ = f.Close()
 	}
 	if err != nil {
-		SetTop(l, fileNameIndex)
+		l.SetTop(fileNameIndex)
 		return fileError("read")
 	}
-	Remove(l, fileNameIndex)
+	l.Remove(fileNameIndex)
 	return err
 }
 
 func LoadString(l *State, s string) error { return LoadBuffer(l, s, s, "") }
 
 func LoadBuffer(l *State, b, name, mode string) error {
-	return Load(l, strings.NewReader(b), name, mode)
+	return l.Load(strings.NewReader(b), name, mode)
 }
 
+// NewStateEx creates a new Lua state. It calls NewState and then sets a panic
+// function that prints an error message to the standard error output in case
+// of fatal errors.
+//
+// Returns the new state.
 func NewStateEx() *State {
 	l := NewState()
 	if l != nil {
 		_ = AtPanic(l, func(l *State) int {
-			s, _ := ToString(l, -1)
+			s, _ := l.ToString(-1)
 			fmt.Fprintf(os.Stderr, "PANIC: unprotected error in call to Lua API (%s)\n", s)
 			return 0
 		})
@@ -498,9 +539,9 @@ func NewStateEx() *State {
 }
 
 func LengthEx(l *State, index int) int {
-	Length(l, index)
-	if length, ok := ToInteger(l, -1); ok {
-		Pop(l, 1)
+	l.Length(index)
+	if length, ok := l.ToInteger(-1); ok {
+		l.Pop(1)
 		return length
 	}
 	Errorf(l, "object length is not a number")
@@ -511,15 +552,15 @@ func LengthEx(l *State, index int) int {
 // library (io.open, os.rename, file:seek, etc.).
 func FileResult(l *State, err error, filename string) int {
 	if err == nil {
-		PushBoolean(l, true)
+		l.PushBoolean(true)
 		return 1
 	}
-	PushNil(l)
+	l.PushNil()
 	if filename != "" {
-		PushString(l, filename+": "+err.Error())
+		l.PushString(filename + ": " + err.Error())
 	} else {
-		PushString(l, err.Error())
+		l.PushString(err.Error())
 	}
-	PushInteger(l, 0) // TODO map err to errno
+	l.PushInteger(0) // TODO map err to errno
 	return 3
 }

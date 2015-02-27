@@ -43,12 +43,12 @@ func OpenLibraries(l *State, preloaded ...RegistryFunction) {
 	}
 	for _, lib := range libs {
 		Require(l, lib.Name, lib.Function, true)
-		Pop(l, 1)
+		l.Pop(1)
 	}
 	SubTable(l, RegistryIndex, "_PRELOAD")
 	for _, lib := range preloaded {
-		PushGoFunction(l, lib.Function)
-		SetField(l, -2, lib.Name)
+		l.PushGoFunction(lib.Function)
+		l.SetField(-2, lib.Name)
 	}
-	Pop(l, 1)
+	l.Pop(1)
 }

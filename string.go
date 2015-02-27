@@ -22,19 +22,19 @@ func findHelper(l *State, isFind bool) int {
 	if init < 1 {
 		init = 1
 	} else if init > len(s)+1 {
-		PushNil(l)
+		l.PushNil()
 		return 1
 	}
-	if isFind && (ToBoolean(l, 4) || !strings.ContainsAny(p, "^$*+?.([%-")) {
+	if isFind && (l.ToBoolean(4) || !strings.ContainsAny(p, "^$*+?.([%-")) {
 		if start := strings.Index(s[init-1:], p); start >= 0 {
-			PushInteger(l, start+init)
-			PushInteger(l, start+init+len(p)-1)
+			l.PushInteger(start + init)
+			l.PushInteger(start + init + len(p) - 1)
 			return 2
 		}
 	} else {
 		l.assert(false) // TODO implement pattern matching
 	}
-	PushNil(l)
+	l.PushNil()
 	return 1
 }
 
@@ -158,39 +158,39 @@ var stringLibrary = []RegistryFunction{
 		}
 		CheckStackWithMessage(l, n, "string slice too long")
 		for _, c := range []byte(s[start-1 : end]) {
-			PushInteger(l, int(c))
+			l.PushInteger(int(c))
 		}
 		return n
 	}},
 	{"char", func(l *State) int {
 		var b bytes.Buffer
-		for i, n := 1, Top(l); i <= n; i++ {
+		for i, n := 1, l.Top(); i <= n; i++ {
 			c := CheckInteger(l, i)
 			ArgumentCheck(l, int(byte(c)) == c, i, "value out of range")
 			b.WriteByte(byte(c))
 		}
-		PushString(l, b.String())
+		l.PushString(b.String())
 		return 1
 	}},
 	// {"dump", ...},
 	{"find", func(l *State) int { return findHelper(l, true) }},
 	{"format", func(l *State) int {
-		PushString(l, formatHelper(l, CheckString(l, 1), Top(l)))
+		l.PushString(formatHelper(l, CheckString(l, 1), l.Top()))
 		return 1
 	}},
 	// {"gmatch", ...},
 	// {"gsub", ...},
-	{"len", func(l *State) int { PushInteger(l, len(CheckString(l, 1))); return 1 }},
-	{"lower", func(l *State) int { PushString(l, strings.ToLower(CheckString(l, 1))); return 1 }},
+	{"len", func(l *State) int { l.PushInteger(len(CheckString(l, 1))); return 1 }},
+	{"lower", func(l *State) int { l.PushString(strings.ToLower(CheckString(l, 1))); return 1 }},
 	// {"match", ...},
 	{"rep", func(l *State) int {
 		s, n, sep := CheckString(l, 1), CheckInteger(l, 2), OptString(l, 3, "")
 		if n <= 0 {
-			PushString(l, "")
+			l.PushString("")
 		} else if len(s)+len(sep) < len(s) || len(s)+len(sep) >= maxInt/n {
 			Errorf(l, "resulting string too large")
 		} else if sep == "" {
-			PushString(l, strings.Repeat(s, n))
+			l.PushString(strings.Repeat(s, n))
 		} else {
 			var b bytes.Buffer
 			b.Grow(n*len(s) + (n-1)*len(sep))
@@ -199,7 +199,7 @@ var stringLibrary = []RegistryFunction{
 				b.WriteString(sep)
 				b.WriteString(s)
 			}
-			PushString(l, b.String())
+			l.PushString(b.String())
 		}
 		return 1
 	}},
@@ -208,7 +208,7 @@ var stringLibrary = []RegistryFunction{
 		for i, j := 0, len(r)-1; i < j; i, j = i+1, j-1 {
 			r[i], r[j] = r[j], r[i]
 		}
-		PushString(l, string(r))
+		l.PushString(string(r))
 		return 1
 	}},
 	{"sub", func(l *State) int {
@@ -221,25 +221,25 @@ var stringLibrary = []RegistryFunction{
 			end = len(s)
 		}
 		if start <= end {
-			PushString(l, s[start-1:end])
+			l.PushString(s[start-1 : end])
 		} else {
-			PushString(l, "")
+			l.PushString("")
 		}
 		return 1
 	}},
-	{"upper", func(l *State) int { PushString(l, strings.ToUpper(CheckString(l, 1))); return 1 }},
+	{"upper", func(l *State) int { l.PushString(strings.ToUpper(CheckString(l, 1))); return 1 }},
 }
 
 // StringOpen opens the string library. Usually passed to Require.
 func StringOpen(l *State) int {
 	NewLibrary(l, stringLibrary)
-	CreateTable(l, 0, 1)
-	PushString(l, "")
-	PushValue(l, -2)
-	SetMetaTable(l, -2)
-	Pop(l, 1)
-	PushValue(l, -2)
-	SetField(l, -2, "__index")
-	Pop(l, 1)
+	l.CreateTable(0, 1)
+	l.PushString("")
+	l.PushValue(-2)
+	l.SetMetaTable(-2)
+	l.Pop(1)
+	l.PushValue(-2)
+	l.SetField(-2, "__index")
+	l.Pop(1)
 	return 1
 }

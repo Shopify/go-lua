@@ -17,10 +17,10 @@ func (h sortHelper) Swap(i, j int) {
 	// Convert Go to Lua indices
 	i++
 	j++
-	RawGetInt(h.l, 1, i)
-	RawGetInt(h.l, 1, j)
-	RawSetInt(h.l, 1, i)
-	RawSetInt(h.l, 1, j)
+	h.l.RawGetInt(1, i)
+	h.l.RawGetInt(1, j)
+	h.l.RawSetInt(1, i)
+	h.l.RawSetInt(1, j)
 }
 
 func (h sortHelper) Less(i, j int) bool {
@@ -28,18 +28,18 @@ func (h sortHelper) Less(i, j int) bool {
 	i++
 	j++
 	if h.hasFunction {
-		PushValue(h.l, 2)
-		RawGetInt(h.l, 1, i)
-		RawGetInt(h.l, 1, j)
-		Call(h.l, 2, 1)
-		b := ToBoolean(h.l, -1)
-		Pop(h.l, 1)
+		h.l.PushValue(2)
+		h.l.RawGetInt(1, i)
+		h.l.RawGetInt(1, j)
+		h.l.Call(2, 1)
+		b := h.l.ToBoolean(-1)
+		h.l.Pop(1)
 		return b
 	}
-	RawGetInt(h.l, 1, i)
-	RawGetInt(h.l, 1, j)
-	b := Compare(h.l, -2, -1, OpLT)
-	Pop(h.l, 2)
+	h.l.RawGetInt(1, i)
+	h.l.RawGetInt(1, j)
+	b := h.l.Compare(-2, -1, OpLT)
+	h.l.Pop(2)
 	return b
 }
 
@@ -49,20 +49,20 @@ var tableLibrary = []RegistryFunction{
 		sep := OptString(l, 2, "")
 		i := OptInteger(l, 3, 1)
 		var last int
-		if IsNoneOrNil(l, 4) {
+		if l.IsNoneOrNil(4) {
 			last = LengthEx(l, 1)
 		} else {
 			last = CheckInteger(l, 4)
 		}
 		s := ""
 		addField := func() {
-			RawGetInt(l, 1, i)
-			if str, ok := ToString(l, -1); ok {
+			l.RawGetInt(1, i)
+			if str, ok := l.ToString(-1); ok {
 				s += str
 			} else {
 				Errorf(l, fmt.Sprintf("invalid value (%s) at index %d in table for 'concat'", TypeNameOf(l, -1), i))
 			}
-			Pop(l, 1)
+			l.Pop(1)
 		}
 		for ; i < last; i++ {
 			addField()
@@ -71,39 +71,39 @@ var tableLibrary = []RegistryFunction{
 		if i == last {
 			addField()
 		}
-		PushString(l, s)
+		l.PushString(s)
 		return 1
 	}},
 	{"insert", func(l *State) int {
 		CheckType(l, 1, TypeTable)
 		e := LengthEx(l, 1) + 1 // First empty element.
-		switch Top(l) {
+		switch l.Top() {
 		case 2:
-			RawSetInt(l, 1, e) // Insert new element at the end.
+			l.RawSetInt(1, e) // Insert new element at the end.
 		case 3:
 			pos := CheckInteger(l, 2)
 			ArgumentCheck(l, 1 <= pos && pos <= e, 2, "position out of bounds")
 			for i := e; i > pos; i-- {
-				RawGetInt(l, 1, i-1)
-				RawSetInt(l, 1, i) // t[i] = t[i-1]
+				l.RawGetInt(1, i-1)
+				l.RawSetInt(1, i) // t[i] = t[i-1]
 			}
-			RawSetInt(l, 1, pos) // t[pos] = v
+			l.RawSetInt(1, pos) // t[pos] = v
 		default:
 			Errorf(l, "wrong number of arguments to 'insert'")
 		}
 		return 0
 	}},
 	{"pack", func(l *State) int {
-		n := Top(l)
-		CreateTable(l, n, 1)
-		PushInteger(l, n)
-		SetField(l, -2, "n")
+		n := l.Top()
+		l.CreateTable(n, 1)
+		l.PushInteger(n)
+		l.SetField(-2, "n")
 		if n > 0 {
-			PushValue(l, 1)
-			RawSetInt(l, -2, 1)
-			Replace(l, 1)
+			l.PushValue(1)
+			l.RawSetInt(-2, 1)
+			l.Replace(1)
 			for i := n; i >= 2; i-- {
-				RawSetInt(l, 1, i)
+				l.RawSetInt(1, i)
 			}
 		}
 		return 1
@@ -112,7 +112,7 @@ var tableLibrary = []RegistryFunction{
 		CheckType(l, 1, TypeTable)
 		i := OptInteger(l, 2, 1)
 		var e int
-		if IsNoneOrNil(l, 3) {
+		if l.IsNoneOrNil(3) {
 			e = LengthEx(l, 1)
 		} else {
 			e = CheckInteger(l, 3)
@@ -121,12 +121,12 @@ var tableLibrary = []RegistryFunction{
 			return 0
 		}
 		n := e - i + 1
-		if n <= 0 || !CheckStack(l, n) {
+		if n <= 0 || !l.CheckStack(n) {
 			Errorf(l, "too many results to unpack")
 			panic("unreachable")
 		}
-		for RawGetInt(l, 1, i); i < e; i++ {
-			RawGetInt(l, 1, i+1)
+		for l.RawGetInt(1, i); i < e; i++ {
+			l.RawGetInt(1, i+1)
 		}
 		return n
 	}},
@@ -137,22 +137,22 @@ var tableLibrary = []RegistryFunction{
 		if pos != size {
 			ArgumentCheck(l, 1 <= pos && pos <= size+1, 2, "position out of bounds")
 		}
-		for RawGetInt(l, 1, pos); pos < size; pos++ {
-			RawGetInt(l, 1, pos+1)
-			RawSetInt(l, 1, pos) // t[pos] = t[pos+1]
+		for l.RawGetInt(1, pos); pos < size; pos++ {
+			l.RawGetInt(1, pos+1)
+			l.RawSetInt(1, pos) // t[pos] = t[pos+1]
 		}
-		PushNil(l)
-		RawSetInt(l, 1, pos) // t[pos] = nil
+		l.PushNil()
+		l.RawSetInt(1, pos) // t[pos] = nil
 		return 1
 	}},
 	{"sort", func(l *State) int {
 		CheckType(l, 1, TypeTable)
 		n := LengthEx(l, 1)
-		hasFunction := !IsNoneOrNil(l, 2)
+		hasFunction := !l.IsNoneOrNil(2)
 		if hasFunction {
 			CheckType(l, 2, TypeFunction)
 		}
-		SetTop(l, 2)
+		l.SetTop(2)
 		h := sortHelper{l, n, hasFunction}
 		sort.Sort(h)
 		// Check result is sorted.

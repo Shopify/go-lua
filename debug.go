@@ -5,6 +5,10 @@ import (
 	"strings"
 )
 
+// A Frame is a token representing an activation record. It is returned by
+// Stack and passed to Info.
+type Frame *callInfo
+
 func (l *State) resetHookCount() { l.hookCount = l.baseHookCount }
 func (l *State) prototype(ci *callInfo) *prototype {
 	return l.stack[ci.function].(*luaClosure).prototype
@@ -48,7 +52,7 @@ func (l *State) runtimeError(message string) {
 }
 
 func (l *State) typeError(v value, operation string) {
-	typeName := TypeName(l, l.valueToType(v))
+	typeName := l.valueToType(v).String()
 	if ci := l.callInfo; ci.isLua() {
 		c := l.stack[ci.function].(*luaClosure)
 		var kind, name string
@@ -82,7 +86,7 @@ func (l *State) typeError(v value, operation string) {
 }
 
 func (l *State) orderError(left, right value) {
-	leftType, rightType := TypeName(l, l.valueToType(left)), TypeName(l, l.valueToType(right))
+	leftType, rightType := l.valueToType(left).String(), l.valueToType(right).String()
 	if leftType == rightType {
 		l.runtimeError(fmt.Sprintf("attempt to compare two '%s' values", leftType))
 	}
@@ -131,7 +135,32 @@ func (l *State) errorMessage() {
 	l.throw(RuntimeError(CheckString(l, -1)))
 }
 
-func SetHooker(l *State, f Hook, mask byte, count int) {
+// SetDebugHook sets the debugging hook function.
+//
+// f is the hook function. mask specifies on which events the hook will be
+// called: it is formed by a bitwise or of the constants MaskCall, MaskReturn,
+// MaskLine, and MaskCount. The count argument is only meaningful when the
+// mask includes MaskCount. For each event, the hook is called as explained
+// below:
+//
+// Call hook is called when the interpreter calls a function. The hook is
+// called just after Lua enters the new function, before the function gets
+// its arguments.
+//
+// Return hook is called when the interpreter returns from a function. The
+// hook is called just before Lua leaves the function. There is no standard
+// way to access the values to be returned by the function.
+//
+// Line hook is called when the interpreter is about to start the execution
+// of a new line of code, or when it jumps back in the code (even to the same
+// line). (This event only happens while Lua is executing a Lua function.)
+//
+// Count hook is called after the interpreter executes every count
+// instructions. (This event only happens while Lua is executing a Lua
+// function.)
+//
+// A hook is disabled by setting mask to zero.
+func SetDebugHook(l *State, f Hook, mask byte, count int) {
 	if f == nil || mask == 0 {
 		f, mask = nil, 0
 	}
@@ -144,11 +173,24 @@ func SetHooker(l *State, f Hook, mask byte, count int) {
 	l.internalHook = false
 }
 
-func Hooker(l *State) Hook     { return l.hooker }
-func HookerMask(l *State) byte { return l.hookMask }
-func HookerCount(l *State) int { return l.hookCount }
+// DebugHook returns the current hook function.
+func DebugHook(l *State) Hook { return l.hooker }
 
-func Stack(l *State, level int, d *Debug) (ok bool) {
+// DebugHookMask returns the current hook mask.
+func DebugHookMask(l *State) byte { return l.hookMask }
+
+// DebugHookCount returns the current hook count.
+func DebugHookCount(l *State) int { return l.hookCount }
+
+// Stack gets information about the interpreter runtime stack.
+//
+// It returns a Frame identifying the activation record of the
+// function executing at a given level. Level 0 is the current running
+// function, whereas level n+1 is the function that has called level n (except
+// for tail calls, which do not count on the stack). When there are no errors,
+// Stack returns true; when called with a level greater than the stack depth,
+// it returns false.
+func Stack(l *State, level int) (f Frame, ok bool) {
 	if level < 0 {
 		return // invalid (negative) level
 	}
@@ -156,12 +198,13 @@ func Stack(l *State, level int, d *Debug) (ok bool) {
 	for ; level > 0 && callInfo != &l.baseCallInfo; level, callInfo = level-1, callInfo.previous {
 	}
 	if level == 0 && callInfo != &l.baseCallInfo { // level found?
-		d.callInfo, ok = callInfo, true
+		f, ok = callInfo, true
 	}
 	return
 }
 
-func functionInfo(d *Debug, f closure) {
+func functionInfo(p Debug, f closure) (d Debug) {
+	d = p
 	if l, ok := f.(*luaClosure); !ok {
 		d.Source = "=[Go]"
 		d.LineDefined, d.LastLineDefined = -1, -1
@@ -179,6 +222,7 @@ func functionInfo(d *Debug, f closure) {
 		}
 	}
 	d.ShortSource = chunkID(d.Source)
+	return
 }
 
 func (l *State) functionName(ci *callInfo) (name, kind string) {
@@ -236,11 +280,38 @@ func (l *State) collectValidLines(f closure) {
 	}
 }
 
-func Info(l *State, what string, d *Debug) bool {
+// Info gets information about a specific function or function invocation.
+//
+// To get information about a function invocation, the parameter where must
+// be a valid activation record that was filled by a previous call to Stack
+// or given as argument to a hook (see Hook).
+//
+// To get information about a function you push it onto the stack and start
+// the what string with the character '>'. (In that case, Info pops the
+// function from the top of the stack.) For instance, to know in which line
+// a function f was defined, you can write the following code:
+//   l.Global("f") // Get global 'f'.
+//   d, _ := lua.Info(l, ">S", nil)
+//   fmt.Printf("%d\n", d.LineDefined)
+//
+// Each character in the string what selects some fields of the Debug struct
+// to be filled or a value to be pushed on the stack
+// 	 'n': fills in the field Name and NameKind
+// 	 'S': fills in the fields Source, ShortSource, LineDefined, LastLineDefined, and What
+// 	 'l': fills in the field CurrentLine
+// 	 't': fills in the field IsTailCall
+// 	 'u': fills in the fields UpValueCount, ParameterCount, and IsVarArg
+// 	 'f': pushes onto the stack the function that is running at the given level
+// 	 'L': pushes onto the stack a table whose indices are the numbers of the lines that are valid on the function
+// (A valid line is a line with some associated code, that is, a line where you
+// can put a break point. Non-valid lines include empty lines and comments.)
+//
+// This function returns false on error (for instance, an invalid option in what).
+func Info(l *State, what string, where Frame) (d Debug, ok bool) {
 	var f closure
 	var fun value
-	var callInfo *callInfo
 	if what[0] == '>' {
+		where = nil
 		fun = l.stack[l.top-1]
 		switch fun := fun.(type) {
 		case closure:
@@ -252,8 +323,7 @@ func Info(l *State, what string, d *Debug) bool {
 		what = what[1:] // skip the '>'
 		l.top--         // pop function
 	} else {
-		callInfo = d.callInfo
-		fun = l.stack[callInfo.function]
+		fun = l.stack[where.function]
 		switch fun := fun.(type) {
 		case closure:
 			f = fun
@@ -263,14 +333,16 @@ func Info(l *State, what string, d *Debug) bool {
 		}
 	}
 	ok, hasL, hasF := true, false, false
+	d.callInfo = where
+	ci := d.callInfo
 	for _, r := range what {
 		switch r {
 		case 'S':
-			functionInfo(d, f)
+			d = functionInfo(d, f)
 		case 'l':
 			d.CurrentLine = -1
-			if callInfo != nil && callInfo.isLua() {
-				d.CurrentLine = l.currentLine(callInfo)
+			if where != nil && ci.isLua() {
+				d.CurrentLine = l.currentLine(where)
 			}
 		case 'u':
 			if f == nil {
@@ -286,11 +358,11 @@ func Info(l *State, what string, d *Debug) bool {
 				d.ParameterCount = lf.prototype.parameterCount
 			}
 		case 't':
-			d.IsTailCall = callInfo != nil && callInfo.isCallStatus(callStatusTail)
+			d.IsTailCall = where != nil && ci.isCallStatus(callStatusTail)
 		case 'n':
 			// calling function is a known Lua function?
-			if callInfo != nil && !callInfo.isCallStatus(callStatusTail) && callInfo.previous.isLua() {
-				d.Name, d.NameKind = l.functionName(callInfo.previous)
+			if where != nil && !ci.isCallStatus(callStatusTail) && where.previous.isLua() {
+				d.Name, d.NameKind = l.functionName(where.previous)
 			} else {
 				d.NameKind = ""
 			}
@@ -312,7 +384,7 @@ func Info(l *State, what string, d *Debug) bool {
 	if hasL {
 		l.collectValidLines(f)
 	}
-	return ok
+	return d, ok
 }
 
 func upValueHelper(f func(*State, int, int) (string, bool), returnValueCount int) Function {
@@ -321,9 +393,9 @@ func upValueHelper(f func(*State, int, int) (string, bool), returnValueCount int
 		if name, ok := f(l, 1, CheckInteger(l, 2)); !ok {
 			return 0
 		} else {
-			PushString(l, name)
+			l.PushString(name)
 		}
-		Insert(l, -returnValueCount)
+		l.Insert(-returnValueCount)
 		return returnValueCount
 	}
 }
@@ -331,36 +403,36 @@ func upValueHelper(f func(*State, int, int) (string, bool), returnValueCount int
 func (l *State) checkUpValue(f, upValueCount int) int {
 	n := CheckInteger(l, upValueCount)
 	CheckType(l, f, TypeFunction)
-	PushValue(l, f)
-	var debug Debug
-	Info(l, ">u", &debug)
+	l.PushValue(f)
+	debug, _ := Info(l, ">u", nil)
 	ArgumentCheck(l, 1 <= n && n <= debug.UpValueCount, upValueCount, "invalue upvalue index")
 	return n
 }
 
 func threadArg(l *State) (int, *State) {
-	if IsThread(l, 1) {
-		return 1, ToThread(l, 1)
+	if l.IsThread(1) {
+		return 1, l.ToThread(1)
 	}
 	return 0, l
 }
 
 func hookTable(l *State) bool { return SubTable(l, RegistryIndex, "_HKEY") }
 
-func internalHooker(l *State, d *Debug) {
+func internalHook(l *State, d Debug) {
 	hookNames := []string{"call", "return", "line", "count", "tail call"}
 	hookTable(l)
-	PushThread(l)
-	RawGet(l, -2)
-	if IsFunction(l, -1) {
-		PushString(l, hookNames[d.Event])
+	l.PushThread()
+	l.RawGet(-2)
+	if l.IsFunction(-1) {
+		l.PushString(hookNames[d.Event])
 		if d.CurrentLine >= 0 {
-			PushInteger(l, d.CurrentLine)
+			l.PushInteger(d.CurrentLine)
 		} else {
-			PushNil(l)
+			l.PushNil()
 		}
-		l.assert(Info(l, "lS", d))
-		Call(l, 2, 0)
+		_, ok := Info(l, "lS", d.callInfo)
+		l.assert(ok)
+		l.Call(2, 0)
 	}
 }
 
@@ -392,37 +464,37 @@ func stringToMask(s string, maskCount bool) (mask byte) {
 var debugLibrary = []RegistryFunction{
 	// {"debug", db_debug},
 	{"getuservalue", func(l *State) int {
-		if TypeOf(l, 1) != TypeUserData {
-			PushNil(l)
+		if l.TypeOf(1) != TypeUserData {
+			l.PushNil()
 		} else {
-			UserValue(l, 1)
+			l.UserValue(1)
 		}
 		return 1
 	}},
 	{"gethook", func(l *State) int {
 		_, l1 := threadArg(l)
-		hooker, mask := Hooker(l1), HookerMask(l1)
+		hooker, mask := DebugHook(l1), DebugHookMask(l1)
 		if hooker != nil && !l.internalHook {
-			PushString(l, "external hook")
+			l.PushString("external hook")
 		} else {
 			hookTable(l)
-			PushThread(l1)
+			l1.PushThread()
 			//			XMove(l1, l, 1)
 			panic("XMove not implemented yet")
-			RawGet(l, -2)
-			Remove(l, -2)
+			l.RawGet(-2)
+			l.Remove(-2)
 		}
-		PushString(l, maskToString(mask))
-		PushInteger(l, HookerCount(l1))
+		l.PushString(maskToString(mask))
+		l.PushInteger(DebugHookCount(l1))
 		return 3
 	}},
 	// {"getinfo", db_getinfo},
 	// {"getlocal", db_getlocal},
-	{"getregistry", func(l *State) int { PushValue(l, RegistryIndex); return 1 }},
+	{"getregistry", func(l *State) int { l.PushValue(RegistryIndex); return 1 }},
 	{"getmetatable", func(l *State) int {
 		CheckAny(l, 1)
-		if !MetaTable(l, 1) {
-			PushNil(l)
+		if !l.MetaTable(1) {
+			l.PushNil()
 		}
 		return 1
 	}},
@@ -430,65 +502,65 @@ var debugLibrary = []RegistryFunction{
 	{"upvaluejoin", func(l *State) int {
 		n1 := l.checkUpValue(1, 2)
 		n2 := l.checkUpValue(3, 4)
-		ArgumentCheck(l, !IsGoFunction(l, 1), 1, "Lua function expected")
-		ArgumentCheck(l, !IsGoFunction(l, 3), 3, "Lua function expected")
+		ArgumentCheck(l, !l.IsGoFunction(1), 1, "Lua function expected")
+		ArgumentCheck(l, !l.IsGoFunction(3), 3, "Lua function expected")
 		UpValueJoin(l, 1, n1, 3, n2)
 		return 0
 	}},
-	{"upvalueid", func(l *State) int { PushLightUserData(l, UpValueId(l, 1, l.checkUpValue(1, 2))); return 1 }},
+	{"upvalueid", func(l *State) int { l.PushLightUserData(UpValueId(l, 1, l.checkUpValue(1, 2))); return 1 }},
 	{"setuservalue", func(l *State) int {
-		if TypeOf(l, 1) == TypeLightUserData {
+		if l.TypeOf(1) == TypeLightUserData {
 			ArgumentError(l, 1, "full userdata expected, got light userdata")
 		}
 		CheckType(l, 1, TypeUserData)
-		if !IsNoneOrNil(l, 2) {
+		if !l.IsNoneOrNil(2) {
 			CheckType(l, 2, TypeTable)
 		}
-		SetTop(l, 2)
-		SetUserValue(l, 1)
+		l.SetTop(2)
+		l.SetUserValue(1)
 		return 1
 	}},
 	{"sethook", func(l *State) int {
-		var hooker Hook
+		var hook Hook
 		var mask byte
 		var count int
 		i, l1 := threadArg(l)
-		if IsNoneOrNil(l, i+1) {
-			SetTop(l, i+1)
+		if l.IsNoneOrNil(i + 1) {
+			l.SetTop(i + 1)
 		} else {
 			s := CheckString(l, i+2)
 			CheckType(l, i+1, TypeFunction)
 			count = OptInteger(l, i+3, 0)
-			hooker, mask = internalHooker, stringToMask(s, count > 0)
+			hook, mask = internalHook, stringToMask(s, count > 0)
 		}
 		if !hookTable(l) {
-			PushString(l, "k")
-			SetField(l, -2, "__mode")
-			PushValue(l, -1)
-			SetMetaTable(l, -2)
+			l.PushString("k")
+			l.SetField(-2, "__mode")
+			l.PushValue(-1)
+			l.SetMetaTable(-2)
 		}
-		PushThread(l1)
+		l1.PushThread()
 		//	 	XMove(l1, l, 1)
 		panic("XMove not yet implemented")
-		PushValue(l, i+1)
-		RawSet(l, -3)
-		SetHooker(l1, hooker, mask, count)
+		l.PushValue(i + 1)
+		l.RawSet(-3)
+		SetDebugHook(l1, hook, mask, count)
 		l1.internalHook = true
 		return 0
 	}},
 	// {"setlocal", db_setlocal},
 	{"setmetatable", func(l *State) int {
-		t := TypeOf(l, 2)
+		t := l.TypeOf(2)
 		ArgumentCheck(l, t == TypeNil || t == TypeTable, 2, "nil or table expected")
-		SetTop(l, 2)
-		SetMetaTable(l, 1)
+		l.SetTop(2)
+		l.SetMetaTable(1)
 		return 1
 	}},
 	{"setupvalue", upValueHelper(SetUpValue, 1)},
 	{"traceback", func(l *State) int {
 		i, l1 := threadArg(l)
-		if s, ok := ToString(l, i+1); !ok && !IsNoneOrNil(l, i+1) {
-			PushValue(l, i+1)
+		if s, ok := l.ToString(i + 1); !ok && !l.IsNoneOrNil(i+1) {
+			l.PushValue(i + 1)
 		} else if l == l1 {
 			Traceback(l, l, s, OptInteger(l, i+2, 1))
 		} else {

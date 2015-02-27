@@ -14,26 +14,26 @@ func testStringHelper(t *testing.T, s string, trace bool) {
 	OpenLibraries(l)
 	LoadString(l, s)
 	if trace {
-		SetHooker(l, func(state *State, ar *Debug) {
+		SetDebugHook(l, func(state *State, ar Debug) {
 			ci := state.callInfo
 			p := state.prototype(ci)
 			println(stack(state.stack[ci.base():state.top]))
 			println(ci.code[ci.savedPC].String(), p.source, p.lineInfo[ci.savedPC])
 		}, MaskCount, 1)
 	}
-	Call(l, 0, 0)
+	l.Call(0, 0)
 }
 
 func TestProtectedCall(t *testing.T) {
 	l := NewState()
 	OpenLibraries(l)
-	SetHooker(l, func(state *State, ar *Debug) {
+	SetDebugHook(l, func(state *State, ar Debug) {
 		ci := state.callInfo
 		_ = stack(state.stack[ci.base():state.top])
 		_ = ci.code[ci.savedPC].String()
 	}, MaskCount, 1)
 	LoadString(l, "assert(not pcall(bit32.band, {}))")
-	Call(l, 0, 0)
+	l.Call(0, 0)
 }
 
 func TestLua(t *testing.T) {
@@ -71,26 +71,26 @@ func TestLua(t *testing.T) {
 		l := NewState()
 		OpenLibraries(l)
 		for _, s := range []string{"_port", "_no32", "_noformatA"} {
-			PushBoolean(l, true)
-			SetGlobal(l, s)
+			l.PushBoolean(true)
+			l.SetGlobal(s)
 		}
 		if v.nonPort {
-			PushBoolean(l, false)
-			SetGlobal(l, "_port")
+			l.PushBoolean(false)
+			l.SetGlobal("_port")
 		}
-		// SetHooker(l, func(state *State, ar *Debug) {
+		// l.SetDebugHook(func(state *State, ar Debug) {
 		// 	ci := state.callInfo.(*luaCallInfo)
 		// 	p := state.prototype(ci)
 		// 	println(stack(state.stack[ci.base():state.top]))
 		// 	println(ci.code[ci.savedPC].String(), p.source, p.lineInfo[ci.savedPC])
 		// }, MaskCount, 1)
-		Global(l, "debug")
-		Field(l, -1, "traceback")
-		traceback := Top(l)
-		// t.Logf("%#v", ToValue(l, traceback))
+		l.Global("debug")
+		l.Field(-1, "traceback")
+		traceback := l.Top()
+		// t.Logf("%#v", l.ToValue(traceback))
 		LoadFile(l, "lua-tests/"+v.name+".lua", "text")
-		// Call(l, 0, 0)
-		if err := ProtectedCall(l, 0, 0, traceback); err != nil {
+		// l.Call(0, 0)
+		if err := l.ProtectedCall(0, 0, traceback); err != nil {
 			t.Errorf("'%s' failed: %s", v.name, err.Error())
 		}
 	}
@@ -104,12 +104,12 @@ func benchmarkSort(b *testing.B, program string) {
 			a[i] = math.random()
 		end`
 	LoadString(l, fmt.Sprintf(s, b.N))
-	if err := ProtectedCall(l, 0, 0, 0); err != nil {
+	if err := l.ProtectedCall(0, 0, 0); err != nil {
 		b.Error(err.Error())
 	}
 	LoadString(l, program)
 	b.ResetTimer()
-	if err := ProtectedCall(l, 0, 0, 0); err != nil {
+	if err := l.ProtectedCall(0, 0, 0); err != nil {
 		b.Error(err.Error())
 	}
 }
@@ -136,30 +136,30 @@ func TestCanRemoveNilObjectFromStack(t *testing.T) {
 	}()
 
 	l := NewState()
-	PushString(l, "hello")
-	Remove(l, -1)
-	PushNil(l)
-	Remove(l, -1)
+	l.PushString("hello")
+	l.Remove(-1)
+	l.PushNil()
+	l.Remove(-1)
 }
 
 func TestTableNext(t *testing.T) {
 	l := NewState()
 	OpenLibraries(l)
-	CreateTable(l, 10, 0)
+	l.CreateTable(10, 0)
 	for i := 1; i <= 4; i++ {
-		PushInteger(l, i)
-		PushValue(l, -1)
-		SetTable(l, -3)
+		l.PushInteger(i)
+		l.PushValue(-1)
+		l.SetTable(-3)
 	}
 	if length := LengthEx(l, -1); length != 4 {
 		t.Errorf("expected table length to be 4, but was %d", length)
 	}
 	count := 0
-	for PushNil(l); Next(l, -2); count++ {
+	for l.PushNil(); l.Next(-2); count++ {
 		if k, v := CheckInteger(l, -2), CheckInteger(l, -1); k != v {
 			t.Errorf("key %d != value %d", k, v)
 		}
-		Pop(l, 1)
+		l.Pop(1)
 	}
 	if count != 4 {
 		t.Errorf("incorrect iteration count %d in Next()", count)
@@ -171,10 +171,10 @@ func TestError(t *testing.T) {
 	BaseOpen(l)
 	errorHandled := false
 	program := "error('error')"
-	PushGoFunction(l, func(l *State) int {
-		if Top(l) == 0 {
+	l.PushGoFunction(func(l *State) int {
+		if l.Top() == 0 {
 			t.Error("error handler received no arguments")
-		} else if errorMessage, ok := ToString(l, -1); !ok {
+		} else if errorMessage, ok := l.ToString(-1); !ok {
 			t.Errorf("error handler received %s instead of string", TypeNameOf(l, -1))
 		} else if errorMessage != chunkID(program)+":1: error" {
 			t.Errorf("error handler received '%s' instead of 'error'", errorMessage)
@@ -183,7 +183,7 @@ func TestError(t *testing.T) {
 		return 1
 	})
 	LoadString(l, program)
-	ProtectedCall(l, 0, 0, -2)
+	l.ProtectedCall(0, 0, -2)
 	if !errorHandled {
 		t.Error("error not handled")
 	}
@@ -194,16 +194,16 @@ func TestErrorf(t *testing.T) {
 	BaseOpen(l)
 	program := "-- script that is bigger than the max ID size\nhelper()\n" + strings.Repeat("--", idSize)
 	expectedErrorMessage := chunkID(program) + ":2: error"
-	PushGoFunction(l, func(l *State) int {
+	l.PushGoFunction(func(l *State) int {
 		Errorf(l, "error")
 		return 0
 	})
-	SetGlobal(l, "helper")
+	l.SetGlobal("helper")
 	errorHandled := false
-	PushGoFunction(l, func(l *State) int {
-		if Top(l) == 0 {
+	l.PushGoFunction(func(l *State) int {
+		if l.Top() == 0 {
 			t.Error("error handler received no arguments")
-		} else if errorMessage, ok := ToString(l, -1); !ok {
+		} else if errorMessage, ok := l.ToString(-1); !ok {
 			t.Errorf("error handler received %s instead of string", TypeNameOf(l, -1))
 		} else if errorMessage != expectedErrorMessage {
 			t.Errorf("error handler received '%s' instead of '%s'", errorMessage, expectedErrorMessage)
@@ -212,7 +212,7 @@ func TestErrorf(t *testing.T) {
 		return 1
 	})
 	LoadString(l, program)
-	ProtectedCall(l, 0, 0, -2)
+	l.ProtectedCall(0, 0, -2)
 	if !errorHandled {
 		t.Error("error not handled")
 	}

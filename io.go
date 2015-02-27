@@ -29,7 +29,7 @@ func toFile(l *State) *os.File {
 
 func newStream(l *State, f *os.File, close Function) *stream {
 	s := &stream{f: f, close: close}
-	PushUserData(l, s)
+	l.PushUserData(s)
 	SetMetaTableNamed(l, fileHandle)
 	return s
 }
@@ -39,8 +39,8 @@ func newFile(l *State) *stream {
 }
 
 func ioFile(l *State, name string) *os.File {
-	Field(l, RegistryIndex, name)
-	s := ToUserData(l, -1).(*stream)
+	l.Field(RegistryIndex, name)
+	s := l.ToUserData(-1).(*stream)
 	if s.close == nil {
 		Errorf(l, fmt.Sprintf("standard %s file is closed", name[len("_IO_"):]))
 	}
@@ -60,16 +60,16 @@ func forceOpen(l *State, name, mode string) {
 
 func ioFileHelper(name, mode string) Function {
 	return func(l *State) int {
-		if !IsNoneOrNil(l, 1) {
-			if name, ok := ToString(l, 1); ok {
+		if !l.IsNoneOrNil(1) {
+			if name, ok := l.ToString(1); ok {
 				forceOpen(l, name, mode)
 			} else {
 				toFile(l)
-				PushValue(l, 1)
+				l.PushValue(1)
 			}
-			SetField(l, RegistryIndex, name)
+			l.SetField(RegistryIndex, name)
 		}
-		Field(l, RegistryIndex, name)
+		l.Field(RegistryIndex, name)
 		return 1
 	}
 }
@@ -82,8 +82,8 @@ func closeHelper(l *State) int {
 }
 
 func close(l *State) int {
-	if IsNone(l, 1) {
-		Field(l, RegistryIndex, output)
+	if l.IsNone(1) {
+		l.Field(RegistryIndex, output)
 	}
 	toFile(l)
 	return closeHelper(l)
@@ -91,8 +91,8 @@ func close(l *State) int {
 
 func write(l *State, f *os.File, argIndex int) int {
 	var err error
-	for argCount := Top(l); argIndex < argCount && err == nil; argIndex++ {
-		if n, ok := ToNumber(l, argIndex); ok {
+	for argCount := l.Top(); argIndex < argCount && err == nil; argIndex++ {
+		if n, ok := l.ToNumber(argIndex); ok {
 			_, err = f.WriteString(numberToString(n))
 		} else {
 			_, err = f.WriteString(CheckString(l, argIndex))
@@ -107,9 +107,9 @@ func write(l *State, f *os.File, argIndex int) int {
 func readNumber(l *State, f *os.File) (err error) {
 	var n float64
 	if _, err = fmt.Fscanf(f, "%f", &n); err == nil {
-		PushNumber(l, n)
+		l.PushNumber(n)
 	} else {
-		PushNil(l)
+		l.PushNil()
 	}
 	return
 }
@@ -117,7 +117,7 @@ func readNumber(l *State, f *os.File) (err error) {
 func read(l *State, f *os.File, argIndex int) int {
 	resultCount := 0
 	var err error
-	if argCount := Top(l) - 1; argCount == 0 {
+	if argCount := l.Top() - 1; argCount == 0 {
 		//		err = readLineHelper(l, f, true)
 		resultCount = argIndex + 1
 	} else {
@@ -127,49 +127,49 @@ func read(l *State, f *os.File, argIndex int) int {
 		return FileResult(l, err, "")
 	}
 	if err == io.EOF {
-		Pop(l, 1)
-		PushNil(l)
+		l.Pop(1)
+		l.PushNil()
 	}
 	return resultCount - argIndex
 }
 
 func readLine(l *State) int {
-	s := ToUserData(l, UpValueIndex(1)).(*stream)
-	argCount, _ := ToInteger(l, UpValueIndex(2))
+	s := l.ToUserData(UpValueIndex(1)).(*stream)
+	argCount, _ := l.ToInteger(UpValueIndex(2))
 	if s.close == nil {
 		Errorf(l, "file is already closed")
 	}
-	SetTop(l, 1)
+	l.SetTop(1)
 	for i := 1; i <= argCount; i++ {
-		PushValue(l, UpValueIndex(3+i))
+		l.PushValue(UpValueIndex(3 + i))
 	}
 	resultCount := read(l, s.f, 2)
 	l.assert(resultCount > 0)
-	if !IsNil(l, -resultCount) {
+	if !l.IsNil(-resultCount) {
 		return resultCount
 	}
 	if resultCount > 1 {
-		m, _ := ToString(l, -resultCount+1)
+		m, _ := l.ToString(-resultCount + 1)
 		Errorf(l, m)
 	}
-	if ToBoolean(l, UpValueIndex(3)) {
-		SetTop(l, 0)
-		PushValue(l, UpValueIndex(1))
+	if l.ToBoolean(UpValueIndex(3)) {
+		l.SetTop(0)
+		l.PushValue(UpValueIndex(1))
 		closeHelper(l)
 	}
 	return 0
 }
 
 func lines(l *State, shouldClose bool) {
-	argCount := Top(l) - 1
+	argCount := l.Top() - 1
 	ArgumentCheck(l, argCount <= MinStack-3, MinStack-3, "too many options")
-	PushValue(l, 1)
-	PushInteger(l, argCount)
-	PushBoolean(l, shouldClose)
+	l.PushValue(1)
+	l.PushInteger(argCount)
+	l.PushBoolean(shouldClose)
 	for i := 1; i <= argCount; i++ {
-		PushValue(l, i+1)
+		l.PushValue(i + 1)
 	}
-	PushGoClosure(l, readLine, uint8(3+argCount))
+	l.PushGoClosure(readLine, uint8(3+argCount))
 }
 
 func flags(m string) (f int, err error) {
@@ -200,17 +200,17 @@ var ioLibrary = []RegistryFunction{
 	{"flush", func(l *State) int { return FileResult(l, ioFile(l, output).Sync(), "") }},
 	{"input", ioFileHelper(input, "r")},
 	{"lines", func(l *State) int {
-		if IsNone(l, 1) {
-			PushNil(l)
+		if l.IsNone(1) {
+			l.PushNil()
 		}
-		if IsNil(l, 1) { // No file name.
-			Field(l, RegistryIndex, input)
-			Replace(l, 1)
+		if l.IsNil(1) { // No file name.
+			l.Field(RegistryIndex, input)
+			l.Replace(1)
 			toFile(l)
 			lines(l, false)
 		} else {
 			forceOpen(l, CheckString(l, 1), "r")
-			Replace(l, 1)
+			l.Replace(1)
 			lines(l, true)
 		}
 		return 1
@@ -241,11 +241,11 @@ var ioLibrary = []RegistryFunction{
 	{"type", func(l *State) int {
 		CheckAny(l, 1)
 		if f, ok := TestUserData(l, 1, fileHandle).(*stream); !ok {
-			PushNil(l)
+			l.PushNil()
 		} else if f.close == nil {
-			PushString(l, "closed file")
+			l.PushString("closed file")
 		} else {
-			PushString(l, "file")
+			l.PushString("file")
 		}
 		return 1
 	}},
@@ -268,7 +268,7 @@ var fileHandleMethods = []RegistryFunction{
 		if err != nil {
 			return FileResult(l, err, "")
 		}
-		PushNumber(l, float64(ret))
+		l.PushNumber(float64(ret))
 		return 1
 	}},
 	{"setvbuf", func(l *State) int { // Files are unbuffered in Go. Fake support for now.
@@ -278,13 +278,13 @@ var fileHandleMethods = []RegistryFunction{
 		// TODO err := setvbuf(f, nil, mode[op], size)
 		return FileResult(l, nil, "")
 	}},
-	{"write", func(l *State) int { PushValue(l, 1); return write(l, toFile(l), 2) }},
+	{"write", func(l *State) int { l.PushValue(1); return write(l, toFile(l), 2) }},
 	//	{"__gc", },
 	{"__tostring", func(l *State) int {
 		if s := toStream(l); s.close == nil {
-			PushString(l, "file (closed)")
+			l.PushString("file (closed)")
 		} else {
-			PushString(l, fmt.Sprintf("file (%p)", s.f))
+			l.PushString(fmt.Sprintf("file (%p)", s.f))
 		}
 		return 1
 	}},
@@ -292,18 +292,18 @@ var fileHandleMethods = []RegistryFunction{
 
 func dontClose(l *State) int {
 	toStream(l).close = dontClose
-	PushNil(l)
-	PushString(l, "cannot close standard file")
+	l.PushNil()
+	l.PushString("cannot close standard file")
 	return 2
 }
 
 func registerStdFile(l *State, f *os.File, reg, name string) {
 	newStream(l, f, dontClose)
 	if reg != "" {
-		PushValue(l, -1)
-		SetField(l, RegistryIndex, reg)
+		l.PushValue(-1)
+		l.SetField(RegistryIndex, reg)
 	}
-	SetField(l, -2, name)
+	l.SetField(-2, name)
 }
 
 // IOOpen opens the io library. Usually passed to Require.
@@ -311,10 +311,10 @@ func IOOpen(l *State) int {
 	NewLibrary(l, ioLibrary)
 
 	NewMetaTable(l, fileHandle)
-	PushValue(l, -1)
-	SetField(l, -2, "__index")
+	l.PushValue(-1)
+	l.SetField(-2, "__index")
 	SetFunctions(l, fileHandleMethods, 0)
-	Pop(l, 1)
+	l.Pop(1)
 
 	registerStdFile(l, os.Stdin, input, "stdin")
 	registerStdFile(l, os.Stdout, output, "stdout")

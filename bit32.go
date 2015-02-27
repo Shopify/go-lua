@@ -24,7 +24,7 @@ func shift(l *State, r uint, i int) int {
 		}
 		r = trim(r)
 	}
-	PushUnsigned(l, r)
+	l.PushUnsigned(r)
 	return 1
 }
 
@@ -33,13 +33,13 @@ func rotate(l *State, i int) int {
 	if i &= bitCount - 1; i != 0 {
 		r = trim((r << uint(i)) | (r >> uint(bitCount-i)))
 	}
-	PushUnsigned(l, r)
+	l.PushUnsigned(r)
 	return 1
 }
 
 func bitOp(l *State, init uint, f func(a, b uint) uint) uint {
 	r := init
-	for i, n := 1, Top(l); i <= n; i++ {
+	for i, n := 1, l.Top(); i <= n; i++ {
 		r = f(r, CheckUnsigned(l, i))
 	}
 	return trim(r)
@@ -70,19 +70,19 @@ var bitLibrary = []RegistryFunction{
 			} else {
 				r = trim((r >> uint(i)) | ^(math.MaxUint32 >> uint(i)))
 			}
-			PushUnsigned(l, r)
+			l.PushUnsigned(r)
 		}
 		return 1
 	}},
-	{"band", func(l *State) int { PushUnsigned(l, andHelper(l)); return 1 }},
-	{"bnot", func(l *State) int { PushUnsigned(l, trim(^CheckUnsigned(l, 1))); return 1 }},
-	{"bor", func(l *State) int { PushUnsigned(l, bitOp(l, 0, func(a, b uint) uint { return a | b })); return 1 }},
-	{"bxor", func(l *State) int { PushUnsigned(l, bitOp(l, 0, func(a, b uint) uint { return a ^ b })); return 1 }},
-	{"btest", func(l *State) int { PushBoolean(l, andHelper(l) != 0); return 1 }},
+	{"band", func(l *State) int { l.PushUnsigned(andHelper(l)); return 1 }},
+	{"bnot", func(l *State) int { l.PushUnsigned(trim(^CheckUnsigned(l, 1))); return 1 }},
+	{"bor", func(l *State) int { l.PushUnsigned(bitOp(l, 0, func(a, b uint) uint { return a | b })); return 1 }},
+	{"bxor", func(l *State) int { l.PushUnsigned(bitOp(l, 0, func(a, b uint) uint { return a ^ b })); return 1 }},
+	{"btest", func(l *State) int { l.PushBoolean(andHelper(l) != 0); return 1 }},
 	{"extract", func(l *State) int {
 		r := CheckUnsigned(l, 1)
 		f, w := fieldArguments(l, 2)
-		PushUnsigned(l, (r>>f)&mask(w))
+		l.PushUnsigned((r >> f) & mask(w))
 		return 1
 	}},
 	{"lrotate", func(l *State) int { return rotate(l, CheckInteger(l, 2)) }},
@@ -92,7 +92,7 @@ var bitLibrary = []RegistryFunction{
 		f, w := fieldArguments(l, 3)
 		m := mask(w)
 		v &= m
-		PushUnsigned(l, (r & ^(m<<f))|(v<<f))
+		l.PushUnsigned((r & ^(m << f)) | (v << f))
 		return 1
 	}},
 	{"rrotate", func(l *State) int { return rotate(l, -CheckInteger(l, 2)) }},

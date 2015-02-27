@@ -13,14 +13,14 @@ func load(l *State, t *testing.T, fileName string) *luaClosure {
 	if err := LoadFile(l, fileName, "bt"); err != nil {
 		return nil
 	}
-	return ToValue(l, -1).(*luaClosure)
+	return l.ToValue(-1).(*luaClosure)
 }
 
 func TestParser(t *testing.T) {
 	l := NewState()
 	OpenLibraries(l)
 	bin := load(l, t, "fixtures/fib.bin")
-	Pop(l, 1)
+	l.Pop(1)
 	closure := load(l, t, "fixtures/fib.lua")
 	p := closure.prototype
 	if p == nil {
@@ -34,7 +34,7 @@ func TestParser(t *testing.T) {
 		t.Error("upvalue count doesn't match", len(closure.upValues), "!=", len(closure.prototype.upValues))
 	}
 	compareClosures(t, bin, closure)
-	Call(l, 0, 0)
+	l.Call(0, 0)
 }
 
 func TestEmptyString(t *testing.T) {
@@ -42,7 +42,7 @@ func TestEmptyString(t *testing.T) {
 	if err := LoadString(l, ""); err != nil {
 		t.Fatal(err.Error())
 	}
-	Call(l, 0, 0)
+	l.Call(0, 0)
 }
 
 func TestParserExhaustively(t *testing.T) {
@@ -78,9 +78,9 @@ func protectedTestParser(l *State, t *testing.T, source string) {
 	}
 	t.Log("Parsing " + source)
 	bin := load(l, t, binary)
-	Pop(l, 1)
+	l.Pop(1)
 	src := load(l, t, source)
-	Pop(l, 1)
+	l.Pop(1)
 	t.Log(source)
 	compareClosures(t, src, bin)
 }

@@ -9,26 +9,26 @@ const radiansPerDegree = math.Pi / 180.0
 
 func mathUnaryOp(f func(float64) float64) Function {
 	return func(l *State) int {
-		PushNumber(l, f(CheckNumber(l, 1)))
+		l.PushNumber(f(CheckNumber(l, 1)))
 		return 1
 	}
 }
 
 func mathBinaryOp(f func(float64, float64) float64) Function {
 	return func(l *State) int {
-		PushNumber(l, f(CheckNumber(l, 1), CheckNumber(l, 2)))
+		l.PushNumber(f(CheckNumber(l, 1), CheckNumber(l, 2)))
 		return 1
 	}
 }
 
 func reduce(f func(float64, float64) float64) Function {
 	return func(l *State) int {
-		n := Top(l) // number of arguments
+		n := l.Top() // number of arguments
 		v := CheckNumber(l, 1)
 		for i := 2; i <= n; i++ {
 			v = f(v, CheckNumber(l, i))
 		}
-		PushNumber(l, v)
+		l.PushNumber(v)
 		return 1
 	}
 }
@@ -48,23 +48,23 @@ var mathLibrary = []RegistryFunction{
 	{"fmod", mathBinaryOp(math.Mod)},
 	{"frexp", func(l *State) int {
 		f, e := math.Frexp(CheckNumber(l, 1))
-		PushNumber(l, f)
-		PushInteger(l, e)
+		l.PushNumber(f)
+		l.PushInteger(e)
 		return 2
 	}},
 	{"ldexp", func(l *State) int {
 		x, e := CheckNumber(l, 1), CheckInteger(l, 2)
-		PushNumber(l, math.Ldexp(x, e))
+		l.PushNumber(math.Ldexp(x, e))
 		return 1
 	}},
 	{"log", func(l *State) int {
 		x := CheckNumber(l, 1)
-		if IsNoneOrNil(l, 2) {
-			PushNumber(l, math.Log(x))
+		if l.IsNoneOrNil(2) {
+			l.PushNumber(math.Log(x))
 		} else if base := CheckNumber(l, 2); base == 10.0 {
-			PushNumber(l, math.Log10(x))
+			l.PushNumber(math.Log10(x))
 		} else {
-			PushNumber(l, math.Log(x)/math.Log(base))
+			l.PushNumber(math.Log(x) / math.Log(base))
 		}
 		return 1
 	}},
@@ -72,25 +72,25 @@ var mathLibrary = []RegistryFunction{
 	{"min", reduce(math.Min)},
 	{"modf", func(l *State) int {
 		i, f := math.Modf(CheckNumber(l, 1))
-		PushNumber(l, i)
-		PushNumber(l, f)
+		l.PushNumber(i)
+		l.PushNumber(f)
 		return 2
 	}},
 	{"pow", mathBinaryOp(math.Pow)},
 	{"rad", mathUnaryOp(func(x float64) float64 { return x * radiansPerDegree })},
 	{"random", func(l *State) int {
 		r := rand.Float64()
-		switch Top(l) {
+		switch l.Top() {
 		case 0: // no arguments
-			PushNumber(l, r)
+			l.PushNumber(r)
 		case 1: // upper limit only
 			u := CheckNumber(l, 1)
 			ArgumentCheck(l, 1.0 <= u, 1, "interval is empty")
-			PushNumber(l, math.Floor(r*u)+1.0) // [1, u]
+			l.PushNumber(math.Floor(r*u) + 1.0) // [1, u]
 		case 2: // lower and upper limits
 			lo, u := CheckNumber(l, 1), CheckNumber(l, 2)
 			ArgumentCheck(l, lo <= u, 2, "interval is empty")
-			PushNumber(l, math.Floor(r*(u-lo+1))+lo) // [lo, u]
+			l.PushNumber(math.Floor(r*(u-lo+1)) + lo) // [lo, u]
 		default:
 			Errorf(l, "wrong number of arguments")
 		}
@@ -111,9 +111,9 @@ var mathLibrary = []RegistryFunction{
 // MathOpen opens the math library. Usually passed to Require.
 func MathOpen(l *State) int {
 	NewLibrary(l, mathLibrary)
-	PushNumber(l, 3.1415926535897932384626433832795) // TODO use math.Pi instead? Values differ.
-	SetField(l, -2, "pi")
-	PushNumber(l, math.MaxFloat64)
-	SetField(l, -2, "huge")
+	l.PushNumber(3.1415926535897932384626433832795) // TODO use math.Pi instead? Values differ.
+	l.SetField(-2, "pi")
+	l.PushNumber(math.MaxFloat64)
+	l.SetField(-2, "huge")
 	return 1
 }

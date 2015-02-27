@@ -430,7 +430,7 @@ func (l *State) hook(event, line int) {
 	l.assert(ci.top <= l.stackLast)
 	l.allowHook = false // can't hook calls inside a hook
 	ci.setCallStatus(callStatusHooked)
-	l.hooker(l, &ar)
+	l.hooker(l, ar)
 	l.assert(!l.allowHook)
 	l.allowHook = true
 	ci.setTop(ciTop)

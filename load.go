@@ -10,28 +10,28 @@ import (
 
 func findLoader(l *State, name string) {
 	var msg string
-	if Field(l, UpValueIndex(1), "searchers"); !IsTable(l, 3) {
+	if l.Field(UpValueIndex(1), "searchers"); !l.IsTable(3) {
 		Errorf(l, "'package.searchers' must be a table")
 	}
 	for i := 1; ; i++ {
-		if RawGetInt(l, 3, i); IsNil(l, -1) {
-			Pop(l, 1)
-			PushString(l, msg)
+		if l.RawGetInt(3, i); l.IsNil(-1) {
+			l.Pop(1)
+			l.PushString(msg)
 			Errorf(l, "module '%s' not found: %s", name, msg)
 		}
-		PushString(l, name)
-		if Call(l, 1, 2); IsFunction(l, -2) {
+		l.PushString(name)
+		if l.Call(1, 2); l.IsFunction(-2) {
 			return
-		} else if IsString(l, -2) {
+		} else if l.IsString(-2) {
 			msg += CheckString(l, -2)
 		}
-		Pop(l, 2)
+		l.Pop(2)
 	}
 }
 
 func findFile(l *State, name, field, dirSep string) (string, error) {
-	Field(l, UpValueIndex(1), field)
-	path, ok := ToString(l, -1)
+	l.Field(UpValueIndex(1), field)
+	path, ok := l.ToString(-1)
 	if !ok {
 		Errorf(l, "'package.%s' must be a string", field)
 	}
@@ -40,8 +40,8 @@ func findFile(l *State, name, field, dirSep string) (string, error) {
 
 func checkLoad(l *State, loaded bool, fileName string) int {
 	if loaded { // Module loaded successfully?
-		PushString(l, fileName) // Second argument to module.
-		return 2                // Return open function & file name.
+		l.PushString(fileName) // Second argument to module.
+		return 2               // Return open function & file name.
 	}
 	m := CheckString(l, 1)
 	e := CheckString(l, -1)
@@ -60,21 +60,21 @@ func searcherLua(l *State) int {
 
 func searcherPreload(l *State) int {
 	name := CheckString(l, 1)
-	Field(l, RegistryIndex, "_PRELOAD")
-	Field(l, -1, name)
-	if IsNil(l, -1) {
-		PushString(l, fmt.Sprintf("\n\tno field package.preload['%s']", name))
+	l.Field(RegistryIndex, "_PRELOAD")
+	l.Field(-1, name)
+	if l.IsNil(-1) {
+		l.PushString(fmt.Sprintf("\n\tno field package.preload['%s']", name))
 	}
 	return 1
 }
 
 func createSearchersTable(l *State) {
 	searchers := []Function{searcherPreload, searcherLua}
-	CreateTable(l, len(searchers), 0)
+	l.CreateTable(len(searchers), 0)
 	for i, s := range searchers {
-		PushValue(l, -2)
-		PushGoClosure(l, s, 1)
-		RawSetInt(l, -2, i+1)
+		l.PushValue(-2)
+		l.PushGoClosure(s, 1)
+		l.RawSetInt(-2, i+1)
 	}
 }
 
@@ -105,31 +105,31 @@ func searchPath(l *State, name, path, sep, dirSep string) (string, error) {
 }
 
 func noEnv(l *State) bool {
-	Field(l, RegistryIndex, "LUA_NOENV")
-	b := ToBoolean(l, -1)
-	Pop(l, 1)
+	l.Field(RegistryIndex, "LUA_NOENV")
+	b := l.ToBoolean(-1)
+	l.Pop(1)
 	return b
 }
 
 func setPath(l *State, field, env, def string) {
 	if path := os.Getenv(env); path == "" || noEnv(l) {
-		PushString(l, def)
+		l.PushString(def)
 	} else {
 		o := fmt.Sprintf("%c%c", pathListSeparator, pathListSeparator)
 		n := fmt.Sprintf("%c%s%c", pathListSeparator, def, pathListSeparator)
 		path = strings.Replace(path, o, n, -1)
-		PushString(l, path)
+		l.PushString(path)
 	}
-	SetField(l, -2, field)
+	l.SetField(-2, field)
 }
 
 var packageLibrary = []RegistryFunction{
 	{"loadlib", func(l *State) int {
 		_ = CheckString(l, 1) // path
 		_ = CheckString(l, 2) // init
-		PushNil(l)
-		PushString(l, "dynamic libraries not enabled; check your Lua installation")
-		PushString(l, "absent")
+		l.PushNil()
+		l.PushString("dynamic libraries not enabled; check your Lua installation")
+		l.PushString("absent")
 		return 3 // Return nil, error message, and where.
 	}},
 	{"searchpath", func(l *State) int {
@@ -139,11 +139,11 @@ var packageLibrary = []RegistryFunction{
 		dirSep := OptString(l, 4, string(filepath.Separator))
 		f, err := searchPath(l, name, path, sep, dirSep)
 		if err != nil {
-			PushNil(l)
-			PushString(l, err.Error())
+			l.PushNil()
+			l.PushString(err.Error())
 			return 2
 		}
-		PushString(l, f)
+		l.PushString(f)
 		return 1
 	}},
 }
@@ -152,40 +152,40 @@ var packageLibrary = []RegistryFunction{
 func PackageOpen(l *State) int {
 	NewLibrary(l, packageLibrary)
 	createSearchersTable(l)
-	SetField(l, -2, "searchers")
+	l.SetField(-2, "searchers")
 	setPath(l, "path", "LUA_PATH", defaultPath)
-	PushString(l, fmt.Sprintf("%c\n%c\n?\n!\n-\n", filepath.Separator, pathListSeparator))
-	SetField(l, -2, "config")
+	l.PushString(fmt.Sprintf("%c\n%c\n?\n!\n-\n", filepath.Separator, pathListSeparator))
+	l.SetField(-2, "config")
 	SubTable(l, RegistryIndex, "_LOADED")
-	SetField(l, -2, "loaded")
+	l.SetField(-2, "loaded")
 	SubTable(l, RegistryIndex, "_PRELOAD")
-	SetField(l, -2, "preload")
-	PushGlobalTable(l)
-	PushValue(l, -2)
+	l.SetField(-2, "preload")
+	l.PushGlobalTable()
+	l.PushValue(-2)
 	SetFunctions(l, []RegistryFunction{{"require", func(l *State) int {
 		name := CheckString(l, 1)
-		SetTop(l, 1)
-		Field(l, RegistryIndex, "_LOADED")
-		Field(l, 2, name)
-		if ToBoolean(l, -1) {
+		l.SetTop(1)
+		l.Field(RegistryIndex, "_LOADED")
+		l.Field(2, name)
+		if l.ToBoolean(-1) {
 			return 1
 		}
-		Pop(l, 1)
+		l.Pop(1)
 		findLoader(l, name)
-		PushString(l, name)
-		Insert(l, -2)
-		Call(l, 2, 1)
-		if !IsNil(l, -1) {
-			SetField(l, 2, name)
+		l.PushString(name)
+		l.Insert(-2)
+		l.Call(2, 1)
+		if !l.IsNil(-1) {
+			l.SetField(2, name)
 		}
-		Field(l, 2, name)
-		if IsNil(l, -1) {
-			PushBoolean(l, true)
-			PushValue(l, -1)
-			SetField(l, 2, name)
+		l.Field(2, name)
+		if l.IsNil(-1) {
+			l.PushBoolean(true)
+			l.PushValue(-1)
+			l.SetField(2, name)
 		}
 		return 1
 	}}}, 1)
-	Pop(l, 1)
+	l.Pop(1)
 	return 1
 }
