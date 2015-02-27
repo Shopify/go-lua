@@ -163,6 +163,7 @@ var tableLibrary = []RegistryFunction{
 	}},
 }
 
+// TableOpen opens the table library. Usually passed to Require.
 func TableOpen(l *State) int {
 	NewLibrary(l, tableLibrary)
 	return 1

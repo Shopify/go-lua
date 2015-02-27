@@ -498,6 +498,7 @@ var debugLibrary = []RegistryFunction{
 	}},
 }
 
+// DebugOpen opens the debug library. Usually passed to Require.
 func DebugOpen(l *State) int {
 	NewLibrary(l, debugLibrary)
 	return 1

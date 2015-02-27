@@ -108,6 +108,7 @@ var mathLibrary = []RegistryFunction{
 	{"tan", mathUnaryOp(math.Tan)},
 }
 
+// MathOpen opens the math library. Usually passed to Require.
 func MathOpen(l *State) int {
 	NewLibrary(l, mathLibrary)
 	PushNumber(l, 3.1415926535897932384626433832795) // TODO use math.Pi instead? Values differ.

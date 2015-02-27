@@ -8,10 +8,10 @@ import (
 	"strings"
 )
 
-const (
-	MultipleReturns = -1 // option for multiple returns in 'PCall' and 'Call'
-)
+// MultipleReturns is the argument for argCount or resultCount in ProtectedCall and Call.
+const MultipleReturns = -1
 
+// Debug.Event and SetHooker mask argument values.
 const (
 	HookCall, MaskCall = iota, 1 << iota
 	HookReturn, MaskReturn
@@ -20,6 +20,7 @@ const (
 	HookTailCall, MaskTailCall
 )
 
+// Errors introduced by the Lua VM.
 var (
 	SyntaxError = errors.New("syntax error")
 	MemoryError = errors.New("memory error")
@@ -27,12 +28,15 @@ var (
 	FileError   = errors.New("file error")
 )
 
+// A RuntimeError is an error raised internally by the Lua VM or through Error.
 type RuntimeError string
 
 func (r RuntimeError) Error() string { return "runtime error: " + string(r) }
 
+// A Type is a symbolic representation of a Lua VM type.
 type Type int
 
+// Valid Type values.
 const (
 	TypeNil Type = iota
 	TypeBoolean
@@ -48,39 +52,70 @@ const (
 	TypeNone = TypeNil - 1
 )
 
+// An Operator is an op argument for Arith.
 type Operator int
 
+// Valid Operator values for Arith.
 const (
-	OpAdd Operator = iota
-	OpSub
-	OpMul
-	OpDiv
-	OpMod
-	OpPow
-	OpUnaryMinus
+	OpAdd        Operator = iota // Performs addition (+).
+	OpSub                        // Performs subtraction (-).
+	OpMul                        // Performs multiplication (*).
+	OpDiv                        // Performs division (/).
+	OpMod                        // Performs modulo (%).
+	OpPow                        // Performs exponentiation (^).
+	OpUnaryMinus                 // Performs mathematical negation (unary -).
 )
 
+// A ComparisonOperator is an op argument for Compare.
 type ComparisonOperator int
 
+// Valid ComparisonOperator values for Compare.
 const (
-	OpEq ComparisonOperator = iota
-	OpLT
-	OpLE
+	OpEq ComparisonOperator = iota // Compares for equality (==).
+	OpLT                           // Compares for less than (<).
+	OpLE                           // Compares for less or equal (<=).
 )
 
+// Lua provides a registry, a predefined table that can be used by any Go code
+// to store whatever Lua values it needs to store. The registry table is always
+// located at pseudo-index RegistryIndex, which is a valid index. Any Go
+// library can store data into this table, but it should take care to choose
+// keys that are different from those used by other libraries, to avoid
+// collisions. Typically, you should use as key a string containing your
+// library name, or a light userdata object in your code, or any Lua object
+// created by your code. As with global names, string keys starting with an
+// underscore followed by uppercase letters are reserved for Lua.
+//
+// The integer keys in the registry are used by the reference mechanism
+// and by some predefined values. Therefore, integer keys should not be used
+// for other purposes.
+//
+// When you create a new Lua state, its registry comes with some predefined
+// values. These predefined values are indexed with integer keys defined as
+// constants.
 const (
+	// RegistryIndex is the psuedo-index for the registry table.
+	RegistryIndex = firstPseudoIndex
+
+	// RegistryIndexMainThread is the registry index for the main thread of the
+	// State. (The main thread is the one created together with the State.)
 	RegistryIndexMainThread = iota
+
+	// RegistryIndexGlobals is the registry index for the global environment.
 	RegistryIndexGlobals
 )
 
+// Signature is the mark for precompiled code ('<esc>Lua').
+const Signature = "\033Lua"
+
+// MinStack is the minimum Lua stack available to a Go function.
+const MinStack = 20
+
 const (
-	Signature     = "\033Lua" // mark for precompiled code ('<esc>Lua')
 	VersionMajor  = 5
 	VersionMinor  = 2
 	VersionNumber = 502
-	MinStack      = 20 // minimum Lua stack available to a Go function
 	VersionString = "Lua " + string('0'+VersionMajor) + "." + string('0'+VersionMinor)
-	RegistryIndex = firstPseudoIndex
 )
 
 type RegistryFunction struct {
@@ -88,19 +123,71 @@ type RegistryFunction struct {
 	Function Function
 }
 
+// A Debug carries different pieces of information about a function or an
+// activation record. Stack fills only the private part of this structure, for
+// later use. To fill the other fields of a Debug with useful information, call
+// Info.
 type Debug struct {
-	Event                                     int
-	Name                                      string
-	NameKind                                  string // "global", "local", "field", "method"
-	What                                      string // "Lua", "Go", "main", "tail"
-	Source, ShortSource                       string
-	CurrentLine, LineDefined, LastLineDefined int
-	UpValueCount, ParameterCount              int
-	IsVarArg, IsTailCall                      bool
-	callInfo                                  *callInfo // active function
+	Event int
+
+	// Name is a reasonable name for the given function. Because functions in
+	// Lua are first-class values, they do not have a fixed name. Some functions
+	// can be the value of multiple global variables, while others can be stored
+	// only in a table field. The Info function checks how the function was
+	// called to find a suitable name. If it cannot find a name, then Name is "".
+	Name string
+
+	// NameKind is explains the name field. The value of NameKind can be "global",
+	// "local", "method", "field", "upvalue", or "" (the empty string), according
+	// to how the function was called. (Lua uses the empty string when no other
+	// option seems to apply.)
+	NameKind string
+
+	// What is the string "Lua" if the function is a Lua function, "Go" if it is
+	// a Go function, "main" if it is the main part of a chunk.
+	What string
+
+	// Source is the source of the chunk that created the function. If Source
+	// starts with a '@', it means that the function was defined in a file where
+	// the file name follows the '@'. If Source starts with a '=', the remainder
+	// of its contents describe the source in a user-dependent manner. Otherwise,
+	// the function was defined in a string where Source is that string.
+	Source string
+
+	// ShortSource is a "printable" version of source, to be used in error messages.
+	ShortSource string
+
+	// CurrentLine is the current line where the given function is executing.
+	// When no line information is available, CurrentLine is set to -1.
+	CurrentLine int
+
+	// LineDefined is the line number where the definition of the function starts.
+	LineDefined int
+
+	// LastLineDefined is the line number where the definition of the function ends.
+	LastLineDefined int
+
+	// UpValueCount is the number of upvalues of the function.
+	UpValueCount int
+
+	// ParameterCount is the number of fixed parameters of the function (always 0
+	// for Go functions).
+	ParameterCount int
+
+	// IsVarArg is true if the function is a vararg function (always true for Go
+	// functions).
+	IsVarArg bool
+
+	// IsTailCall is true if this function invocation was called by a tail call.
+	// In this case, the caller of this level is not in the stack.
+	IsTailCall bool
+	callInfo   *callInfo // active function
 }
 
+// A Hook is a callback function that can be registered with SetHooker to trace various VM events.
 type Hook func(state *State, activationRecord *Debug)
+
+// A Function is a Go function intended to be called from Lua.
 type Function func(state *State) int
 
 // type State interface {
@@ -131,7 +218,7 @@ const (
 	callStatusHookYielded                               // last hook called yielded
 )
 
-// per thread state
+// A State is an opaque structure representing per thread Lua state.
 type State struct {
 	error                 error
 	shouldYield           bool
@@ -227,10 +314,10 @@ func (l *State) checkResults(argCount, resultCount int) {
 	}
 }
 
-// Context is called y a continuation function to retrieve the status of the
-// thread and a context information.  When called in the origin function, it
+// Context is called by a continuation function to retrieve the status of the
+// thread and context information. When called in the origin function, it
 // will always return (0, false, nil). When called inside a continuation function,
-// it will return (ctx, shouldYield, err), where `ctx` is the value that was
+// it will return (ctx, shouldYield, err), where ctx is the value that was
 // passed to the callee together with the continuation function.
 //
 // http://www.lua.org/manual/5.2/manual.html#lua_getctx
@@ -265,23 +352,23 @@ func CallWithContinuation(l *State, argCount, resultCount, context int, continua
 	l.adjustResults(resultCount)
 }
 
-// ProtectedCall calls a function in protected mode.  Both `argCount` and
-// `resultCount` have the same meaning as in Call.  If there are no errors
+// ProtectedCall calls a function in protected mode. Both argCount and
+// resultCount have the same meaning as in Call. If there are no errors
 // during the call, ProtectedCall behaves exactly like Call.
 //
 // However, if there is any error, ProtectedCall catches it, pushes a single
 // value on the stack (the error message), and returns an error. Like Call,
 // ProtectedCall always removes the function and its arguments from the stack.
 //
-// If `errorFunction` is 0, then the error message returned on the stack is
-// exactly the original error message.  Otherwise, errorFunction is the stack
-// index of an error handler (in the Lua C, message handler).  This cannot be
-// a pseudo-index in the current implementation.  In case of runtime errors,
+// If errorFunction is 0, then the error message returned on the stack is
+// exactly the original error message. Otherwise, errorFunction is the stack
+// index of an error handler (in the Lua C, message handler). This cannot be
+// a pseudo-index in the current implementation. In case of runtime errors,
 // this function will be called with the error message and its return value
 // will be the message returned on the stack by ProtectedCall.
 //
 // Typically, the error handler is used to add more debug information to the
-// error message, such as a stack traceback.  Such information cannot be
+// error message, such as a stack traceback. Such information cannot be
 // gathered after the return of ProtectedCall, since by then, the stack has
 // unwound.
 //
@@ -351,7 +438,7 @@ func Load(l *State, r io.Reader, chunkName string, mode string) error {
 	return nil
 }
 
-// NewState creates a new thread running in a new, independant state.
+// NewState creates a new thread running in a new, independent state.
 //
 // http://www.lua.org/manual/5.2/manual.html#lua_newstate
 func NewState() *State {
@@ -372,11 +459,12 @@ func apiCheckStackIndex(index int, v value) {
 	}
 }
 
-// SetField does the equivalent of `table[key]=v`, where `table` is the value
-// at `index` and `v` is the value on top of the stack.
+// SetField does the equivalent of
+// 		table[key]=v
+// where table is the value at index and v is the value on top of the stack.
 //
 // This function pops the value from the stack. As in Lua, this function may
-// trigger a metamethod for the "newindex" event.
+// trigger a metamethod for the __newindex event.
 //
 // http://www.lua.org/manual/5.2/manual.html#lua_setfield
 func SetField(l *State, index int, key string) {
@@ -435,7 +523,7 @@ func (l *State) setIndexToValue(index int, v value) {
 	}
 }
 
-// AbsIndex converts the acceptable index `index` to an absolute index (that
+// AbsIndex converts the acceptable index index to an absolute index (that
 // is, one that does not depend on the stack top).
 //
 // http://www.lua.org/manual/5.2/manual.html#lua_absindex
@@ -446,11 +534,11 @@ func AbsIndex(l *State, index int) int {
 	return l.top - l.callInfo.function + index
 }
 
-// SetTop accepts any index, or 0, and sets the stack top to `index`.  If the
+// SetTop accepts any index, or 0, and sets the stack top to index. If the
 // new top is larger than the old one, then the new elements are filled with
-// nil.  If `index` is 0, then all stack elements are removed.
+// nil. If index is 0, then all stack elements are removed.
 //
-// If `index` is negative, the stack will be decremented by that much.  If
+// If index is negative, the stack will be decremented by that much. If
 // the decrement is larger than the stack, SetTop will panic().
 //
 // http://www.lua.org/manual/5.2/manual.html#lua_settop
@@ -472,8 +560,8 @@ func SetTop(l *State, index int) {
 	}
 }
 
-// Remove the element at the given valid `index`, shifting down the elements
-// above `index` to fill the gap.  This function cannot be called with a
+// Remove the element at the given valid index, shifting down the elements
+// above index to fill the gap. This function cannot be called with a
 // pseudo-index, because a pseudo-index is not an actual stack position.
 //
 // http://www.lua.org/manual/5.2/manual.html#lua_remove
@@ -498,7 +586,7 @@ func Insert(l *State, index int) {
 
 func (l *State) move(dest int, src value) { l.setIndexToValue(dest, src) }
 
-// Replace moves the top element into the given valid `index` without shifting
+// Replace moves the top element into the given valid index without shifting
 // any element (therefore replacing the value at the given index), and then
 // pops the top element.
 //
@@ -509,8 +597,8 @@ func Replace(l *State, index int) {
 	l.top--
 }
 
-// CheckStack ensures that there are at least `size` free stack slots in the
-// stack.  This call will not panic(), unlike the other CheckXxx() functions.
+// CheckStack ensures that there are at least size free stack slots in the
+// stack. This call will not panic(), unlike the other Check*() functions.
 //
 // http://www.lua.org/manual/5.2/manual.html#lua_checkstack
 func CheckStack(l *State, size int) bool {
@@ -525,6 +613,7 @@ func CheckStack(l *State, size int) bool {
 	return ok
 }
 
+// AtPanic sets a new panic function and returns the old one.
 func AtPanic(l *State, panicFunction Function) Function {
 	panicFunction, l.global.panicFunction = l.global.panicFunction, panicFunction
 	return panicFunction
@@ -558,7 +647,7 @@ func (l *State) valueToType(v value) Type {
 	return TypeNone
 }
 
-// TypeOf returns the type of the value at `index`, or TypeNone for a non-
+// TypeOf returns the type of the value at index, or TypeNone for a non-
 // valid (but acceptable) index.
 //
 // http://www.lua.org/manual/5.2/manual.html#lua_type
@@ -566,7 +655,7 @@ func TypeOf(l *State, index int) Type {
 	return l.valueToType(l.indexToValue(index))
 }
 
-// IsGoFunction verifies that the value at `index` is a Go function. Similar to `lua_iscfunction`.
+// IsGoFunction verifies that the value at index is a Go function.
 //
 // http://www.lua.org/manual/5.2/manual.html#lua_iscfunction
 func IsGoFunction(l *State, index int) bool {
@@ -577,7 +666,7 @@ func IsGoFunction(l *State, index int) bool {
 	return ok
 }
 
-// IsNumber verifies that the value at `index` is a number.
+// IsNumber verifies that the value at index is a number.
 //
 // http://www.lua.org/manual/5.2/manual.html#lua_isnumber
 func IsNumber(l *State, index int) bool {
@@ -585,7 +674,7 @@ func IsNumber(l *State, index int) bool {
 	return ok
 }
 
-// IsString verifies that the value at `index` is a string, or a number (which
+// IsString verifies that the value at index is a string, or a number (which
 // is always convertible to a string).
 //
 // http://www.lua.org/manual/5.2/manual.html#lua_isstring
@@ -597,7 +686,7 @@ func IsString(l *State, index int) bool {
 	return ok
 }
 
-// IsUserData verifies that the value at `index` is a userdata.
+// IsUserData verifies that the value at index is a userdata.
 //
 // http://www.lua.org/manual/5.2/manual.html#lua_isuserdata
 func IsUserData(l *State, index int) bool {
@@ -628,7 +717,7 @@ func Arith(l *State, op Operator) {
 	l.top--
 }
 
-// RawEqual verifies that the values at `index1` and `index2` are primitively
+// RawEqual verifies that the values at index1 and index2 are primitively
 // equal (that is, without calling their metamethods).
 //
 // http://www.lua.org/manual/5.2/manual.html#lua_rawequal
@@ -658,7 +747,7 @@ func Compare(l *State, index1, index2 int, op ComparisonOperator) bool {
 	return false
 }
 
-// ToInteger converts the Lua value at `index` into a signed integer.  The Lua
+// ToInteger converts the Lua value at index into a signed integer. The Lua
 // value must be a number, or a string convertible to a number.
 //
 // If the number is not an integer, it is truncated in some non-specified way.
@@ -673,7 +762,7 @@ func ToInteger(l *State, index int) (int, bool) {
 	return 0, false
 }
 
-// ToUnsigned converts the Lua value at `index` to a Go `uint`. The Lua value
+// ToUnsigned converts the Lua value at index to a Go uint. The Lua value
 // must be a number or a string convertible to a number.
 //
 // If the number is not an unsigned integer, it is truncated in some non-
@@ -692,7 +781,7 @@ func ToUnsigned(l *State, index int) (uint, bool) {
 	return 0, false
 }
 
-// ToString  converts the Lua value at `index` to a Go string.  The Lua value
+// ToString  converts the Lua value at index to a Go string.  The Lua value
 // must also be a string or a number; otherwise the function returns
 // false for its second return value.
 //
@@ -704,8 +793,8 @@ func ToString(l *State, index int) (s string, ok bool) {
 	return
 }
 
-// RawLength returns the length of the value at `index`.  For strings, this is
-// the length.  For tables, this is the result of the `#` operator with no
+// RawLength returns the length of the value at index.  For strings, this is
+// the length.  For tables, this is the result of the # operator with no
 // metamethods.  For userdata, this is the size of the block of memory
 // allocated for the userdata (not implemented yet). For other values, it is 0.
 //
@@ -722,7 +811,7 @@ func RawLength(l *State, index int) int {
 	return 0
 }
 
-// ToGoFunction converts a value at `index` into a Go function.  That value
+// ToGoFunction converts a value at index into a Go function.  That value
 // must be a Go function, otherwise it returns nil.
 //
 // http://www.lua.org/manual/5.2/manual.html#lua_tocfunction
@@ -736,7 +825,7 @@ func ToGoFunction(l *State, index int) Function {
 	return nil
 }
 
-// ToUserData returns an interface{} of the userdata of the value at `index`.
+// ToUserData returns an interface{} of the userdata of the value at index.
 // Otherwise, it returns nil.
 //
 // http://www.lua.org/manual/5.2/manual.html#lua_touserdata
@@ -747,7 +836,7 @@ func ToUserData(l *State, index int) interface{} {
 	return nil
 }
 
-// ToThread converts the value at `index` to a Lua thread (a State). This
+// ToThread converts the value at index to a Lua thread (a State). This
 // value must be a thread, otherwise the return value will be nil.
 //
 // http://www.lua.org/manual/5.2/manual.html#lua_tothread
@@ -758,7 +847,7 @@ func ToThread(l *State, index int) *State {
 	return nil
 }
 
-// ToValue convertes the value at `index` into a generic Go interface{}.  The
+// ToValue convertes the value at index into a generic Go interface{}.  The
 // value can be a userdata, a table, a thread, a function, or Go string, bool
 // or float64 types. Otherwise, the function returns nil.
 //
@@ -791,9 +880,9 @@ func PushString(l *State, s string) string { // TODO is it useful to return the 
 // PushFString pushes onto the stack a formatted string and returns that
 // string.  It is similar to fmt.Sprintf, but has some differences: the
 // conversion specifiers are quite restricted.  There are no flags, widths,
-// or precisions.  The conversion specifiers can only be `%%` (inserts a `%`
-// in the string), `%s`, `%f` (a Lua number), `%p` (a pointer as a hexadecimal
-// numeral), `%d` and `%c` (an integer as a byte).
+// or precisions.  The conversion specifiers can only be index%%index (inserts a index%index
+// in the string), index%sindex, index%findex (a Lua number), index%pindex (a pointer as a hexadecimal
+// numeral), index%dindex and index%cindex (an integer as a byte).
 //
 // http://www.lua.org/manual/5.2/manual.html#lua_pushfstring
 func PushFString(l *State, format string, args ...interface{}) string {
@@ -847,11 +936,11 @@ func PushFString(l *State, format string, args ...interface{}) string {
 // function whenever it is called.  To associate values with a Go function,
 // first these values should be pushed onto the stack (when there are multiple
 // values, the first value is pushed first).  Then PushGoClosure is called to
-// create and push the Go function onto the stack, with the argument `upValueCount`
+// create and push the Go function onto the stack, with the argument upValueCount
 // telling how many values should be associated with the function.  Calling
 // PushGoClosure also pops these values from the stack.
 //
-// When `upValueCount` is 0, this function creates a light Go function, which is just a
+// When upValueCount is 0, this function creates a light Go function, which is just a
 // Go function.
 //
 // http://www.lua.org/manual/5.2/manual.html#lua_pushcclosure
@@ -869,7 +958,7 @@ func PushGoClosure(l *State, function Function, upValueCount uint8) {
 	}
 }
 
-// PushThread pushes the thread `l` onto the stack.  It returns true if `l` is
+// PushThread pushes the thread l onto the stack.  It returns true if l is
 // the main thread of its state.
 //
 // http://www.lua.org/manual/5.2/manual.html#lua_pushthread
@@ -878,7 +967,7 @@ func PushThread(l *State) bool {
 	return l.global.mainThread == l
 }
 
-// Global pushes onto the stack the value of the global `name`.
+// Global pushes onto the stack the value of the global name.
 //
 // http://www.lua.org/manual/5.2/manual.html#lua_getglobal
 func Global(l *State, name string) {
@@ -887,9 +976,9 @@ func Global(l *State, name string) {
 	l.stack[l.top-1] = l.tableAt(g, l.stack[l.top-1])
 }
 
-// Field pushes onto the stack the value `table[name]`, where `table` is the
-// table at on the stack at the given `index`. This call may trigger a
-// metamethod for the `index` event.
+// Field pushes onto the stack the value table[name], where table is the
+// table at on the stack at the given index. This call may trigger a
+// metamethod for the index event.
 //
 // http://www.lua.org/manual/5.2/manual.html#lua_getfield
 func Field(l *State, index int, name string) {
@@ -906,8 +995,8 @@ func RawGet(l *State, index int) {
 	l.stack[l.top-1] = t.at(l.stack[l.top-1])
 }
 
-// RawGetInt pushes onto the stack the value `table[key]` where `table` is the
-// value at `index` on the stack. The access is raw, as it doesn't invoke
+// RawGetInt pushes onto the stack the value table[key] where table is the
+// value at index on the stack. The access is raw, as it doesn't invoke
 // metamethods.
 //
 // http://www.lua.org/manual/5.2/manual.html#lua_rawgeti
@@ -916,8 +1005,8 @@ func RawGetInt(l *State, index, key int) {
 	l.apiPush(t.atInt(key))
 }
 
-// RawGetValue pushes onto the stack value `table[p]` where `table` is the
-// value at `index` on the stack, and `p` is a light userdata.  The access is
+// RawGetValue pushes onto the stack value table[p] where table is the
+// value at index on the stack, and p is a light userdata.  The access is
 // raw, as it doesn't invoke metamethods.
 //
 // http://www.lua.org/manual/5.2/manual.html#lua_rawgetp
@@ -927,8 +1016,8 @@ func RawGetValue(l *State, index int, p interface{}) {
 }
 
 // CreateTable creates a new empty table and pushes it onto the stack.
-// `arrayCount` is a hint for how many elements the table will have as a
-// sequence; `recordCount` is a hint for how many other elements the table
+// arrayCount is a hint for how many elements the table will have as a
+// sequence; recordCount is a hint for how many other elements the table
 // will have.  Lua may use these hints to preallocate memory for the the new
 // table.  This pre-allocation is useful for performance when you know in
 // advance how many elements the table will have.  Otherwise, you can use the
@@ -939,9 +1028,9 @@ func CreateTable(l *State, arrayCount, recordCount int) {
 	l.apiPush(newTableWithSize(arrayCount, recordCount))
 }
 
-// MetaTable pushes onto the stack the metatable of the value at `index`.  If
-// the value at `index` does not have a metatable, the function returns
-// `false` and nothing is put onto the stack.
+// MetaTable pushes onto the stack the metatable of the value at index.  If
+// the value at index does not have a metatable, the function returns
+// false and nothing is put onto the stack.
 //
 // http://www.lua.org/manual/5.2/manual.html#lua_getmetatable
 func MetaTable(l *State, index int) bool {
@@ -962,7 +1051,7 @@ func MetaTable(l *State, index int) bool {
 }
 
 // UserValue pushes onto the stack the Lua value associated with the userdata
-// at `index`.  This value must be a table or nil.
+// at index.  This value must be a table or nil.
 //
 // http://www.lua.org/manual/5.2/manual.html#lua_getuservalue
 func UserValue(l *State, index int) {
@@ -986,8 +1075,8 @@ func SetGlobal(l *State, name string) {
 	l.top -= 2 // pop value and key
 }
 
-// SetTable does the equivalent of `table[key]=v`, where `table` is the value
-// at `index`, `v` is the value at the top of the stack and `key` is the value
+// SetTable does the equivalent of indextable[key]=vindex, where indextableindex is the value
+// at index, indexvindex is the value at the top of the stack and indexkeyindex is the value
 // just below the top.
 //
 // The function pops both the key and the value from the stack.  As in Lua,
@@ -1012,8 +1101,8 @@ func RawSet(l *State, index int) {
 	l.top -= 2
 }
 
-// RawSetInt does the equivalent of `table[n]=v` where `table` is the table at
-// `index` and `v` is the value at the top of the stack.
+// RawSetInt does the equivalent of indextable[n]=vindex where indextableindex is the table at
+// index and indexvindex is the value at the top of the stack.
 //
 // This function pops the value from the stack.  The assignment is raw; it
 // doesn't invoke metamethods.
@@ -1027,7 +1116,7 @@ func RawSetInt(l *State, index, key int) {
 }
 
 // SetUserValue pops a table or Nil from the stack and sets it as the new
-// value associated to the userdata at `index`.
+// value associated to the userdata at index.
 //
 // http://www.lua.org/manual/5.2/manual.html#lua_setuservalue
 func SetUserValue(l *State, index int) {
@@ -1043,7 +1132,7 @@ func SetUserValue(l *State, index int) {
 }
 
 // SetMetaTable pops a table from the stack and sets it as the new metatable
-// for the value at `index`.
+// for the value at index.
 //
 // http://www.lua.org/manual/5.2/manual.html#lua_setmetatable
 func SetMetaTable(l *State, index int) {
@@ -1073,17 +1162,17 @@ func Error(l *State) {
 }
 
 // Next pops a key from the stack and pushes a key-value pair from the table
-// at `index`, while the table has next elements.  If there are no more
+// at index, while the table has next elements.  If there are no more
 // elements, nothing is pushed on the stack and Next returns false.
 //
 // A typical traversal looks like this:
 //
 //  // Table is on top of the stack (index -1)
-//  lua.PushNil(l)  // Add `nil` entry on stack (need 2 free slots)
+//  lua.PushNil(l)  // Add indexnilindex entry on stack (need 2 free slots)
 //  for lua.Next(l, -2) {
 //  	key := lua.CheckString(l, -2)
 //  	val := lua.CheckString(l, -1)
-//  	lua.Pop(l, 1) // Remove `val`, but need `key` for the next iter
+//  	lua.Pop(l, 1) // Remove indexvalindex, but need indexkeyindex for the next iter
 //  }
 //
 // http://www.lua.org/manual/5.2/manual.html#lua_next
@@ -1098,9 +1187,9 @@ func Next(l *State, index int) bool {
 	return false
 }
 
-// Concat concatenates the `n` values at the top of the stack, pops them, and
-// leaves the result at the top.  If `n` is 1, the result is the single value
-// on the stack (that is, the function does nothing); if `n` is 0, the result
+// Concat concatenates the indexnindex values at the top of the stack, pops them, and
+// leaves the result at the top.  If indexnindex is 1, the result is the single value
+// on the stack (that is, the function does nothing); if indexnindex is 0, the result
 // is the empty string. Concatenation is performed following the usual
 // semantic of Lua.
 //
@@ -1114,8 +1203,8 @@ func Concat(l *State, n int) {
 	} // else n == 1; nothing to do
 }
 
-// Register sets the Go function `f` as the new value of global `name`.  If
-// `name` was already defined, it is overwritten.
+// Register sets the Go function indexfindex as the new value of global indexnameindex.  If
+// indexnameindex was already defined, it is overwritten.
 //
 // http://www.lua.org/manual/5.2/manual.html#lua_register
 func Register(l *State, name string, f Function) {
@@ -1149,8 +1238,8 @@ func (l *State) protectedCall(f func(), oldTop, errorFunc int) error {
 	return err
 }
 
-// UpValue returns the name of the upvalue at `index` away from `function`,
-// where `index` cannot be greater than the number of upvalues.
+// UpValue returns the name of the upvalue at index away from indexfunctionindex,
+// where index cannot be greater than the number of upvalues.
 //
 // Returns an empty string and false if the index is greater than the number
 // of upvalues.
@@ -1168,7 +1257,7 @@ func UpValue(l *State, function, index int) (name string, ok bool) {
 
 // SetUpValue sets the value of a closure's upvalue. It assigns the value at
 // the top of the stack to the upvalue and returns its name.  It also pops a
-// value from the stack. `function` and `index` are as in UpValue.
+// value from the stack. indexfunctionindex and index are as in UpValue.
 //
 // Returns an empty string and false if the index is greater than the number
 // of upvalues.
@@ -1210,31 +1299,50 @@ func UpValueJoin(l *State, f1, n1, f2, n2 int) {
 // Call calls a function. To do so, use the following protocol: first, the
 // function to be called is pushed onto the stack; then, the arguments to the
 // function are pushed in direct order; that is, the first argument is pushed
-// first.  Finally, you call Call.  `argCount` is the number of arguments that
-// you pushed onto the stack. All arguments and the function value are popped
+// first. Finally, call Call. argCount is the number of arguments that you
+// pushed onto the stack. All arguments and the function value are popped
 // from the stack when the function is called.
 //
-// The results are pushed onto the stack when the function returns.  The
-// number of results is adjusted to `resultCount`, unless `resultCount` is
-// `MultipleReturns`.  In this case, all results from the function are
-// pushed.  Lua takes care that the returned values fit into the stack space.
-// The function results are pushed onto the stack in direct order (the first
+// The results are pushed onto the stack when the function returns. The
+// number of results is adjusted to resultCount, unless resultCount is
+// MultipleReturns. In this case, all results from the function are pushed.
+// Lua takes care that the returned values fit into the stack space. The
+// function results are pushed onto the stack in direct order (the first
 // result is pushed first), so that after the call the last result is on the
 // top of the stack.
 //
 // Any error inside the called function provokes a call to panic().
 //
+// The following example shows how the host program can do the equivalent to
+// this Lua code:
+//
+//		a = f("how", t.x, 14)
+//
+// Here it is in Go:
+//
+//		Global(l, "f")       // Function to be called.
+//		PushString(l, "how") // 1st argument.
+//		Global(l, "t")       // Table to be indexed.
+//		Field(l, -1, "x")    // Push result of t.x (2nd arg).
+//		Remove(l, -2)        // Remove t from the stack.
+//		PushInteger(l, 14)   // 3rd argument.
+//		Call(l, 3, 1)        // Call f with 3 arguments and 1 result.
+//		SetGlobal(l, "a")    // Set global a.
+//
+// Note that the code above is "balanced": at its end, the stack is back to
+// its original configuration. This is considered good programming practice.
+//
 // http://www.lua.org/manual/5.2/manual.html#lua_call
 func Call(l *State, argCount, resultCount int) { CallWithContinuation(l, argCount, resultCount, 0, nil) }
 
 // Top returns the index of the top element in the stack. Because Lua indices
-// start at 1, this result is equal to the number of elements in the stack (
-// and so 0 means an empty stack).
+// start at 1, this result is equal to the number of elements in the stack
+// (hence 0 means an empty stack).
 //
 // http://www.lua.org/manual/5.2/manual.html#lua_gettop
 func Top(l *State) int { return l.top - (l.callInfo.function + 1) }
 
-// Copy moves the element at the index `from` into the valid index `to`
+// Copy moves the element at the index from into the valid index to
 // without shifting any element (therefore replacing the value at that
 // position).
 //
@@ -1255,13 +1363,13 @@ func isPseudoIndex(i int) bool { return i <= RegistryIndex }
 
 func apiCheckStackSpace(l *State, n int) { l.assert(n < l.top-l.callInfo.function) }
 
-// TypeName returns the name of Type `t`.
+// TypeName returns the name of Type t.
 //
 // http://www.lua.org/manual/5.2/manual.html#lua_typename
 func TypeName(l *State, t Type) string { return typeNames[t+1] }
 
-// ToNumber converts the Lua value at `index` to the Go type for a Lua number (
-// float64).  The Lua value must be a number or a string convertible to a
+// ToNumber converts the Lua value at index to the Go type for a Lua number
+// (float64). The Lua value must be a number or a string convertible to a
 // number.
 //
 // If the operation failed, the second return value will be false.
@@ -1269,8 +1377,8 @@ func TypeName(l *State, t Type) string { return typeNames[t+1] }
 // http://www.lua.org/manual/5.2/manual.html#lua_tonumberx
 func ToNumber(l *State, index int) (float64, bool) { return l.toNumber(l.indexToValue(index)) }
 
-// ToBoolean converts the Lua value at `index` to a Go boolean.  Like all
-// tests in Lua, the only true values are `true` booleans and `nil`.
+// ToBoolean converts the Lua value at index to a Go boolean. Like all
+// tests in Lua, the only true values are true booleans and nil.
 // Otherwise, all other Lua values evaluate to false.
 //
 // To accept only actual boolean values, use the test IsBoolean.
@@ -1278,16 +1386,16 @@ func ToNumber(l *State, index int) (float64, bool) { return l.toNumber(l.indexTo
 // http://www.lua.org/manual/5.2/manual.html#lua_toboolean
 func ToBoolean(l *State, index int) bool { return !isFalse(l.indexToValue(index)) }
 
-// Table pushes onto the stack the value `table[top]`, where `table` is the
-// value at `index`, and `top` is the value at the top of the stack. This
+// Table pushes onto the stack the value table[top], where table is the
+// value at index, and top is the value at the top of the stack. This
 // function pops the key from the stack, putting the resulting value in its
-// place.  As in Lua, this function may trigger a metamethod for the "index"
+// place.  As in Lua, this function may trigger a metamethod for the __index
 // event.
 //
 // http://www.lua.org/manual/5.2/manual.html#lua_gettable
 func Table(l *State, index int) { l.stack[l.top-1] = l.tableAt(l.indexToValue(index), l.stack[l.top-1]) }
 
-// PushValue pushes a copy of the element at `index` onto the stack.
+// PushValue pushes a copy of the element at index onto the stack.
 //
 // http://www.lua.org/manual/5.2/manual.html#lua_pushvalue
 func PushValue(l *State, index int) { l.apiPush(l.indexToValue(index)) }
@@ -1302,23 +1410,23 @@ func PushNil(l *State) { l.apiPush(nil) }
 // http://www.lua.org/manual/5.2/manual.html#lua_pushnumber
 func PushNumber(l *State, n float64) { l.apiPush(n) }
 
-// PushInteger pushes `n` onto the stack.
+// PushInteger pushes n onto the stack.
 //
 // http://www.lua.org/manual/5.2/manual.html#lua_pushinteger
 func PushInteger(l *State, n int) { l.apiPush(float64(n)) }
 
-// PushUnsigned pushes `n` onto the stack.
+// PushUnsigned pushes n onto the stack.
 //
 // http://www.lua.org/manual/5.2/manual.html#lua_pushunsigned
 func PushUnsigned(l *State, n uint) { l.apiPush(float64(n)) }
 
-// PushBoolean pushes a boolean value with value `b` onto the stack.
+// PushBoolean pushes a boolean value with value b onto the stack.
 //
 // http://www.lua.org/manual/5.2/manual.html#lua_pushboolean
 func PushBoolean(l *State, b bool) { l.apiPush(b) }
 
-// PushLightUserData pushes a light user data onto the stack.  Userdata
-// represents Go values in Lua.  A light userdata is an interface{}.  Its
+// PushLightUserData pushes a light user data onto the stack. Userdata
+// represents Go values in Lua. A light userdata is an interface{}. Its
 // equality matches the Go rules (http://golang.org/ref/spec#Comparison_operators).
 //
 // http://www.lua.org/manual/5.2/manual.html#lua_pushlightuserdata
@@ -1328,18 +1436,18 @@ func PushLightUserData(l *State, d interface{}) { l.apiPush(d) }
 // onto the stack.
 func PushUserData(l *State, d interface{}) { l.apiPush(&userData{data: d}) }
 
-// Length of the value at `index`; it is equivalent to the `#` operator in
+// Length of the value at index; it is equivalent to the # operator in
 // Lua. The result is pushed on the stack.
 //
 // http://www.lua.org/manual/5.2/manual.html#lua_len
 func Length(l *State, index int) { l.apiPush(l.objectLength(l.indexToValue(index))) }
 
-// Pop pops `n` elements from the stack.
+// Pop pops n elements from the stack.
 //
 // http://www.lua.org/manual/5.2/manual.html#lua_pop
 func Pop(l *State, n int) { SetTop(l, -n-1) }
 
-// NewTable creates a new empty table and pushes it onto the stack.  It is
+// NewTable creates a new empty table and pushes it onto the stack. It is
 // equivalent to CreateTable(l, 0, 0).
 //
 // http://www.lua.org/manual/5.2/manual.html#lua_newtable
@@ -1350,43 +1458,43 @@ func NewTable(l *State) { CreateTable(l, 0, 0) }
 // http://www.lua.org/manual/5.2/manual.html#lua_pushcfunction
 func PushGoFunction(l *State, f Function) { PushGoClosure(l, f, 0) }
 
-// IsFunction verifies that the value at `index` is a function, either Go or
+// IsFunction verifies that the value at index is a function, either Go or
 // Lua function.
 //
 // http://www.lua.org/manual/5.2/manual.html#lua_isfunction
 func IsFunction(l *State, index int) bool { return TypeOf(l, index) == TypeFunction }
 
-// IsTable verifies that the value at `index` is a table.
+// IsTable verifies that the value at index is a table.
 //
 // http://www.lua.org/manual/5.2/manual.html#lua_istable
 func IsTable(l *State, index int) bool { return TypeOf(l, index) == TypeTable }
 
-// IsLightUserData verifies that the value at `index` is a light userdata.
+// IsLightUserData verifies that the value at index is a light userdata.
 //
 // http://www.lua.org/manual/5.2/manual.html#lua_islightuserdata
 func IsLightUserData(l *State, index int) bool { return TypeOf(l, index) == TypeLightUserData }
 
-// IsNil verifies that the value at `index` is nil.
+// IsNil verifies that the value at index is nil.
 //
 // http://www.lua.org/manual/5.2/manual.html#lua_isnil
 func IsNil(l *State, index int) bool { return TypeOf(l, index) == TypeNil }
 
-// IsBoolean verifies that the value at `index` is a boolean.
+// IsBoolean verifies that the value at index is a boolean.
 //
 // http://www.lua.org/manual/5.2/manual.html#lua_isboolean
 func IsBoolean(l *State, index int) bool { return TypeOf(l, index) == TypeBoolean }
 
-// IsThread verifies that the value at `index` is a thread.
+// IsThread verifies that the value at index is a thread.
 //
 // http://www.lua.org/manual/5.2/manual.html#lua_isthread
 func IsThread(l *State, index int) bool { return TypeOf(l, index) == TypeThread }
 
-// IsNone verifies that the value at `index` is not valid.
+// IsNone verifies that the value at index is not valid.
 //
 // http://www.lua.org/manual/5.2/manual.html#lua_isnone
 func IsNone(l *State, index int) bool { return TypeOf(l, index) == TypeNone }
 
-// IsNoneOrNil verifies that the value at `index` is either nil or invalid.
+// IsNoneOrNil verifies that the value at index is either nil or invalid.
 //
 // http://www.lua.org/manual/5.2/manual.html#lua_isnonornil.
 func IsNoneOrNil(l *State, index int) bool { return TypeOf(l, index) <= TypeNil }

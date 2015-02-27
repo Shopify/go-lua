@@ -318,6 +318,7 @@ var baseLibrary = []RegistryFunction{
 	}},
 }
 
+// BaseOpen opens the basic library. Usually passed to Require.
 func BaseOpen(l *State) int {
 	PushGlobalTable(l)
 	PushGlobalTable(l)

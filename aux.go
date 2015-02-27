@@ -90,6 +90,13 @@ func MetaField(l *State, index int, event string) bool {
 	return true
 }
 
+// CallMeta calls a metamethod.
+//
+// If the object at index has a metatable and this metatable has a field event,
+// this function calls this field passing the object as its only argument. In
+// this case this function returns true and pushes onto the stack the value
+// returned by the call. If there is no metatable or no metamethod, this
+// function returns false (without pushing any value on the stack).
 func CallMeta(l *State, index int, event string) bool {
 	index = AbsIndex(l, index)
 	if !MetaField(l, index, event) {
@@ -100,6 +107,11 @@ func CallMeta(l *State, index int, event string) bool {
 	return true
 }
 
+// ArgumentError raises an error with a standard message that includes extraMessage as a comment.
+//
+// This function never returns. It is an idiom to use it in Go functions as
+//  ArgumentError(l, args, "message")
+//  panic("unreachable")
 func ArgumentError(l *State, argCount int, extraMessage string) {
 	var activationRecord Debug
 	if !Stack(l, 0, &activationRecord) { // no stack frame?
@@ -203,6 +215,12 @@ func ToStringMeta(l *State, index int) (string, bool) {
 	return ToString(l, -1)
 }
 
+// NewMetaTable return 0 if the registry already has the key name. Otherwise,
+// creates a new table to be used as a metatable for userdata, adds it to the
+// registry with key name, and returns 1.
+//
+// In both cases pushes onto the stack the final value associated with name in
+// the registry.
 func NewMetaTable(l *State, name string) bool {
 	if MetaTableNamed(l, name); !IsNil(l, -1) {
 		return false
@@ -236,6 +254,9 @@ func TestUserData(l *State, index int, name string) interface{} {
 	return nil
 }
 
+// CheckUserData checks whether the function argument at index is a userdata
+// of the type name (see NewMetaTable) and returns the userdata (see
+// ToUserData).
 func CheckUserData(l *State, index int, name string) interface{} {
 	if d := TestUserData(l, index, name); d != nil {
 		return d
@@ -244,18 +265,21 @@ func CheckUserData(l *State, index int, name string) interface{} {
 	panic("unreachable")
 }
 
+// CheckType checks whether the function argument at index has type t. See Type for the encoding of types for t.
 func CheckType(l *State, index int, t Type) {
 	if TypeOf(l, index) != t {
 		tagError(l, index, t)
 	}
 }
 
+// CheckAny checks whether the function has an argument of any type (including nil) at position index.
 func CheckAny(l *State, index int) {
 	if TypeOf(l, index) == TypeNone {
 		ArgumentError(l, index, "value expected")
 	}
 }
 
+// ArgumentCheck checks whether cond is true. If not, raises an error with a standard message.
 func ArgumentCheck(l *State, cond bool, index int, extraMessage string) {
 	if !cond {
 		ArgumentError(l, index, extraMessage)
@@ -483,6 +507,8 @@ func LengthEx(l *State, index int) int {
 	panic("unreachable")
 }
 
+// FileResult produces the return values for file-related functions in the standard
+// library (io.open, os.rename, file:seek, etc.).
 func FileResult(l *State, err error, filename string) int {
 	if err == nil {
 		PushBoolean(l, true)

@@ -101,6 +101,7 @@ var osLibrary = []RegistryFunction{
 	}},
 }
 
+// OSOpen opens the os library. Usually passed to Require.
 func OSOpen(l *State) int {
 	NewLibrary(l, osLibrary)
 	return 1

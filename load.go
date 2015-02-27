@@ -148,6 +148,7 @@ var packageLibrary = []RegistryFunction{
 	}},
 }
 
+// PackageOpen opens the package library. Usually passed to Require.
 func PackageOpen(l *State) int {
 	NewLibrary(l, packageLibrary)
 	createSearchersTable(l)

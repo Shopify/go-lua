@@ -99,6 +99,7 @@ var bitLibrary = []RegistryFunction{
 	{"rshift", func(l *State) int { return shift(l, CheckUnsigned(l, 1), -CheckInteger(l, 2)) }},
 }
 
+// Bit32Open opens the bit32 library. Usually passed to Require.
 func Bit32Open(l *State) int {
 	NewLibrary(l, bitLibrary)
 	return 1

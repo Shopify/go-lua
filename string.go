@@ -230,6 +230,7 @@ var stringLibrary = []RegistryFunction{
 	{"upper", func(l *State) int { PushString(l, strings.ToUpper(CheckString(l, 1))); return 1 }},
 }
 
+// StringOpen opens the string library. Usually passed to Require.
 func StringOpen(l *State) int {
 	NewLibrary(l, stringLibrary)
 	CreateTable(l, 0, 1)

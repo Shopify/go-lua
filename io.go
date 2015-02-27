@@ -306,6 +306,7 @@ func registerStdFile(l *State, f *os.File, reg, name string) {
 	SetField(l, -2, name)
 }
 
+// IOOpen opens the io library. Usually passed to Require.
 func IOOpen(l *State) int {
 	NewLibrary(l, ioLibrary)
 
