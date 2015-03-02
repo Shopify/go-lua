@@ -194,19 +194,14 @@ type Hook func(state *State, activationRecord Debug)
 // A Function is a Go function intended to be called from Lua.
 type Function func(state *State) int
 
-// type State interface {
-// basic stack manipulation
 // TODO XMove(from, to State, n int)
-
+//
 // Set functions (stack -> Lua)
 // RawSetValue(index int, p interface{})
-
+//
 // Debug API
 // Local(activationRecord *Debug, index int) string
 // SetLocal(activationRecord *Debug, index int) string
-// UpValueId(function, index int) interface{}
-// UpValueJoin(function1, index1, function2, index2 int)
-// }
 
 type pc int
 type callStatus byte
