@@ -13,4 +13,4 @@ function fibi(n)
 	return n1
 end
 
-print(fibi(1000000))
+print(fibi(10000000))

@@ -7,4 +7,4 @@ function fibr(n)
 	return fibr(n-1) + fibr(n-2)
 end
 
-print(fibr(30))
+print(fibr(35))
