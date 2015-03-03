@@ -291,10 +291,11 @@ func (l *State) preCall(function int, resultCount int) bool {
 			if p.isVarArg {
 				base = l.adjustVarArgs(p, argCount)
 			}
-			ci := l.pushLuaFrame(function, base, resultCount, p)
-			if l.hookMask&MaskCall != 0 {
-				l.callHook(ci)
-			}
+			l.pushLuaFrame(function, base, resultCount, p)
+			// ci := l.pushLuaFrame(function, base, resultCount, p)
+			// if l.hookMask&MaskCall != 0 {
+			// 	l.callHook(ci)
+			// }
 			return false
 		default:
 			tm := l.tagMethodByObject(f, tmCall)
@@ -320,9 +321,9 @@ func (l *State) callHook(ci *callInfo) {
 	ci.savedPC++ // hooks assume 'pc' is already incremented
 	if pci := ci.previous; pci.isLua() && pci.code[pci.savedPC-1].opCode() == opTailCall {
 		ci.setCallStatus(callStatusTail)
-		l.hook(HookTailCall, -1)
+		// l.hook(HookTailCall, -1)
 	} else {
-		l.hook(HookCall, -1)
+		// l.hook(HookCall, -1)
 	}
 	ci.savedPC-- // correct 'pc'
 }
@@ -343,9 +344,9 @@ func (l *State) adjustVarArgs(p *prototype, argCount int) int {
 
 func (l *State) postCall(firstResult int) bool {
 	ci := l.callInfo
-	if l.hookMask&MaskReturn != 0 {
-		l.hook(HookReturn, -1)
-	}
+	// if l.hookMask&MaskReturn != 0 {
+	// 	l.hook(HookReturn, -1)
+	// }
 	result, wanted, i := ci.function, ci.resultCount, 0
 	l.callInfo = ci.previous // back to caller
 	// TODO this is obscure - I don't fully understand the control flow, but it works
@@ -359,9 +360,9 @@ func (l *State) postCall(firstResult int) bool {
 		result++
 	}
 	l.top = result
-	if l.hookMask&(MaskReturn|MaskLine) != 0 {
-		l.oldPC = l.callInfo.savedPC // oldPC for caller function
-	}
+	// if l.hookMask&(MaskReturn|MaskLine) != 0 {
+	// 	l.oldPC = l.callInfo.savedPC // oldPC for caller function
+	// }
 	return wanted != MultipleReturns
 }
 

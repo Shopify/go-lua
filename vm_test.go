@@ -119,6 +119,33 @@ func BenchmarkSort2(b *testing.B) {
 	benchmarkSort(b, "i = 0; table.sort(a, function(x,y) i=i+1; return y<x end)")
 }
 
+func BenchmarkFibonnaci(b *testing.B) {
+	l := NewState()
+	s := `return function(n)
+			if n == 0 then
+				return 0
+			elseif n == 1 then
+				return 1
+			end
+			local n0, n1 = 0, 1
+			for i = n, 2, -1 do
+				local tmp = n0 + n1
+				n0 = n1
+				n1 = tmp
+			end
+			return n1
+		end`
+	LoadString(l, s)
+	if err := l.ProtectedCall(0, 1, 0); err != nil {
+		b.Error(err.Error())
+	}
+	l.PushInteger(b.N)
+	b.ResetTimer()
+	if err := l.ProtectedCall(1, 1, 0); err != nil {
+		b.Error(err.Error())
+	}
+}
+
 func TestVarArgMeta(t *testing.T) {
 	s := `function f(t, ...) return t, {...} end
 		local a = setmetatable({}, {__call = f})

@@ -925,7 +925,7 @@ func init() {
 	}
 }
 
-func (l *State) execute() { l.executeFunctionTable() }
+func (l *State) execute() { l.executeSwitch() }
 
 func (l *State) executeFunctionTable() {
 	ci := l.callInfo
@@ -970,12 +970,12 @@ func (l *State) executeSwitch() {
 	ci := l.callInfo
 	frame, closure, constants := newFrame(l, ci)
 	for {
-		if l.hookMask&(MaskLine|MaskCount) != 0 {
-			if l.hookCount--; l.hookCount == 0 || l.hookMask&MaskLine != 0 {
-				l.traceExecution()
-				frame = ci.frame
-			}
-		}
+		// if l.hookMask&(MaskLine|MaskCount) != 0 {
+		// 	if l.hookCount--; l.hookCount == 0 || l.hookMask&MaskLine != 0 {
+		// 		l.traceExecution()
+		// 		frame = ci.frame
+		// 	}
+		// }
 		switch i := ci.step(); i.opCode() {
 		case opMove:
 			frame[i.a()] = frame[i.b()]
