@@ -1,4 +1,4 @@
-function fibi(n)
+function fib(n)
 	if n == 0 then
 		return 0
 	elseif n == 1 then
@@ -13,4 +13,4 @@ function fibi(n)
 	return n1
 end
 
-print(fibi(10000000))
+fib(1000000)

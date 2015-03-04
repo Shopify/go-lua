@@ -7,4 +7,8 @@ function fibt(n0, n1, c)
 	return fibt(n1, n0+n1, c-1)
 end
 
-print(fibt(0, 1, 1000000))
+function fib(n)
+  fibt(0, 1, n)
+end
+
+fib(1000000)
