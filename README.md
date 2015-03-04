@@ -19,6 +19,111 @@ Most core Lua libraries are at least partially implemented. Prominent exceptions
 
 Weak reference tables are not and will not be supported. go-lua uses the Go heap for Lua objects, and Go does not support weak references.
 
+Benchmarks
+----------
+
+Benchmark results shown here are taken from a Mid 2012 MacBook Pro Retina with a 2.6 GHz Core i7 CPU running OS X 10.10.2, go 1.4.2 and Lua 5.2.2.
+
+The Fibonacci function can be written a few different ways to evaluate different performance characteristics of a language interpreter. The simplest way is as a recursive function:
+```lua
+  function fib(n)
+    if n == 0 then
+      return 0
+    else if n == 1 then
+      return 1
+    end
+    return fib(n-1) + fib(n-2)
+  end
+```
+
+This exercises the call stack implementation. When computing `fib(35)`, go-lua is about 6x slower than the C Lua interpreter. [Gopher-lua](https://github.com/yuin/gopher-lua) is about 20% faster than go-lua. Much of the performance difference between go-lua and gopher-lua comes from the inclusion of debug hooks in go-lua. The remainder is due to the call stack implementation - go-lua heap-allocates Lua stack frames with a separately allocated variant struct, as outlined above. Although it caches recently used stack frames, it is outperformed by the simpler statically allocated call stacks in gopher-lua.
+```
+  $ time lua fibr.lua
+  real  0m2.807s
+  user  0m2.795s
+  sys   0m0.006s
+  
+  $ time glua fibr.lua
+  real  0m14.528s
+  user  0m14.513s
+  sys   0m0.031s
+  
+  $ time go-lua fibr.lua
+  real  0m17.411s
+  user  0m17.514s
+  sys   0m1.287s
+```
+
+The recursive Fibonacci function can be transformed into a tail-recursive variant:
+```lua
+  function fibt(n0, n1, c)
+    if c == 0 then
+      return n0
+    else if c == 1 then
+      return n1
+    end
+    return fibt(n1, n0+n1, c-1)
+  end
+  
+  function fib(n)
+    fibt(0, 1, n)
+  end
+```
+
+The Lua interpreter detects and optimizes tail calls. This exhibits similar relative performance between the 3 interpreters, though gopher-lua edges ahead a little due to its simpler stack model and reduced bookkeeping.
+```
+  $ time lua fibt.lua
+  real  0m0.099s
+  user  0m0.096s
+  sys   0m0.002s
+
+  $ time glua fibt.lua
+  real  0m0.489s
+  user  0m0.484s
+  sys   0m0.005s
+
+  $ time go-lua fibt.lua
+  real  0m0.607s
+  user  0m0.610s
+  sys   0m0.068s
+```
+
+Finally, we can write an explicitly iterative implementation:
+```lua
+  function fib(n)
+    if n == 0 then
+      return 0
+    else if n == 1 then
+      return 1
+    end
+    local n0, n1 = 0, 1
+    for i = n, 2, -1 do
+      local tmp = n0 + n1
+      n0 = n1
+      n1 = tmp
+    end
+    return n1
+  end
+```
+
+This exercises more of the bytecode interpreter’s inner loop. Here we see the performance impact of Go’s `switch` implementation. Both go-lua and gopher-lua are an order of magnitude slower than the C Lua interpreter.
+```
+  $ time lua fibi.lua
+  real  0m0.023s
+  user  0m0.020s
+  sys   0m0.003s
+
+  $ time glua fibi.lua
+  real  0m0.242s
+  user  0m0.235s
+  sys   0m0.005s
+
+  $ time go-lua fibi.lua
+  real  0m0.242s
+  user  0m0.240s
+  sys   0m0.028s
+```
+
 License
 -------
 
