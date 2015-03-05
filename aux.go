@@ -564,3 +564,19 @@ func FileResult(l *State, err error, filename string) int {
 	l.PushInteger(0) // TODO map err to errno
 	return 3
 }
+
+// DoFile loads and runs the given file.
+func DoFile(l *State, fileName string) error {
+	if err := LoadFile(l, fileName, ""); err != nil {
+		return err
+	}
+	return l.ProtectedCall(0, MultipleReturns, 0)
+}
+
+// DoString loads and runs the given string.
+func DoString(l *State, s string) error {
+	if err := LoadString(l, s); err != nil {
+		return err
+	}
+	return l.ProtectedCall(0, MultipleReturns, 0)
+}
