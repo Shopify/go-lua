@@ -8,6 +8,25 @@ go-lua is a port of the Lua 5.2 VM to pure Go. It is compatible with binary file
 
 The motivation is to enable simple scripting of Go applications. For example, it is used to describe flows in [Shopify's](http://www.shopify.com/) load generation tool, Genghis.
 
+Usage
+-----
+
+go-lua is intended to be used as a Go package. It does not include a command to run the interpreter. To start using the library, run:
+```sh
+go get github.com/Shopify/go-lua
+```
+
+To develop & test go-lua, you'll also need the [lua-tests](https://github.com/Shopify/lua-tests) submodule checked out:
+```sh
+git submodule update --init
+```
+
+You can then develop with the usual Go commands, e.g.:
+```sh
+go build
+go test -cover
+```
+
 Status
 ------
 
