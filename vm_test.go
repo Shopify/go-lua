@@ -2,6 +2,8 @@ package lua
 
 import (
 	"fmt"
+	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 )
@@ -61,12 +63,15 @@ func TestLua(t *testing.T) {
 		{name: "math"},
 		// {name: "nextvar"},
 		// {name: "pm"},
-		{name: "sort"},
+		{name: "sort", nonPort: true}, // sort.lua depends on os.clock(), which is not yet implemented on Windows.
 		{name: "strings"},
 		// {name: "vararg"},
 		// {name: "verybig"},
 	}
 	for _, v := range tests {
+		if v.nonPort && runtime.GOOS == "windows" {
+			t.Skipf("'%s' skipped because it's non-portable & we're running Windows", v.name)
+		}
 		t.Log(v)
 		l := NewState()
 		OpenLibraries(l)
@@ -88,7 +93,9 @@ func TestLua(t *testing.T) {
 		l.Field(-1, "traceback")
 		traceback := l.Top()
 		// t.Logf("%#v", l.ToValue(traceback))
-		LoadFile(l, "lua-tests/"+v.name+".lua", "text")
+		if err := LoadFile(l, filepath.Join("lua-tests", v.name+".lua"), "text"); err != nil {
+			t.Errorf("'%s' failed: %s", v.name, err.Error())
+		}
 		// l.Call(0, 0)
 		if err := l.ProtectedCall(0, 0, traceback); err != nil {
 			t.Errorf("'%s' failed: %s", v.name, err.Error())

@@ -51,7 +51,7 @@ func TestParserExhaustively(t *testing.T) {
 		t.Skipf("exhaustively testing the parser requires luac: %s", err)
 	}
 	l := NewState()
-	matches, err := filepath.Glob("lua-tests/*.lua")
+	matches, err := filepath.Glob(filepath.Join("lua-tests", "*.lua"))
 	if err != nil {
 		t.Fatal(err)
 	}
