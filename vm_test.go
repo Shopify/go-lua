@@ -3,6 +3,7 @@ package lua
 import (
 	"fmt"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 )
@@ -62,12 +63,15 @@ func TestLua(t *testing.T) {
 		{name: "math"},
 		// {name: "nextvar"},
 		// {name: "pm"},
-		{name: "sort"},
+		{name: "sort", nonPort: true}, // sort.lua depends on os.clock(), which is not yet implemented on Windows.
 		{name: "strings"},
 		// {name: "vararg"},
 		// {name: "verybig"},
 	}
 	for _, v := range tests {
+		if v.nonPort && runtime.GOOS == "windows" {
+			t.Skipf("'%s' skipped because it's non-portable & we're running Windows", v.name)
+		}
 		t.Log(v)
 		l := NewState()
 		OpenLibraries(l)
