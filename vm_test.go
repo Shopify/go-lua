@@ -2,7 +2,7 @@ package lua
 
 import (
 	"fmt"
-	"path"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -89,7 +89,7 @@ func TestLua(t *testing.T) {
 		l.Field(-1, "traceback")
 		traceback := l.Top()
 		// t.Logf("%#v", l.ToValue(traceback))
-		if err := LoadFile(l, path.Join("lua-tests", v.name+".lua"), "text"); err != nil {
+		if err := LoadFile(l, filepath.Join("lua-tests", v.name+".lua"), "text"); err != nil {
 			t.Errorf("'%s' failed: %s", v.name, err.Error())
 		}
 		// l.Call(0, 0)

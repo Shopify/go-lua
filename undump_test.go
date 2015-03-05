@@ -6,7 +6,7 @@ import (
 	"io"
 	"os"
 	"os/exec"
-	"path"
+	"path/filepath"
 	"testing"
 )
 
@@ -47,8 +47,8 @@ func TestUndump(t *testing.T) {
 	if err != nil {
 		t.Skipf("testing undump requires luac: %s", err)
 	}
-	source := path.Join("lua-tests", "checktable.lua")
-	binary := path.Join("lua-tests", "checktable.bin")
+	source := filepath.Join("lua-tests", "checktable.lua")
+	binary := filepath.Join("lua-tests", "checktable.bin")
 	if err := exec.Command("luac", "-o", binary, source).Run(); err != nil {
 		t.Fatalf("luac failed to compile %s: %s", source, err)
 	}
