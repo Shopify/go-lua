@@ -27,6 +27,21 @@ go build
 go test -cover
 ```
 
+A simple example that loads & runs a Lua script is:
+```go
+package main
+
+import "github.com/Shopify/go-lua"
+
+func main() {
+  l := lua.NewState()
+  lua.OpenLibraries(l)
+  if err := lua.DoFile(l, "hello.lua"); err != nil {
+    panic(err)
+  }
+}
+```
+
 Status
 ------
 
