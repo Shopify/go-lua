@@ -2,7 +2,6 @@ package lua
 
 import (
 	"io"
-	"os"
 	"runtime"
 	"strconv"
 	"strings"
@@ -215,13 +214,21 @@ var baseLibrary = []RegistryFunction{
 				panic("unreachable")
 			}
 			if i > 1 {
-				os.Stdout.WriteString("\t")
+				if _, err := l.Env.Stdout.Write([]byte("\t")); err != nil {
+					Errorf(l, err.Error())
+					panic("unreachable")
+				}
 			}
-			os.Stdout.WriteString(s)
+			if _, err := l.Env.Stdout.Write([]byte(s)); err != nil {
+				Errorf(l, err.Error())
+				panic("unreachable")
+			}
 			l.Pop(1) // pop result
 		}
-		os.Stdout.WriteString("\n")
-		os.Stdout.Sync()
+		if _, err := l.Env.Stdout.Write([]byte("\n")); err != nil {
+			Errorf(l, err.Error())
+			panic("unreachable")
+		}
 		return 0
 	}},
 	{"rawequal", func(l *State) int {
