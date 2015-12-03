@@ -1388,8 +1388,8 @@ func (t Type) String() string { return typeNames[t+1] }
 func (l *State) ToNumber(index int) (float64, bool) { return l.toNumber(l.indexToValue(index)) }
 
 // ToBoolean converts the Lua value at index to a Go boolean. Like all
-// tests in Lua, the only true values are true booleans and nil.
-// Otherwise, all other Lua values evaluate to false.
+// tests in Lua, the only false values are false booleans and nil.
+// Otherwise, all other Lua values evaluate to true.
 //
 // To accept only actual boolean values, use the test IsBoolean.
 //
