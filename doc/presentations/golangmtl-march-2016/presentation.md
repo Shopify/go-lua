@@ -47,15 +47,44 @@
 
 ---
 
+# Goals
+
+- Low overhead Go ↔︎ Lua cross calls
+- 
+
+---
+
 # Implementation
+
+- Go data types: `string`, `float64`, `nil`, `bool`, `interface{}`
+- Go GC
+- 8 kLOC + tests
+- Custom `table` type
+- Separate data and control stacks
+  - Data: `[]interface{}`
+  - Control: doubly-linked list of `callInfo` structs
+
+^ Lua tables act as both maps and arrays, grow dynamically, support metatables (with a negative cache)
 
 ---
 
 # Lessons
 
+- Impedance mismatch: external vs. internal `map` iteration
+  - Go map iteration order is randomized, via `for ... range m` loop
+  - Lua requires external iteration via `Next` function
+
+^ Requires recording the iteration order when `Next` is first called, then using the recorded keys in subsequent calls.
+
 ---
 
 # Performance
+
+- 10x slower than C Lua
+- Array sort performance worse in Go than in C Lua
+  - More comparisons than necessary
+  - Improved in Go 1.6 - haven't retested
+- 
 
 ---
 
