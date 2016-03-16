@@ -20,6 +20,8 @@
 
 ^ Assume some knowledge of Go, so let's focus on Lua.
 
+^ Reference implementation is one of the fastest scripting language interpreters. `luajit` is even faster.
+
 ---
 
 # What is go-lua?
@@ -78,9 +80,67 @@
 
 # What does it look like?
 
+```go
+	l := lua.NewState()   // new VM instance
+
+	lua.OpenLibraries(l)  // register standard libraries
+	goluago.Open(l)       // expose some Go API
+	luagoquery.Open(l)    // jQuery-like selectors
+
+	setConfigTable(l, config.Config)
+	registerHTTPFunctions(ctx, l, config)
+	registerStatsdFunctions(l, config.Datadog)
+	registerSleep(ctx, l)
+	registerLoggers(l, config.Logger, config.Datadog)
+	registerSearcher(l, config.FileSystem)
+
+	return loadAndExecute(l, path)
+```
+
+---
+
+# What does it look like?
+
+```go
+    func registerSleep(ctx context.Context, l *lua.State) {
+    	l.Register("sleep", func(l *lua.State) int {
+    		ms := lua.CheckNumber(l, 1)
+    		ctx, _ := context.WithTimeout(ctx, time.Duration(ms))
+    		<-ctx.Done()
+    		return 0
+    	})
+    }
+```
+
+---
+
+# What does it look like?
+
+```go
+    func statsdCount(l *lua.State, d DatadogClient) lua.Function {
+    	return func(l *lua.State) int {
+    		name := lua.CheckString(l, 1)
+    		value := lua.OptInteger(l, 2, 1)
+    		tags := pullTags(l, 3)
+    		rate := lua.OptNumber(l, 4, 1.0)
+    		if err := d.Count(name, int64(value), tags, rate); err != nil {
+    			lua.Errorf(l, err.Error())
+    		}
+    		return 1
+    	}
+    }
+```
+
 ---
 
 # How do we use it?
+
+- Genghis load generator workers
+  - Spin up a Lua VM instance representing a user N times/sec
+  - Functions exposed for HTTP, statsd, success/failure, etc.
+  - Lua scripts (flows) run out of a zip archive, in memory
+- Shaping generated traffic to match "real world" - *in progress*
+- Flow configuration data/scripts with Shopify API - *future*
 
 ---
 
@@ -110,27 +170,27 @@
 - Range checks for slice access
 
 ```go
-frame[i.a()] = frame[i.b()]
+		frame[i.a()] = frame[i.b()]
 ```
 
 ```x86asm
-                              ; ... extract i.a and i.b (omitted)
-MOVQ DI, BP
-CMPQ R10, BX                  ; range check
-JAE 0x9da02
-SHLQ $0x4, BX
-ADDQ BX, BP
-MOVQ DI, BX
-MOVQ CX, R8
-CMPQ R10, CX                  ; range check
-JAE 0x9d9fb
-SHLQ $0x4, R8
-ADDQ R8, BX
-MOVQ BX, 0x8(SP)              ; push args
-MOVQ BP, 0x10(SP)
-LEAQ 0xbe5e3(IP), BP
-MOVQ BP, 0(SP)
-CALL runtime.typedmemmove(SB) ; call runtime helper
+		                              ; ... extract i.a and i.b (omitted)
+		MOVQ DI, BP
+		CMPQ R10, BX                  ; range check
+		JAE 0x9da02
+		SHLQ $0x4, BX
+		ADDQ BX, BP
+		MOVQ DI, BX
+		MOVQ CX, R8
+		CMPQ R10, CX                  ; range check
+		JAE 0x9d9fb
+		SHLQ $0x4, R8
+		ADDQ R8, BX
+		MOVQ BX, 0x8(SP)              ; push args
+		MOVQ BP, 0x10(SP)
+		LEAQ 0xbe5e3(IP), BP
+		MOVQ BP, 0(SP)
+		CALL runtime.typedmemmove(SB) ; call runtime helper
 ```
 
 ^ Access to slices in Go requires range checks. Here's the implementation of the Move opcode, which simply copies one "register" to another in the Lua VM ...
@@ -143,22 +203,47 @@ CALL runtime.typedmemmove(SB) ; call runtime helper
 
 - Large, dense `switch` is a binary search
 
-```x86asm
-SHRL $0x0, DX   ; extract opcode from instruction
-ANDL $0x3f, DX
-CMPQ $0x14, DX  ; op > 14?
-JA 0xa2186
-CMPQ $0x9, DX   ; op > 9?
-JA 0x9ea87
-CMPQ $0x4, DX   ; op > 4?
-JA 0x9dd01
-CMPQ $0x1, DX   ; op > 1?
-JA 0x9da94
-CMPQ $0x0, DX   ; op != 0?
-JNE 0x9da09
+```go
+		switch i := ci.step(); i.opCode() {
+		case opMove:
+			frame[i.a()] = frame[i.b()]
+		case opLoadConstant:
+			frame[i.a()] = constants[i.bx()]
+		case opLoadConstantEx:
+			frame[i.a()] = constants[expectNext(ci, opExtraArg).ax()]
+		case opLoadBool:
+			frame[i.a()] = i.b() != 0
+			if i.c() != 0 {
+				ci.skip()
+			}
+		...
+		}
 ```
 
-^ The core bytecode interpreter is a large dense switch statement, with a case for each opcode. C compilers typically turn this into a jump table - a table where each entry is the address of the code block for one case - and an indirect branch - that is, the value we're switching on is used to index the jump table in a branch instruction. Go implements the same thing as a binary search followed by a linear search when fewer than 4 cases remain. In go-lua, this means 2-5 compare & branch pairs for instruction dispatch.
+^ The core bytecode interpreter is a large dense switch statement, with a case for each opcode. C compilers typically turn this into a jump table - a table where each entry is the address of the code block for one case - and an indirect branch - that is, the value we're switching on is used to index the jump table in a branch instruction.
+
+---
+
+# Performance
+
+- Large, dense `switch` is a binary search
+
+```x86asm
+		SHRL $0x0, DX   ; extract opcode from instruction
+		ANDL $0x3f, DX
+		CMPQ $0x14, DX  ; op > 14?
+		JA 0xa2186
+		CMPQ $0x9, DX   ; op > 9?
+		JA 0x9ea87
+		CMPQ $0x4, DX   ; op > 4?
+		JA 0x9dd01
+		CMPQ $0x1, DX   ; op > 1?
+		JA 0x9da94
+		CMPQ $0x0, DX   ; op != 0?
+		JNE 0x9da09
+```
+
+^ Go implements the same thing as a binary search followed by a linear search when fewer than 4 cases remain. In go-lua, this means 2-5 compare & branch pairs for instruction dispatch.
 
 ---
 
@@ -183,6 +268,10 @@ JNE 0x9da09
 
 > insert :dog: graphs here
 
+^ Genghis workers start over 300 goroutines per second on a c3.4xlarge instance, each with its own Lua VM that initializes, parses & executes the flow
+
+^ Bottleneck is usually network IO, not CPU and certainly not memory
+
 ---
 
 # Current status
@@ -190,6 +279,7 @@ JNE 0x9da09
 - Actively used in `Shopify/genghis`
 - 28 forks, 2 ahead of `Shopify/go-lua`
 - Not actively developed right now
+  - `#patcheswelcome` :smile:
 - `Shopify/goluago` fills many gaps
 
 ^ It's central to our genghis load generator. Other projects might use it, but I don't know about them.
