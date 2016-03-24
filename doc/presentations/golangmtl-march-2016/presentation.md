@@ -58,8 +58,6 @@
 
 ^ Existing C Lua bindings in Go have 2 or more managed heaps - Go's + N Lua heaps. Cgo brings additional overhead, especially if we're calling out to C from many goroutines. Our goal was to support 10s of thousands of goroutines simultaneously, each with their own Lua VM.
 
-^ Minimal VM instance size is 1696 bytes on x86-64. Actually parsing & executing a trivial script requires 8840 bytes.
-
 ---
 
 # Implementation
@@ -282,7 +280,9 @@
 
 # Performance
 
-> insert :dog: graphs here
+![inline](Genghis.png)
+
+^ Minimal VM instance size is 1696 bytes on x86-64. Actually parsing & executing a trivial script requires 8840 bytes.
 
 ^ Genghis workers start over 300 goroutines per second on a c3.4xlarge instance, each with its own Lua VM that initializes, parses & executes the flow
 
