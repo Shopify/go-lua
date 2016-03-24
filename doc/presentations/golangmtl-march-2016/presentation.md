@@ -16,7 +16,7 @@
 - Used extensively in:
   - **Games**: describe levels, data, game logic & AI
   - **Nginx**: load balancing, SSL cert. management, routing, etc.
-  - **Redis**: "stored procedures"
+  - **Redis**: "stored procedures", inventory/reservation system
 
 ^ Assume some knowledge of Go, so let's focus on Lua.
 
@@ -31,14 +31,16 @@
 
 ---
 
-# Origin myth
+![](brahma.jpg)
+
+# Creation myth
 
 - Conan load generator
   - Written & scripted in Ruby, hosted in Heroku, scaled manually
   - "**go**nan" rewrite - popular for pair programming interviews
 - Genghis load generator
   - Written in Go, Heroku scheduler, EC2 workers
-  - Scales to 20M RPM against Shopify
+  - Scales to 300K RPS against Shopify
   - How to deploy new flows without deploying everything?
 
 ^ We use Genghis to simulate flash sales and other nasty things, so we can test the limits of our infrastructure. Needs a way to script it, so we can run new scripts, called "flows", without redeploying everything. go-lua is that scripting engine.
@@ -80,7 +82,7 @@
 
 # What does it look like?
 
-```go
+```
 	l := lua.NewState()   // new VM instance
 
 	lua.OpenLibraries(l)  // register standard libraries
@@ -101,7 +103,7 @@
 
 # What does it look like?
 
-```go
+```
     func registerSleep(ctx context.Context, l *lua.State) {
     	l.Register("sleep", func(l *lua.State) int {
     		ms := lua.CheckNumber(l, 1)
@@ -116,7 +118,7 @@
 
 # What does it look like?
 
-```go
+```
     func statsdCount(l *lua.State, d DatadogClient) lua.Function {
     	return func(l *lua.State) int {
     		name := lua.CheckString(l, 1)
@@ -139,8 +141,20 @@
   - Spin up a Lua VM instance representing a user N times/sec
   - Functions exposed for HTTP, statsd, success/failure, etc.
   - Lua scripts (flows) run out of a zip archive, in memory
-- Shaping generated traffic to match "real world" - *in progress*
+- Shaping generated traffic to match "real world" - *closed*
 - Flow configuration data/scripts with Shopify API - *future*
+
+---
+
+# Shopify/goluago
+
+- Go's API is much richer than Lua's
+  - Ad-hoc exposure through, e.g. `require "goluago/time"`
+- Use Go's regular expressions rather than Lua patterns
+- `time.now()` in ns vs Lua's `os.clock()` in seconds
+- `goluago/util` Go package for varargs, debugging, etc.
+
+^ `goluago` is a set of packages exposing useful Go API functionality. For example, we use Go regular expressions instead of Lua patterns in `genghis`. The `util` subpackage includes useful Go functions for dumping Lua stack frames, vararg support, and recursively copying large data structures between Go & Lua.
 
 ---
 
@@ -169,21 +183,21 @@
 
 - Range checks for slice access
 
-```go
-		frame[i.a()] = frame[i.b()]
+```
+	  frame[i.a()] = frame[i.b()]
 ```
 
-```x86asm
+```
 		                              ; ... extract i.a and i.b (omitted)
 		MOVQ DI, BP
 		CMPQ R10, BX                  ; range check
-		JAE 0x9da02
+		JAE  0x9da02
 		SHLQ $0x4, BX
 		ADDQ BX, BP
 		MOVQ DI, BX
 		MOVQ CX, R8
 		CMPQ R10, CX                  ; range check
-		JAE 0x9d9fb
+		JAE  0x9d9fb
 		SHLQ $0x4, R8
 		ADDQ R8, BX
 		MOVQ BX, 0x8(SP)              ; push args
@@ -203,7 +217,7 @@
 
 - Large, dense `switch` is a binary search
 
-```go
+```
 		switch i := ci.step(); i.opCode() {
 		case opMove:
 			frame[i.a()] = frame[i.b()]
@@ -228,19 +242,19 @@
 
 - Large, dense `switch` is a binary search
 
-```x86asm
+```
 		SHRL $0x0, DX   ; extract opcode from instruction
 		ANDL $0x3f, DX
 		CMPQ $0x14, DX  ; op > 14?
-		JA 0xa2186
+		JA   0xa2186
 		CMPQ $0x9, DX   ; op > 9?
-		JA 0x9ea87
+		JA   0x9ea87
 		CMPQ $0x4, DX   ; op > 4?
-		JA 0x9dd01
+		JA   0x9dd01
 		CMPQ $0x1, DX   ; op > 1?
-		JA 0x9da94
+		JA   0x9da94
 		CMPQ $0x0, DX   ; op != 0?
-		JNE 0x9da09
+		JNE  0x9da09
 ```
 
 ^ Go implements the same thing as a binary search followed by a linear search when fewer than 4 cases remain. In go-lua, this means 2-5 compare & branch pairs for instruction dispatch.
@@ -280,7 +294,7 @@
 - 28 forks, 2 ahead of `Shopify/go-lua`
 - Not actively developed right now
   - `#patcheswelcome` :smile:
-- `Shopify/goluago` fills many gaps
+- For everything else, there's `Shopify/goluago`
 
 ^ It's central to our genghis load generator. Other projects might use it, but I don't know about them.
 
@@ -288,5 +302,3 @@
 
 ^ go-lua works well for our use case. It has known bugs, but our workarounds actually led to cleaner code, so ... yay bugs?
 We'd like to move up to Lua 5.3, add missing library functions and improve performance, but none of those things is a priority for us & we haven't felt any pain from them.
-
-^ `goluago` is a set of packages exposing useful Go API functionality. For example, we use Go regular expressions instead of Lua patterns in `genghis`. Some of this is much more useful than Lua API functions, for example `time.now` has nanosecond resolution.
