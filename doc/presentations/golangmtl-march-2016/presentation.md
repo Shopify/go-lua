@@ -18,7 +18,7 @@
   - **Nginx**: load balancing, SSL cert. management, routing, etc.
   - **Redis**: "stored procedures", inventory/reservation system
 
-^ Assume some knowledge of Go, so let's focus on Lua.
+^ I assume some knowledge of Go. Alexandre will introduce the language after this talk, if you're unfamiliar. Let's focus on Lua.
 
 ^ Reference implementation is one of the fastest scripting language interpreters. `luajit` is even faster.
 
@@ -28,6 +28,8 @@
 
 - Several bindings to C Lua already exist for Go
 - go-lua is a manual port of C Lua to Go
+
+^ If you're familiar with the work to port Go's compiler & runtime from C to Go, you'll know Robert Griesemer implemented a pretty useful translation tool. go-lua preceded that. It was ported by hand.
 
 ---
 
@@ -49,6 +51,16 @@
 
 ---
 
+![](brahma.jpg)
+
+# Creation myth
+
+![inline](IMG_0048.JPG)
+
+^ This is the high-level architecture of Genghis. I've included this here to provide context for the rest of the talk. I hope someone else from our team can go into some detail on this at a later meetup.
+
+---
+
 # Goals
 
 - Low overhead Go ↔︎ Lua cross calls
@@ -57,6 +69,63 @@
 - Familiar API for C Lua developers
 
 ^ Existing C Lua bindings in Go have 2 or more managed heaps - Go's + N Lua heaps. Cgo brings additional overhead, especially if we're calling out to C from many goroutines. Our goal was to support 10s of thousands of goroutines simultaneously, each with their own Lua VM.
+
+---
+
+# Genghis worker
+
+```
+  for tick() {
+  	go func() {
+      l := lua.NewState()
+      registerLibraries(l)
+      registerFunctions(l)
+      lua.LoadString(l, fmt.Sprintf("require %q", path))
+      l.ProtectedCall(0, 0, 0)
+    }()
+  }
+```
+
+^ Why do we want to support this kind of scale? It provides a simple flow programming model, where an execution of a flow is  isolated from all other executions. Here's the high-level view of what's going on in one of our EC2 workers when we run a flow. We spin up a new, isolated VM instance on every tick and that VM instance runs our Lua script to completion.
+
+---
+
+# Example Lua script (flow)
+
+```
+info "starting"
+local resp = get(config.domain)
+
+if not resp then
+    fail("resp is nil =/")
+elseif not resp.body then
+    fail("body is nil =/", {code=resp.code})
+end
+success("flow succeeded", {code=resp.code, status=resp.status})
+```
+
+^ Here's a trivial flow. All the functions called here are part of Genghis, not go-lua, and we'll see a couple examples later.
+
+---
+
+# Checkout random product
+
+```
+  local helpers = require("helpers")
+  local common = require("common")
+
+  helpers.add_product(config.variants)
+
+  helpers.do_steps({
+    common.begin_checkout,
+    common.input_customer_information,
+    common.pick_shipping_method,
+    common.pay,
+    common.poll_processing_page
+  })
+```
+
+^  Realistic flows are more complex, and we have both generic and Shopify-specific helpers to make it easier to write flows.
 
 ---
 
@@ -99,6 +168,8 @@
 	return loadAndExecute(l, path)
 ```
 
+^ This is an expanded version of the flow execution code I showed earlier. Note the basic steps here: create a new VM instance, register the libraries and globals we need. The `goluago` and `luagoquery` libraries are provided by separate Go packages. Both have been open-sourced.
+
 ---
 
 # What does it look like?
@@ -114,6 +185,8 @@
     }
 ```
 
+^ Here's a `sleep` function that we've exposed to Lua from Go. It's registered as a global. It takes a VM instance and returns a count of the values returned. Here we expect a single numeric argument & we return nothing. The go-lua API provides core functions as methods on the VM instance, and useful helpers as top-level functions in the `lua` package. Here we can see `Register` is a core function, so we're calling it as a method, whereas argument type checking is built on top of API primitives, and is exposed as `lua.CheckNumber`.
+
 ---
 
 # What does it look like?
@@ -128,10 +201,12 @@
     		if err := d.Count(name, int64(value), tags, rate); err != nil {
     			lua.Errorf(l, err.Error())
     		}
-    		return 1
+    		return 0
     	}
     }
 ```
+
+^ Here's a slightly more complex example. It shows the support for optional arguments with default values as well as error handling. In go-lua, we use `panic` to implement the `Errorf` function. This is one of the least pleasant part of the API. It echos the C API faithfully, but isn't idiomatic Go.
 
 ---
 
@@ -160,11 +235,15 @@
 
 # Lessons
 
+- API design is hard
+  - `panic` vs `error`, explicit vs implicit stack manipulation
 - Impedance mismatch: external vs. internal `map` iteration
   - Go map iteration order random in `for ... range m {}`
   - Lua requires external iteration via `Next` function
 - Go is not a terrible host for an embedded scripting language
   - ... if you don't care much about performance
+
+^ go-lua's API changed significantly days before we opened up the project. The changes significantly improved usability. On reflection, we could have departed further from the C API and made it even more usable. A couple of key examples are the choice to use `panic` for Lua error handling, and the explicit stack frame manipulation required for accessing function arguments & return values.
 
 ^ Requires recording the iteration order when `Next` is first called, then using the recorded keys in subsequent calls.
 
