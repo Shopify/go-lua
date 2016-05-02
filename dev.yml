@@ -1,0 +1,9 @@
+name: go-lua
+
+up:
+  - go: 1.5.3
+
+commands:
+  test:
+    run: go test ./...
+    desc: 'run unit tests'
