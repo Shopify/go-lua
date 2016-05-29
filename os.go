@@ -53,29 +53,27 @@ var osLibrary = []RegistryFunction{
 
 		// Run the command.
 		if err := cmd.Run(); err != nil {
-			if err != nil {
-				terminatedSuccessfully = false
-				terminationReason = "exit"
-				terminationData = 1
+			terminatedSuccessfully = false
+			terminationReason = "exit"
+			terminationData = 1
 
-				if exiterr, ok := err.(*exec.ExitError); ok {
-					if status, ok := exiterr.Sys().(syscall.WaitStatus); ok {
-						if status.Signaled() {
-							terminationReason = "signal"
-							terminationData = int(status.Signal())
-						} else {
-							terminationData = status.ExitStatus()
-						}
+			if exiterr, ok := err.(*exec.ExitError); ok {
+				if status, ok := exiterr.Sys().(syscall.WaitStatus); ok {
+					if status.Signaled() {
+						terminationReason = "signal"
+						terminationData = int(status.Signal())
 					} else {
-						// Unsupported system?
+						terminationData = status.ExitStatus()
 					}
 				} else {
-					// From man 3 system:
-					// "If a child process could not be created, or its
-					// status could not be retrieved, the return value
-					// is -1."
-					terminationData = -1
+					// Unsupported system?
 				}
+			} else {
+				// From man 3 system:
+				// "If a child process could not be created, or its
+				// status could not be retrieved, the return value
+				// is -1."
+				terminationData = -1
 			}
 		}
 
