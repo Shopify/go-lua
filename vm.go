@@ -108,6 +108,9 @@ func (l *State) equalObjects(t1, t2 value) bool {
 		if t1 == t2 {
 			return true
 		}
+		if t2 == nil {
+			return false
+		}
 		tm = l.equalTagMethod(t1.metaTable, t2.(*table).metaTable, tmEq)
 	default:
 		return t1 == t2
