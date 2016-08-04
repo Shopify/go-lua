@@ -102,13 +102,19 @@ func (l *State) equalObjects(t1, t2 value) bool {
 	case *userData:
 		if t1 == t2 {
 			return true
+		} else if t2, ok := t2.(*userData); ok && t2 != nil {
+			tm = l.equalTagMethod(t1.metaTable, t2.metaTable, tmEq)
+		} else if !ok || t2 == nil {
+			return false
 		}
-		tm = l.equalTagMethod(t1.metaTable, t2.(*userData).metaTable, tmEq)
 	case *table:
 		if t1 == t2 {
 			return true
+		} else if t2, ok := t2.(*table); ok && t2 != nil {
+			tm = l.equalTagMethod(t1.metaTable, t2.metaTable, tmEq)
+		} else if !ok || t2 == nil {
+			return false
 		}
-		tm = l.equalTagMethod(t1.metaTable, t2.(*table).metaTable, tmEq)
 	default:
 		return t1 == t2
 	}
