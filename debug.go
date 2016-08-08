@@ -76,7 +76,7 @@ func (l *State) typeError(v value, operation string) {
 			return false
 		}
 		if !isUpValue() && isInStack() {
-			kind, name = c.prototype.objectName(frameIndex, ci.savedPC)
+			name, kind = c.prototype.objectName(frameIndex, ci.savedPC)
 		}
 		if kind != "" {
 			l.runtimeError(fmt.Sprintf("attempt to %s %s '%s' (a %s value)", operation, kind, name, typeName))
