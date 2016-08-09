@@ -10,6 +10,16 @@ import (
 
 func testString(t *testing.T, s string)  { testStringHelper(t, s, false) }
 func traceString(t *testing.T, s string) { testStringHelper(t, s, true) }
+func testNoPanicString(t *testing.T, s string) {
+	defer func() {
+		if rc := recover(); rc != nil {
+			var buffer [8192]byte
+			t.Errorf("got panic %v; expected none", rc)
+			t.Logf("trace:\n%s", buffer[:runtime.Stack(buffer[:], false)])
+		}
+	}()
+	testStringHelper(t, s, false)
+}
 
 func testStringHelper(t *testing.T, s string, trace bool) {
 	l := NewState()
@@ -151,6 +161,13 @@ func BenchmarkFibonnaci(b *testing.B) {
 	if err := l.ProtectedCall(1, 1, 0); err != nil {
 		b.Error(err.Error())
 	}
+}
+
+func TestTailCall(t *testing.T) {
+	// Issue: https://github.com/Shopify/go-lua/issues/46
+	s := `function f() end
+	return f()`
+	testNoPanicString(t, s)
 }
 
 func TestVarArgMeta(t *testing.T) {
