@@ -682,7 +682,7 @@ func protectedParser(l *State, r io.Reader, name, chunkMode string) error {
 		} else if c == Signature[0] {
 			l.checkMode(chunkMode, "binary")
 			b.UnreadByte()
-			closure, err = l.undump(r, name) // TODO handle err
+			closure, err = l.undump(b, name) // TODO handle err
 		} else {
 			l.checkMode(chunkMode, "text")
 			b.UnreadByte()
