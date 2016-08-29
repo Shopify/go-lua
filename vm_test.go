@@ -163,12 +163,49 @@ func BenchmarkFibonnaci(b *testing.B) {
 	}
 }
 
-func TestTailCall(t *testing.T) {
-	// Issue: https://github.com/Shopify/go-lua/issues/46
-	s := `function f() end
-	return f()`
+// Test for failures where both the callee and caller are making a tailcall.
+//
+// Related issue(s): #46
+func TestTailCall_Recursive(t *testing.T) {
+	s := `function tailcall(n, m)
+			if n > m then return n end
+			return tailcall(n + 1, m)
+		end
+		return tailcall(0, 5)`
 	testNoPanicString(t, s)
 }
+
+// Test for failures where only the caller is making a tailcall.
+//
+// Related issue(s): #46
+func TestTailCall_RecursiveDiffFn(t *testing.T) {
+	s := `function tailcall(n) return n+1 end
+		return tailcall(5)`
+	testNoPanicString(t, s)
+}
+
+// Test for failures where only the callee is making a tailcall.
+//
+// Related issue(s): #46
+func TestTailCall_SameFn(t *testing.T) {
+	s := `function tailcall(n, m)
+			if n > m then return n end
+			return tailcall(n + 1, m)
+		end
+		return (tailcall(0, 5))`
+	testNoPanicString(t, s)
+}
+
+// Test for failures when neither callee nor caller make a tailcall.
+//
+// Related issue(s): #46
+func TestNoTailCall(t *testing.T) {
+	s := `function notailcall() return 5 end
+		return (notailcall())`
+	testNoPanicString(t, s)
+}
+
+// End tailcall tests
 
 func TestVarArgMeta(t *testing.T) {
 	s := `function f(t, ...) return t, {...} end
