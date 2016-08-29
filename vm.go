@@ -758,6 +758,7 @@ func init() {
 				oci.setTop(ofn + (e.l.top - nfn)) // correct top
 				oci.frame = e.l.stack[base:oci.top]
 				oci.savedPC = nci.savedPC
+				oci.code = nci.code               // correct code (savedPC indexes nci->code)
 				oci.setCallStatus(callStatusTail) // function was tail called
 				e.l.top, e.l.callInfo, e.callInfo = oci.top, oci, oci
 				// TODO e.l.assert(e.l.top == oci.base()+e.l.stack[ofn].(*luaClosure).prototype.maxStackSize)
@@ -1226,6 +1227,7 @@ func (l *State) executeSwitch() {
 				oci.setTop(ofn + (l.top - nfn))  // correct top
 				oci.frame = l.stack[base:oci.top]
 				oci.savedPC = nci.savedPC
+				oci.code = nci.code               // correct code (savedPC indexes nci->code)
 				oci.setCallStatus(callStatusTail) // function was tail called
 				l.top, l.callInfo, ci = oci.top, oci, oci
 				// TODO l.assert(l.top == oci.base()+l.stack[ofn].(*luaClosure).prototype.maxStackSize)
