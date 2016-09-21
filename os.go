@@ -4,7 +4,7 @@ import (
 	"io/ioutil"
 	"os"
 	"os/exec"
-	"strings"
+	"syscall"
 	"time"
 )
 
@@ -28,20 +28,65 @@ var osLibrary = []RegistryFunction{
 		l.PushNumber(time.Unix(int64(CheckNumber(l, 1)), 0).Sub(time.Unix(int64(OptNumber(l, 2, 0)), 0)).Seconds())
 		return 1
 	}},
+
+	// From the Lua manual:
+	// "This function is equivalent to the ISO C function system"
+	// https://www.lua.org/manual/5.2/manual.html#pdf-os.execute
 	{"execute", func(l *State) int {
 		c := OptString(l, 1, "")
+
 		if c == "" {
-			// TODO check if sh is available
-			l.PushBoolean(true)
+			// Check whether "sh" is available on the system.
+			err := exec.Command("sh").Run()
+			l.PushBoolean(err == nil)
 			return 1
 		}
-		cmd := strings.Fields(c)
-		if err := exec.Command(cmd[0], cmd[1:]...).Run(); err != nil {
-			// TODO
+
+		terminatedSuccessfully := true
+		terminationReason := "exit"
+		terminationData := 0
+
+		// Create the command.
+		cmd := exec.Command("sh", "-c", c)
+		cmd.Stdout = os.Stdout
+		cmd.Stderr = os.Stderr
+
+		// Run the command.
+		if err := cmd.Run(); err != nil {
+			terminatedSuccessfully = false
+			terminationReason = "exit"
+			terminationData = 1
+
+			if exiterr, ok := err.(*exec.ExitError); ok {
+				if status, ok := exiterr.Sys().(syscall.WaitStatus); ok {
+					if status.Signaled() {
+						terminationReason = "signal"
+						terminationData = int(status.Signal())
+					} else {
+						terminationData = status.ExitStatus()
+					}
+				} else {
+					// Unsupported system?
+				}
+			} else {
+				// From man 3 system:
+				// "If a child process could not be created, or its
+				// status could not be retrieved, the return value
+				// is -1."
+				terminationData = -1
+			}
 		}
-		l.PushBoolean(true)
-		l.PushString("exit")
-		l.PushInteger(0)
+
+		// Deal with the return values.
+		if terminatedSuccessfully {
+			l.PushBoolean(true)
+		} else {
+			l.PushNil()
+		}
+
+		l.PushString(terminationReason)
+		l.PushInteger(terminationData)
+
 		return 3
 	}},
 	{"exit", func(l *State) int {
