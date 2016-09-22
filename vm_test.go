@@ -220,6 +220,12 @@ func TestCanRemoveNilObjectFromStack(t *testing.T) {
 	l.Remove(-1)
 }
 
+func TestTableEqualityNil(t *testing.T) {
+	s := `local t = {}
+		assert(t ~= nil)`
+	testString(t, s)
+}
+
 func TestTableNext(t *testing.T) {
 	l := NewState()
 	OpenLibraries(l)
