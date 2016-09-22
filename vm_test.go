@@ -220,6 +220,58 @@ func TestCanRemoveNilObjectFromStack(t *testing.T) {
 	l.Remove(-1)
 }
 
+func TestTableUserdataEquality(t *testing.T) {
+	const s = `return function(x)
+		local b = x == {}
+		assert(type(b) == "boolean")
+		assert(b == false)
+		-- reverse
+		b = {} == x
+		assert(type(b) == "boolean")
+		assert(b == false)
+	end`
+
+	l := NewState()
+	OpenLibraries(l)
+	LoadString(l, s)
+	if err := l.ProtectedCall(0, 1, 0); err != nil {
+		t.Error(err.Error())
+	}
+
+	l.PushUserData(5)
+	if err := l.ProtectedCall(1, 0, 0); err != nil {
+		t.Error(err.Error())
+	}
+}
+
+func TestUserDataEqualityNil(t *testing.T) {
+	const s = `return function(x)
+		local b = x == nil
+		assert(type(b) == "boolean")
+		assert(b == false)
+	end`
+
+	l := NewState()
+	OpenLibraries(l)
+	LoadString(l, s)
+	if err := l.ProtectedCall(0, 1, 0); err != nil {
+		t.Error(err.Error())
+	}
+
+	l.PushUserData(5)
+	if err := l.ProtectedCall(1, 0, 0); err != nil {
+		t.Error(err.Error())
+	}
+}
+
+func TestTableEqualityNil(t *testing.T) {
+	const s = `local b = {} == nil
+	assert(type(b) == "boolean")
+	assert(b == false)`
+
+	testString(t, s)
+}
+
 func TestTableNext(t *testing.T) {
 	l := NewState()
 	OpenLibraries(l)
