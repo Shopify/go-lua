@@ -10,6 +10,16 @@ import (
 
 func testString(t *testing.T, s string)  { testStringHelper(t, s, false) }
 func traceString(t *testing.T, s string) { testStringHelper(t, s, true) }
+func testNoPanicString(t *testing.T, s string) {
+	defer func() {
+		if rc := recover(); rc != nil {
+			var buffer [8192]byte
+			t.Errorf("got panic %v; expected none", rc)
+			t.Logf("trace:\n%s", buffer[:runtime.Stack(buffer[:], false)])
+		}
+	}()
+	testStringHelper(t, s, false)
+}
 
 func testStringHelper(t *testing.T, s string, trace bool) {
 	l := NewState()
@@ -151,6 +161,40 @@ func BenchmarkFibonnaci(b *testing.B) {
 	if err := l.ProtectedCall(1, 1, 0); err != nil {
 		b.Error(err.Error())
 	}
+}
+
+// TestTailCallRecursive tests for failures where both the callee and caller are making a tailcall.
+func TestTailCallRecursive(t *testing.T) {
+	s := `function tailcall(n, m)
+			if n > m then return n end
+			return tailcall(n + 1, m)
+		end
+		return tailcall(0, 5)`
+	testNoPanicString(t, s)
+}
+
+// TestTailCallRecursiveDiffFn tests for failures where only the caller is making a tailcall.
+func TestTailCallRecursiveDiffFn(t *testing.T) {
+	s := `function tailcall(n) return n+1 end
+		return tailcall(5)`
+	testNoPanicString(t, s)
+}
+
+// TestTailCallSameFn tests for failures where only the callee is making a tailcall.
+func TestTailCallSameFn(t *testing.T) {
+	s := `function tailcall(n, m)
+			if n > m then return n end
+			return tailcall(n + 1, m)
+		end
+		return (tailcall(0, 5))`
+	testNoPanicString(t, s)
+}
+
+// TestNoTailCall tests for failures when neither callee nor caller make a tailcall.
+func TestNormalCall(t *testing.T) {
+	s := `function notailcall() return 5 end
+		return (notailcall())`
+	testNoPanicString(t, s)
 }
 
 func TestVarArgMeta(t *testing.T) {
