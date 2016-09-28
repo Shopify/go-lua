@@ -911,6 +911,7 @@ func (l *State) PushFString(format string, args ...interface{}) string {
 			i++
 		case 'p':
 			l.push(fmt.Sprintf("%p", args[i]))
+			i++
 		case '%':
 			l.push("%")
 		default:
