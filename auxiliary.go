@@ -507,7 +507,11 @@ func LoadFile(l *State, fileName, mode string) error {
 	if f != os.Stdin {
 		_ = f.Close()
 	}
-	if err != nil {
+	switch err {
+	case nil: // do nothing
+	case SyntaxError: // do nothing
+	case MemoryError: // do nothing
+	default:
 		l.SetTop(fileNameIndex)
 		return fileError("read")
 	}
