@@ -53,9 +53,30 @@ func classend(ms *matchState, ppos int) int {
 
 func matchClass(c byte, cl byte) bool {
 	var res bool
-	var rcl rune = rune(cl)
+	var rc, rcl rune = rune(c), rune(cl)
 	switch unicode.ToLower(rcl) {
-	// TODO: Implement other cases...
+	case 'a':
+		res = unicode.IsLetter(rc)
+	case 'c':
+		res = unicode.IsControl(rc)
+	case 'd':
+		res = unicode.IsDigit(rc)
+	case 'g':
+		res = unicode.IsGraphic(rc) && !unicode.IsSpace(rc)
+	case 'l':
+		res = unicode.IsLower(rc)
+	case 'p':
+		res = unicode.IsPunct(rc)
+	case 's':
+		res = unicode.IsSpace(rc)
+	case 'u':
+		res = unicode.IsUpper(rc)
+	case 'w':
+		res = unicode.In(rc, unicode.Letter, unicode.Number)
+	case 'x':
+		res = unicode.In(rc, unicode.Hex_Digit)
+	case 'z':
+		res = (c == 0)
 	default:
 		return cl == c
 	}
