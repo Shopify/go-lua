@@ -90,45 +90,66 @@ func match(ms *matchState, spos int, ppos int) (int, bool) {
 	}
 	ms.matchDepth--
 	ok := true
+
+	// The default case - return true to goto init
+	defaultCase := func() bool {
+		eppos := classend(ms, ppos) // points to optional suffix
+		// does not match at least once?
+		if !singlematch(ms, spos, ppos, eppos) {
+			var ep byte = 0
+			if eppos != len(*ms.p) {
+				ep = (*ms.p)[eppos]
+			}
+			if ep == '*' || ep == '?' || ep == '-' { // accept empty?
+				ppos = eppos + 1
+				return true // return match(ms, spos, eppos + 1);
+			} else { // '+' or no suffix
+				ok = false // fail
+			}
+		} else { // matched once
+			var ep byte = 0
+			if eppos != len(*ms.p) {
+				ep = (*ms.p)[eppos]
+			}
+			switch ep {
+			case '?': // optional
+				// TODO
+			case '+': // 1 or more repetitions
+				// TODO
+				fallthrough
+			case '*': // 0 or more repetitions
+				// TODO
+			case '-': // 0 or more repetitions (minimum)
+				// TODO
+			default: // no suffix
+				spos++
+				ppos = eppos
+				return true
+			}
+		}
+		return false
+	}
+
 init: // using goto's to optimize tail recursion
 	if ppos != len(*ms.p) { // end of pattern?
 		switch (*ms.p)[ppos] {
-		default: // pattern class plus optional suffix
-			{
-				eppos := classend(ms, ppos) // points to optional suffix
-				// does not match at least once?
-				if !singlematch(ms, spos, ppos, eppos) {
-					var ep byte = 0
-					if eppos != len(*ms.p) {
-						ep = (*ms.p)[eppos]
-					}
-					if ep == '*' || ep == '?' || ep == '-' { // accept empty?
-						ppos = eppos + 1
-						goto init // return match(ms, spos, eppos + 1);
-					} else { // '+' or no suffix
-						ok = false // fail
-					}
-				} else { // matched once
-					var ep byte = 0
-					if eppos != len(*ms.p) {
-						ep = (*ms.p)[eppos]
-					}
-					switch ep {
-					case '?': // optional
-						// TODO
-					case '+': // 1 or more repetitions
-						// TODO
-						fallthrough
-					case '*': // 0 or more repetitions
-						// TODO
-					case '-': // 0 or more repetitions (minimum)
-						// TODO
-					default: // no suffix
-						spos++
-						ppos = eppos
-						goto init
-					}
+		case lEsc:
+			pnext := (*ms.p)[ppos+1]
+			switch {
+			case pnext == 'b': // balanced string?
+				// TODO
+			case pnext == 'f': // frontier?
+				// TODO
+			case pnext >= '0' && pnext <= '9': /* capture results (%0-%9)? */
+				// TODO
+			default:
+				if defaultCase() {
+					goto init
 				}
+			}
+		default: // pattern class plus optional suffix
+			if defaultCase() {
+				goto init
 			}
 		}
 	}
