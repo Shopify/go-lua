@@ -1,0 +1,199 @@
+package lua
+
+import "unicode"
+
+const luaMaxCaptures = 32
+
+const maxCCalls = 200
+
+const lEsc = '%'
+
+type matchState struct {
+	matchDepth int
+	src        *string
+	p          *string
+	l          *State
+	level      int
+	capture    [luaMaxCaptures]struct {
+		init int
+		len  int
+	}
+}
+
+func classend(ms *matchState, ppos int) int {
+	switch (*ms.p)[ppos] {
+	case lEsc:
+		ppos++
+		if ppos == len(*ms.p) {
+			Errorf(ms.l, "malformed pattern (ends with '%')")
+		}
+		return ppos + 1
+	case '[':
+		ppos++
+		if (*ms.p)[ppos] == '^' {
+			ppos++
+		}
+		for { // look for a ']'
+			if ppos == len(*ms.p) {
+				Errorf(ms.l, "malformed pattern (missing ']')")
+			}
+			ppos++
+			if (*ms.p)[ppos] == lEsc && ppos < len(*ms.p) {
+				ppos++ // skip escapes (e.g. `%]')
+			}
+			if (*ms.p)[ppos] == '[' {
+				break
+			}
+		}
+		return ppos + 1
+	default:
+		return ppos + 1
+	}
+}
+
+func matchClass(c byte, cl byte) bool {
+	var res bool
+	var rcl rune = rune(cl)
+	switch unicode.ToLower(rcl) {
+	// TODO: Implement other cases...
+	default:
+		return cl == c
+	}
+	if unicode.IsLower(rcl) {
+		return res
+	} else {
+		return !res
+	}
+}
+
+func singlematch(ms *matchState, spos int, ppos int, eppos int) bool {
+	if spos >= len(*ms.src) {
+		return false
+	} else {
+		var c byte = (*ms.src)[spos]
+		switch (*ms.p)[ppos] {
+		case '.':
+			return true // matches any char
+		case lEsc:
+			return matchClass(c, (*ms.p)[ppos+1])
+		case '[':
+			return false // TODO
+		default:
+			return (*ms.p)[ppos] == c
+		}
+	}
+}
+
+func match(ms *matchState, spos int, ppos int) (int, bool) {
+	if ms.matchDepth == 0 {
+		Errorf(ms.l, "pattern too complex")
+	}
+	ms.matchDepth--
+	ok := true
+init: // using goto's to optimize tail recursion
+	if ppos != len(*ms.p) { // end of pattern?
+		switch (*ms.p)[ppos] {
+		default: // pattern class plus optional suffix
+			{
+				eppos := classend(ms, ppos) // points to optional suffix
+				// does not match at least once?
+				if !singlematch(ms, spos, ppos, eppos) {
+					var ep byte = 0
+					if eppos != len(*ms.p) {
+						ep = (*ms.p)[eppos]
+					}
+					if ep == '*' || ep == '?' || ep == '-' { // accept empty?
+						ppos = eppos + 1
+						goto init // return match(ms, spos, eppos + 1);
+					} else { // '+' or no suffix
+						ok = false // fail
+					}
+				} else { // matched once
+					var ep byte = 0
+					if eppos != len(*ms.p) {
+						ep = (*ms.p)[eppos]
+					}
+					switch ep {
+					case '?': // optional
+						// TODO
+					case '+': // 1 or more repetitions
+						// TODO
+						fallthrough
+					case '*': // 0 or more repetitions
+						// TODO
+					case '-': // 0 or more repetitions (minimum)
+						// TODO
+					default: // no suffix
+						spos++
+						ppos = eppos
+						goto init
+					}
+				}
+			}
+		}
+	}
+	ms.matchDepth++
+	return spos, ok
+}
+
+func pushOnecapture(ms *matchState, i int, spos int, epos int) {
+	if i >= ms.level {
+		if i == 0 { // ms->level == 0, too
+			ms.l.PushString((*ms.src)[spos:epos])
+		} else {
+			Errorf(ms.l, "invalid capture index")
+		}
+	} else {
+		// TODO
+	}
+}
+
+// TODO: spos and epos can be NULL, how to handle?
+func pushCaptures(ms *matchState, spos int, epos int) int {
+	nlevels := 1
+	if !(ms.level == 0) {
+		nlevels = ms.level
+	}
+	CheckStackWithMessage(ms.l, nlevels, "too many captures")
+	for i := 0; i < nlevels; i++ {
+		pushOnecapture(ms, i, spos, epos)
+	}
+	return nlevels
+}
+
+func gmatchAux(l *State) int {
+	src, _ := l.ToString(UpValueIndex(1))
+	p, _ := l.ToString(UpValueIndex(2))
+
+	ms := matchState{
+		l:          l,
+		matchDepth: maxCCalls,
+		src:        &src,
+		p:          &p,
+	}
+
+	srcpos, _ := l.ToInteger(UpValueIndex(3))
+	for ; srcpos < len(*ms.src); srcpos++ {
+		ms.level = 0
+		epos, ok := match(&ms, srcpos, 0)
+		if ok {
+			newstart := epos
+			if epos == srcpos {
+				newstart++
+			}
+			l.PushInteger(newstart)
+			l.Replace(UpValueIndex(3))
+			return pushCaptures(&ms, srcpos, epos)
+		}
+	}
+	return 0
+}
+
+func gmatch(l *State) int {
+	CheckString(l, 1)
+	CheckString(l, 2)
+	l.SetTop(2)
+	l.PushInteger(0)
+	l.PushGoClosure(gmatchAux, 3)
+	return 1
+}
