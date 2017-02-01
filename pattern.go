@@ -4,9 +4,10 @@ import "unicode"
 
 const luaMaxCaptures = 32
 
-const maxCCalls = 200
-
-const lEsc = '%'
+const (
+	capUnfinished = -1
+	capPosition   = -2
+)
 
 type matchState struct {
 	matchDepth int
@@ -20,12 +21,27 @@ type matchState struct {
 	}
 }
 
+const maxCCalls = 200
+const lEsc = '%'
+
+func captureToClose(ms *matchState) int {
+	level := ms.level
+	level--
+	for ; level >= 0; level-- {
+		if ms.capture[level].len == capUnfinished {
+			return level
+		}
+	}
+	Errorf(ms.l, "invalid pattern capture")
+	return 0
+}
+
 func classend(ms *matchState, ppos int) int {
 	switch (*ms.p)[ppos] {
 	case lEsc:
 		ppos++
 		if ppos == len(*ms.p) {
-			Errorf(ms.l, "malformed pattern (ends with '%')")
+			Errorf(ms.l, "malformed pattern (ends with '%%')")
 		}
 		return ppos + 1
 	case '[':
@@ -105,6 +121,31 @@ func singlematch(ms *matchState, spos int, ppos int, eppos int) bool {
 	}
 }
 
+func startCapture(ms *matchState, spos int, ppos int, what int) (int, bool) {
+	level := ms.level
+	if level >= luaMaxCaptures {
+		Errorf(ms.l, "too many captures")
+	}
+	ms.capture[level].init = spos
+	ms.capture[level].len = what
+	ms.level = level + 1
+	res, ok := match(ms, spos, ppos)
+	if !ok { // match failed?
+		ms.level-- // undo capture
+	}
+	return res, ok
+}
+
+func endCapture(ms *matchState, spos int, ppos int) (int, bool) {
+	l := captureToClose(ms)
+	ms.capture[l].len = spos - ms.capture[l].init // close capture
+	res, ok := match(ms, spos, ppos)
+	if !ok { // match failed?
+		ms.capture[l].len = capUnfinished // undo capture
+	}
+	return res, ok
+}
+
 func match(ms *matchState, spos int, ppos int) (int, bool) {
 	if ms.matchDepth == 0 {
 		Errorf(ms.l, "pattern too complex")
@@ -154,6 +195,14 @@ func match(ms *matchState, spos int, ppos int) (int, bool) {
 init: // using goto's to optimize tail recursion
 	if ppos != len(*ms.p) { // end of pattern?
 		switch (*ms.p)[ppos] {
+		case '(': // start capture
+			if (*ms.p)[ppos+1] == ')' {
+				spos, ok = startCapture(ms, spos, ppos+2, capPosition)
+			} else {
+				spos, ok = startCapture(ms, spos, ppos+1, capUnfinished)
+			}
+		case ')': // end capture
+			spos, ok = endCapture(ms, spos, ppos+1)
 		case lEsc:
 			pnext := (*ms.p)[ppos+1]
 			switch {
@@ -181,12 +230,21 @@ init: // using goto's to optimize tail recursion
 func pushOnecapture(ms *matchState, i int, spos int, epos int) {
 	if i >= ms.level {
 		if i == 0 { // ms->level == 0, too
-			ms.l.PushString((*ms.src)[spos:epos])
+			ms.l.PushString((*ms.src)[spos:epos]) // add whole match
 		} else {
 			Errorf(ms.l, "invalid capture index")
 		}
 	} else {
-		// TODO
+		l := ms.capture[i].len
+		if l == capUnfinished {
+			Errorf(ms.l, "unfinished capture")
+		}
+		ipos := ms.capture[i].init
+		if l == capPosition {
+			ms.l.PushInteger(ipos)
+		} else {
+			ms.l.PushString((*ms.src)[ipos : ipos+l])
+		}
 	}
 }
 
