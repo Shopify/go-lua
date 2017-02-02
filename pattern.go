@@ -1,6 +1,9 @@
 package lua
 
-import "unicode"
+import (
+	"strings"
+	"unicode"
+)
 
 const luaMaxCaptures = 32
 
@@ -23,6 +26,7 @@ type matchState struct {
 
 const maxCCalls = 200
 const lEsc = '%'
+const specials = "^$*+?.([%-"
 
 func captureToClose(ms *matchState) int {
 	level := ms.level
@@ -121,6 +125,29 @@ func singlematch(ms *matchState, spos int, ppos int, eppos int) bool {
 	}
 }
 
+func maxExpand(ms *matchState, spos int, ppos int, eppos int) (int, bool) {
+	i := 0 // counts maximum expand for item
+	for {
+		if singlematch(ms, spos+i, ppos, eppos) {
+			i++
+		} else {
+			break
+		}
+	}
+	// keeps trying to match with the maximum repetitions
+	for {
+		if i < 0 {
+			break
+		}
+		res, ok := match(ms, spos+i, eppos+1)
+		if ok {
+			return res, ok
+		}
+		i--
+	}
+	return 0, false
+}
+
 func startCapture(ms *matchState, spos int, ppos int, what int) (int, bool) {
 	level := ms.level
 	if level >= luaMaxCaptures {
@@ -175,12 +202,18 @@ func match(ms *matchState, spos int, ppos int) (int, bool) {
 			}
 			switch ep {
 			case '?': // optional
-				// TODO
+				res, resOk := match(ms, spos+1, eppos+1)
+				if resOk {
+					spos = res
+				} else {
+					ppos = eppos + 1
+					return true
+				}
 			case '+': // 1 or more repetitions
-				// TODO
+				spos++ // 1 match already done
 				fallthrough
 			case '*': // 0 or more repetitions
-				// TODO
+				spos, ok = maxExpand(ms, spos, ppos, eppos)
 			case '-': // 0 or more repetitions (minimum)
 				// TODO
 			default: // no suffix
@@ -203,6 +236,16 @@ init: // using goto's to optimize tail recursion
 			}
 		case ')': // end capture
 			spos, ok = endCapture(ms, spos, ppos+1)
+		case '$':
+			if ppos+1 != len(*ms.p) { // is the `$' the last char in pattern?
+				if defaultCase() {
+					goto init
+				}
+			} else {
+				if spos != len(*ms.src) {
+					spos, ok = 0, false
+				}
+			}
 		case lEsc:
 			pnext := (*ms.p)[ppos+1]
 			switch {
@@ -248,10 +291,9 @@ func pushOnecapture(ms *matchState, i int, spos int, epos int) {
 	}
 }
 
-// TODO: spos and epos can be NULL, how to handle?
-func pushCaptures(ms *matchState, spos int, epos int) int {
+func pushCaptures(ms *matchState, spos int, epos int, snil bool) int {
 	nlevels := 1
-	if !(ms.level == 0) {
+	if !(ms.level == 0 && !snil) {
 		nlevels = ms.level
 	}
 	CheckStackWithMessage(ms.l, nlevels, "too many captures")
@@ -261,14 +303,88 @@ func pushCaptures(ms *matchState, spos int, epos int) int {
 	return nlevels
 }
 
+func nospecials(p string) bool {
+	if strings.IndexAny(p, specials) != -1 {
+		return false
+	}
+	return true
+}
+
+func strFindAux(l *State, find bool) int {
+	s := CheckString(l, 1)
+	p := CheckString(l, 2)
+
+	init := relativePosition(OptInteger(l, 3, 1), len(s))
+	if init < 1 {
+		init = 1
+	} else if init > len(s)+1 { // start after string's end?
+		l.PushNil() // cannot find anything
+		return 1
+	}
+	// explicit request or no special characters?
+	// FIXME: ToBoolean returns true for invalid index
+	if find && (l.Top() >= 4 && l.ToBoolean(4)) || nospecials(p) {
+		// do a plain search
+		s2 := strings.Index(s[init-1:], p)
+		if s2 != -1 {
+			l.PushInteger(s2 + init)
+			l.PushInteger(s2 + init + len(p) - 1)
+			return 2
+		}
+	} else {
+		s1 := init - 1
+		anchor := p[0] == '^'
+		if anchor {
+			p = p[1:] // skip anchor character
+		}
+
+		ms := matchState{
+			l:          l,
+			matchDepth: maxCCalls,
+			src:        &s,
+			p:          &p,
+		}
+
+		for {
+			ms.level = 0
+			res, ok := match(&ms, s1, 0)
+			if ok {
+				if find {
+					l.PushInteger(s1 + 1)
+					l.PushInteger(res)
+					return pushCaptures(&ms, 0, 0, true) + 2
+				} else {
+					return pushCaptures(&ms, s1, res, false)
+				}
+			}
+
+			if !(s1 < len(*ms.src) && !anchor) {
+				break
+			}
+			s1++
+		}
+	}
+
+	l.PushNil()
+	return 1
+}
+
+func strFind(l *State) int {
+	return strFindAux(l, true)
+}
+
+func strMatch(l *State) int {
+	return strFindAux(l, false)
+}
+
 func gmatchAux(l *State) int {
-	src, _ := l.ToString(UpValueIndex(1))
+	s, _ := l.ToString(UpValueIndex(1))
 	p, _ := l.ToString(UpValueIndex(2))
 
 	ms := matchState{
 		l:          l,
 		matchDepth: maxCCalls,
-		src:        &src,
+		src:        &s,
 		p:          &p,
 	}
 
@@ -283,7 +399,7 @@ func gmatchAux(l *State) int {
 			}
 			l.PushInteger(newstart)
 			l.Replace(UpValueIndex(3))
-			return pushCaptures(&ms, srcpos, epos)
+			return pushCaptures(&ms, srcpos, epos, false)
 		}
 	}
 	return 0
@@ -296,4 +412,8 @@ func gmatch(l *State) int {
 	l.PushInteger(0)
 	l.PushGoClosure(gmatchAux, 3)
 	return 1
+}
+
+func strGsub(l *State) int {
+	return 0
 }
