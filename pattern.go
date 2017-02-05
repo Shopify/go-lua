@@ -61,7 +61,7 @@ func classend(ms *matchState, ppos int) int {
 			if (*ms.p)[ppos] == lEsc && ppos < len(*ms.p) {
 				ppos++ // skip escapes (e.g. `%]')
 			}
-			if (*ms.p)[ppos] == '[' {
+			if (*ms.p)[ppos] == ']' {
 				break
 			}
 		}
@@ -107,6 +107,38 @@ func matchClass(c byte, cl byte) bool {
 	}
 }
 
+func matchbracketclass(c byte, p string, ppos int, ecpos int) bool {
+	sig := true
+
+	if p[ppos+1] == '^' {
+		sig = false
+		ppos++ // skip the `^'
+	}
+
+	for {
+		ppos++
+		if ppos >= ecpos {
+			break
+		}
+
+		if p[ppos] == lEsc {
+			ppos++
+			if matchClass(c, p[ppos]) {
+				return sig
+			}
+		} else if p[ppos+1] == '-' && ppos+2 < ecpos {
+			ppos = ppos + 2
+			if p[ppos-2] <= c && c <= p[ppos] {
+				return sig
+			}
+		} else if p[ppos] == c {
+			return sig
+		}
+	}
+
+	return !sig
+}
+
 func singlematch(ms *matchState, spos int, ppos int, eppos int) bool {
 	if spos >= len(*ms.src) {
 		return false
@@ -118,7 +150,7 @@ func singlematch(ms *matchState, spos int, ppos int, eppos int) bool {
 		case lEsc:
 			return matchClass(c, (*ms.p)[ppos+1])
 		case '[':
-			return false // TODO
+			return matchbracketclass(c, *ms.p, ppos, eppos-1)
 		default:
 			return (*ms.p)[ppos] == c
 		}
@@ -146,6 +178,19 @@ func maxExpand(ms *matchState, spos int, ppos int, eppos int) (int, bool) {
 		i--
 	}
 	return 0, false
+}
+
+func minExpand(ms *matchState, spos int, ppos int, eppos int) (int, bool) {
+	for {
+		res, ok := match(ms, spos, eppos+1)
+		if ok {
+			return res, true
+		} else if singlematch(ms, spos, ppos, eppos) {
+			spos++
+		} else {
+			return 0, false
+		}
+	}
 }
 
 func startCapture(ms *matchState, spos int, ppos int, what int) (int, bool) {
@@ -215,7 +260,7 @@ func match(ms *matchState, spos int, ppos int) (int, bool) {
 			case '*': // 0 or more repetitions
 				spos, ok = maxExpand(ms, spos, ppos, eppos)
 			case '-': // 0 or more repetitions (minimum)
-				// TODO
+				spos, ok = minExpand(ms, spos, ppos, eppos)
 			default: // no suffix
 				spos++
 				ppos = eppos
