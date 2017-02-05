@@ -25,7 +25,8 @@ func findHelper(l *State, isFind bool) int {
 		l.PushNil()
 		return 1
 	}
-	if isFind && (l.ToBoolean(4) || !strings.ContainsAny(p, "^$*+?.([%-")) {
+	isPlain := l.TypeOf(4) == TypeNone || l.ToBoolean(4)
+	if isFind && (isPlain || !strings.ContainsAny(p, "^$*+?.([%-")) {
 		if start := strings.Index(s[init-1:], p); start >= 0 {
 			l.PushInteger(start + init)
 			l.PushInteger(start + init + len(p) - 1)
