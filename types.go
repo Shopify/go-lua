@@ -62,7 +62,7 @@ func stack(s []value) string {
 }
 
 func isFalse(s value) bool {
-	if s == nil {
+	if s == nil || s == none {
 		return true
 	}
 	b, isBool := s.(bool)
