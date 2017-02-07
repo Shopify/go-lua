@@ -2,6 +2,7 @@ package lua
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"io"
 	"math"
@@ -100,12 +101,12 @@ func (s *scanner) tokenToString(t rune) string {
 
 func (s *scanner) scanError(message string, token rune) {
 	if token != 0 {
-		message = fmt.Sprintf("%s:%d: %s near %s", s.source, s.lineNumber, message, s.tokenToString(token))
+		message = fmt.Sprintf("syntax error: %s:%d: %s near %s", s.source, s.lineNumber, message, s.tokenToString(token))
 	} else {
-		message = fmt.Sprintf("%s:%d: %s", s.source, s.lineNumber, message)
+		message = fmt.Sprintf("syntax error: %s:%d: %s", s.source, s.lineNumber, message)
 	}
 	s.l.push(message)
-	s.l.throw(SyntaxError)
+	s.l.throw(errors.New(message))
 }
 
 func (s *scanner) incrementLineNumber() {
