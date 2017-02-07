@@ -15,3 +15,17 @@ func TestPushFStringPointer(t *testing.T) {
 		t.Errorf("PushFString, expected \"%s\" but found \"%s\"", expected, actual)
 	}
 }
+
+func TestToBooleanOutOfRange(t *testing.T) {
+	l := NewState()
+	l.SetTop(0)
+	l.PushBoolean(false)
+	l.PushBoolean(true)
+
+	for i, want := range []bool{false, true, false, false} {
+		idx := 1 + i
+		if got := l.ToBoolean(idx); got != want {
+			t.Errorf("l.ToBoolean(%d) = %t; want %t", idx, got, want)
+		}
+	}
+}
