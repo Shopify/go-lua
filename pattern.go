@@ -1,6 +1,7 @@
 package lua
 
 import (
+	"bytes"
 	"strings"
 	"unicode"
 )
@@ -27,6 +28,14 @@ type matchState struct {
 const maxCCalls = 200
 const lEsc = '%'
 const specials = "^$*+?.([%-"
+
+func checkCapture(ms *matchState, l int) int {
+	l = l - '1'
+	if l < 0 || l >= ms.level || ms.capture[l].len == capUnfinished {
+		Errorf(ms.l, "invalid capture index %%%d", l+1)
+	}
+	return l
+}
 
 func captureToClose(ms *matchState) int {
 	level := ms.level
@@ -218,6 +227,25 @@ func endCapture(ms *matchState, spos int, ppos int) (int, bool) {
 	return res, ok
 }
 
+func matchCapture(ms *matchState, spos int, l int) (int, bool) {
+	l = checkCapture(ms, l)
+	ln := ms.capture[l].len
+
+	// memcmp(ms->capture[l].init, s, len)
+	capBytes := (*ms.src)[ms.capture[l].init : ms.capture[l].init+ln]
+	sposln := len(*ms.src) - spos
+	if ln < sposln {
+		sposln = ln
+	}
+	sposBytes := (*ms.src)[spos : spos+sposln]
+
+	if len(*ms.src)-spos >= ln && strings.Compare(capBytes, sposBytes) == 0 {
+		return spos + ln, true
+	} else {
+		return 0, false
+	}
+}
+
 func match(ms *matchState, spos int, ppos int) (int, bool) {
 	if ms.matchDepth == 0 {
 		Errorf(ms.l, "pattern too complex")
@@ -299,7 +327,11 @@ init: // using goto's to optimize tail recursion
 			case pnext == 'f': // frontier?
 				// TODO
 			case pnext >= '0' && pnext <= '9': /* capture results (%0-%9)? */
-				// TODO
+				spos, ok = matchCapture(ms, spos, int((*ms.p)[ppos+1]))
+				if ok {
+					ppos = ppos + 2
+					goto init
+				}
 			default:
 				if defaultCase() {
 					goto init
@@ -329,7 +361,7 @@ func pushOnecapture(ms *matchState, i int, spos int, epos int) {
 		}
 		ipos := ms.capture[i].init
 		if l == capPosition {
-			ms.l.PushInteger(ipos)
+			ms.l.PushInteger(ipos + 1)
 		} else {
 			ms.l.PushString((*ms.src)[ipos : ipos+l])
 		}
@@ -459,6 +491,106 @@ func gmatch(l *State) int {
 	return 1
 }
 
+func addS(ms *matchState, b *bytes.Buffer, spos int, epos int) {
+	news, _ := ms.l.ToString(3)
+	for i := 0; i < len(news); i++ {
+		if news[i] != lEsc {
+			b.WriteByte(news[i])
+		} else {
+			i++ // skip ESC
+			if !unicode.IsDigit(rune(news[i])) {
+				if news[i] != lEsc {
+					Errorf(ms.l, "invalid use of '%%' in replacement string")
+				}
+				b.WriteByte(news[i])
+			} else if news[i] == '0' {
+				b.WriteString((*ms.src)[spos:epos])
+			} else {
+				pushOnecapture(ms, int(news[i]-'1'), spos, epos)
+				bs, _ := ms.l.ToString(-1) // add capture to accumulated result
+				b.WriteString(bs)
+				ms.l.Pop(1)
+			}
+		}
+	}
+}
+
+func addValue(ms *matchState, b *bytes.Buffer, spos int, epos int, tr Type) {
+	switch tr {
+	case TypeFunction:
+		ms.l.PushValue(3)
+		n := pushCaptures(ms, spos, epos, false)
+		ms.l.Call(n, 1)
+	case TypeTable:
+		pushOnecapture(ms, 0, spos, epos)
+		ms.l.Table(3)
+	default: // TypeNumber or TypeString
+		addS(ms, b, spos, epos)
+		return
+	}
+
+	if !ms.l.ToBoolean(-1) { // nil or false?
+		ms.l.Pop(1)
+		ms.l.PushString((*ms.src)[spos:epos]) // keep original text
+	} else if !ms.l.IsString(-1) {
+		Errorf(ms.l, "invalid replacement value (a %s)", TypeNameOf(ms.l, -1))
+	}
+
+	bs, _ := ms.l.ToString(-1) // add result to accumulator
+	b.WriteString(bs)
+	ms.l.Pop(1)
+}
+
 func strGsub(l *State) int {
-	return 0
+	src := CheckString(l, 1)
+	p := CheckString(l, 2)
+	tr := l.TypeOf(3)
+	maxS := OptInteger(l, 4, len(src)+1)
+
+	anchor := p[0] == '^'
+	n := 0
+
+	ArgumentCheck(l, tr == TypeNumber || tr == TypeString || tr == TypeFunction || tr == TypeTable, 3, "string/function/table expected")
+	if anchor {
+		p = p[1:] // skip anchor character
+	}
+
+	ms := matchState{
+		l:          l,
+		matchDepth: maxCCalls,
+		src:        &src,
+		p:          &p,
+	}
+	srcpos := 0
+	b := new(bytes.Buffer)
+
+	for {
+		if n >= maxS {
+			break
+		}
+
+		ms.level = 0
+		epos, ok := match(&ms, srcpos, 0)
+		if ok {
+			n++
+			addValue(&ms, b, srcpos, epos, tr)
+		}
+		if ok && epos > srcpos { // non empty match?
+			srcpos = epos // skip it
+		} else if srcpos < len(src) {
+			b.WriteByte(src[srcpos])
+			srcpos++
+		} else {
+			break
+		}
+		if anchor {
+			break
+		}
+	}
+
+	b.WriteString(src[srcpos:])
+	l.PushString(b.String())
+	l.PushInteger(n) // number of substitutions
+
+	return 2
 }
