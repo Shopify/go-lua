@@ -68,7 +68,7 @@ func classend(ms *matchState, ppos int) int {
 			}
 			ppos++
 			if (*ms.p)[ppos] == lEsc && ppos < len(*ms.p) {
-				ppos++ // skip escapes (e.g. `%]')
+				ppos = ppos + 2 // skip escapes (e.g. `%]')
 			}
 			if (*ms.p)[ppos] == ']' {
 				break
@@ -95,7 +95,7 @@ func matchClass(c byte, cl byte) bool {
 	case 'l':
 		res = unicode.IsLower(rc)
 	case 'p':
-		res = unicode.IsPunct(rc)
+		res = unicode.In(rc, unicode.Mark, unicode.Punct, unicode.Symbol)
 	case 's':
 		res = unicode.IsSpace(rc)
 	case 'u':
@@ -547,7 +547,7 @@ func strGsub(l *State) int {
 	tr := l.TypeOf(3)
 	maxS := OptInteger(l, 4, len(src)+1)
 
-	anchor := p[0] == '^'
+	anchor := len(p) > 0 && p[0] == '^'
 	n := 0
 
 	ArgumentCheck(l, tr == TypeNumber || tr == TypeString || tr == TypeFunction || tr == TypeTable, 3, "string/function/table expected")
