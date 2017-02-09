@@ -53,7 +53,7 @@ func classend(ms *matchState, ppos int) int {
 	switch (*ms.p)[ppos] {
 	case lEsc:
 		ppos++
-		if ppos == len(*ms.p) {
+		if ppos >= len(*ms.p) {
 			Errorf(ms.l, "malformed pattern (ends with '%%')")
 		}
 		return ppos + 1
@@ -63,14 +63,14 @@ func classend(ms *matchState, ppos int) int {
 			ppos++
 		}
 		for { // look for a ']'
-			if ppos == len(*ms.p) {
+			if ppos >= len(*ms.p) {
 				Errorf(ms.l, "malformed pattern (missing ']')")
 			}
 			ppos++
-			if (*ms.p)[ppos] == lEsc && ppos < len(*ms.p) {
+			if ppos < len(*ms.p) && (*ms.p)[ppos] == lEsc {
 				ppos = ppos + 2 // skip escapes (e.g. `%]')
 			}
-			if (*ms.p)[ppos] == ']' {
+			if ppos < len(*ms.p) && (*ms.p)[ppos] == ']' {
 				break
 			}
 		}
@@ -164,6 +164,36 @@ func singlematch(ms *matchState, spos int, ppos int, eppos int) bool {
 			return (*ms.p)[ppos] == c
 		}
 	}
+}
+
+func matchbalance(ms *matchState, spos int, ppos int) (int, bool) {
+	if ppos >= len(*ms.p)-1 {
+		Errorf(ms.l, "malformed pattern (missing arguments to '%%b')")
+	}
+
+	if spos >= len(*ms.src) || (*ms.src)[spos] != (*ms.p)[ppos] {
+		return 0, false
+	} else {
+		b := (*ms.p)[ppos]
+		e := (*ms.p)[ppos+1]
+		cont := 1
+		for {
+			spos++
+			if spos >= len(*ms.src) {
+				break
+			}
+			if (*ms.src)[spos] == e {
+				cont--
+				if cont == 0 {
+					return spos + 1, true
+				}
+			} else if (*ms.src)[spos] == b {
+				cont++
+			}
+		}
+	}
+
+	return 0, false
 }
 
 func maxExpand(ms *matchState, spos int, ppos int, eppos int) (int, bool) {
@@ -320,17 +350,43 @@ init: // using goto's to optimize tail recursion
 				}
 			}
 		case lEsc:
-			pnext := (*ms.p)[ppos+1]
+			var pnext byte
+			if ppos+1 < len(*ms.p) {
+				pnext = (*ms.p)[ppos+1]
+			}
 			switch {
 			case pnext == 'b': // balanced string?
-				// TODO
+				spos, ok = matchbalance(ms, spos, ppos+2)
+				if ok {
+					ppos = ppos + 4
+					goto init // return match(ms, s, p + 4)
+				} // else fail
 			case pnext == 'f': // frontier?
-				// TODO
+				ppos = ppos + 2
+				if ppos >= len(*ms.p) || (*ms.p)[ppos] != '[' {
+					Errorf(ms.l, "missing '[' after '%%f' in pattern")
+				}
+				eppos := classend(ms, ppos) // points to what is next
+				var previous byte = 0
+				if spos != 0 {
+					previous = (*ms.src)[spos-1]
+				}
+				if !matchbracketclass(previous, *ms.p, ppos, eppos-1) {
+					var sc byte
+					if spos < len(*ms.src) {
+						sc = (*ms.src)[spos]
+					}
+					if matchbracketclass(sc, *ms.p, ppos, eppos-1) {
+						ppos = eppos
+						goto init
+					}
+				}
+				ok = false // match failed
 			case pnext >= '0' && pnext <= '9': /* capture results (%0-%9)? */
 				spos, ok = matchCapture(ms, spos, int((*ms.p)[ppos+1]))
 				if ok {
 					ppos = ppos + 2
-					goto init
+					goto init // return match(ms, s, p + 2)
 				}
 			default:
 				if defaultCase() {
@@ -466,7 +522,7 @@ func gmatchAux(l *State) int {
 	}
 
 	srcpos, _ := l.ToInteger(UpValueIndex(3))
-	for ; srcpos < len(*ms.src); srcpos++ {
+	for ; srcpos <= len(*ms.src); srcpos++ {
 		ms.level = 0
 		epos, ok := match(&ms, srcpos, 0)
 		if ok {
