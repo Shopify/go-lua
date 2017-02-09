@@ -17,9 +17,8 @@ func debugValue(v value) string {
 		entry := func(x value) string {
 			if t, ok := x.(*table); ok {
 				return fmt.Sprintf("table %#v", t)
-			} else {
-				return debugValue(x)
 			}
+			return debugValue(x)
 		}
 		s := fmt.Sprintf("table %#v {[", v)
 		for _, x := range v.array {
