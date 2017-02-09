@@ -456,8 +456,7 @@ func strFindAux(l *State, find bool) int {
 		return 1
 	}
 	// explicit request or no special characters?
-	// FIXME: ToBoolean returns true for invalid index
-	if find && (l.Top() >= 4 && l.ToBoolean(4)) || nospecials(p) {
+	if find && l.ToBoolean(4) || nospecials(p) {
 		// do a plain search
 		s2 := strings.Index(s[init-1:], p)
 		if s2 != -1 {
