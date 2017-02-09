@@ -276,57 +276,21 @@ func matchCapture(ms *matchState, spos int, l int) (int, bool) {
 	}
 }
 
+// This function makes liberal use of goto in order to keep control over the
+// stack size, similar to the original C version of the function.  However,
+// this implementation has an additional goto label that was not in the
+// original code.  Go cannot jump from one block to another, so the dflt label
+// that used to come right after the default case of the main switch could
+// not be jumped into.
+//
+// Instead, we drag the default case outside of the switch, and skip over it
+// to the "end" of the function in cases where we shouldn't execute it.
 func match(ms *matchState, spos int, ppos int) (int, bool) {
 	if ms.matchDepth == 0 {
 		Errorf(ms.l, "pattern too complex")
 	}
 	ms.matchDepth--
 	ok := true
-
-	// The default case - return true to goto init
-	defaultCase := func() bool {
-		eppos := classend(ms, ppos) // points to optional suffix
-		// does not match at least once?
-		if !singlematch(ms, spos, ppos, eppos) {
-			var ep byte = 0
-			if eppos != len(*ms.p) {
-				ep = (*ms.p)[eppos]
-			}
-			if ep == '*' || ep == '?' || ep == '-' { // accept empty?
-				ppos = eppos + 1
-				return true // return match(ms, spos, eppos + 1);
-			} else { // '+' or no suffix
-				ok = false // fail
-			}
-		} else { // matched once
-			var ep byte = 0
-			if eppos != len(*ms.p) {
-				ep = (*ms.p)[eppos]
-			}
-			switch ep {
-			case '?': // optional
-				res, resOk := match(ms, spos+1, eppos+1)
-				if resOk {
-					spos = res
-				} else {
-					ppos = eppos + 1
-					return true
-				}
-			case '+': // 1 or more repetitions
-				spos++ // 1 match already done
-				fallthrough
-			case '*': // 0 or more repetitions
-				spos, ok = maxExpand(ms, spos, ppos, eppos)
-			case '-': // 0 or more repetitions (minimum)
-				spos, ok = minExpand(ms, spos, ppos, eppos)
-			default: // no suffix
-				spos++
-				ppos = eppos
-				return true
-			}
-		}
-		return false
-	}
 
 init: // using goto's to optimize tail recursion
 	if ppos != len(*ms.p) { // end of pattern?
@@ -341,9 +305,7 @@ init: // using goto's to optimize tail recursion
 			spos, ok = endCapture(ms, spos, ppos+1)
 		case '$':
 			if ppos+1 != len(*ms.p) { // is the `$' the last char in pattern?
-				if defaultCase() {
-					goto init
-				}
+				goto dflt
 			} else {
 				if spos != len(*ms.src) {
 					spos, ok = 0, false
@@ -389,16 +351,55 @@ init: // using goto's to optimize tail recursion
 					goto init // return match(ms, s, p + 2)
 				}
 			default:
-				if defaultCase() {
+				goto dflt
+			}
+		default:
+			goto dflt // Old dflt label was here.
+		}
+		goto end // We shouldn't execute the default case.
+	dflt: // pattern class plus optional suffix
+		eppos := classend(ms, ppos) // points to optional suffix
+		// does not match at least once?
+		if !singlematch(ms, spos, ppos, eppos) {
+			var ep byte = 0
+			if eppos != len(*ms.p) {
+				ep = (*ms.p)[eppos]
+			}
+			if ep == '*' || ep == '?' || ep == '-' { // accept empty?
+				ppos = eppos + 1
+				goto init // return match(ms, spos, eppos + 1);
+			} else { // '+' or no suffix
+				ok = false // fail
+			}
+		} else { // matched once
+			var ep byte = 0
+			if eppos != len(*ms.p) {
+				ep = (*ms.p)[eppos]
+			}
+			switch ep {
+			case '?': // optional
+				res, resOk := match(ms, spos+1, eppos+1)
+				if resOk {
+					spos = res
+				} else {
+					ppos = eppos + 1
 					goto init
 				}
-			}
-		default: // pattern class plus optional suffix
-			if defaultCase() {
+			case '+': // 1 or more repetitions
+				spos++ // 1 match already done
+				fallthrough
+			case '*': // 0 or more repetitions
+				spos, ok = maxExpand(ms, spos, ppos, eppos)
+			case '-': // 0 or more repetitions (minimum)
+				spos, ok = minExpand(ms, spos, ppos, eppos)
+			default: // no suffix
+				spos++
+				ppos = eppos
 				goto init
 			}
 		}
 	}
+end:
 	ms.matchDepth++
 	return spos, ok
 }
