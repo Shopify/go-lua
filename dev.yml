@@ -6,6 +6,16 @@ up:
       name: Initializing submodules
       met?: test -f lua-tests/.git
       meet: git submodule update --init
+  - custom:
+      name: Lua version check
+      met?: |
+        if [ ! $(luac -v | awk ' { print $2 }') == "5.2.4" ]; then
+          echo "Luac version 5.2.4 is required."
+          echo "Luac is installed with Lua."
+          echo "brew install lua"
+          exit 1
+        fi
+      meet: 'true'
 
 commands:
   test:
