@@ -437,6 +437,14 @@ func (l *State) Load(r io.Reader, chunkName string, mode string) error {
 	return nil
 }
 
+func (l *State) Dump(w io.Writer) error {
+	l.checkElementCount(1)
+	if f, ok := l.stack[l.top-1].(*luaClosure); ok {
+		return l.dump(f.prototype, w)
+	}
+	return errors.New("todo")
+}
+
 // NewState creates a new thread running in a new, independent state.
 //
 // http://www.lua.org/manual/5.2/manual.html#lua_newstate
