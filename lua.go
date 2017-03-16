@@ -94,7 +94,7 @@ const (
 // values. These predefined values are indexed with integer keys defined as
 // constants.
 const (
-	// RegistryIndex is the psuedo-index for the registry table.
+	// RegistryIndex is the pseudo-index for the registry table.
 	RegistryIndex = firstPseudoIndex
 
 	// RegistryIndexMainThread is the registry index for the main thread of the
