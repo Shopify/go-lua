@@ -233,7 +233,7 @@ func (l *State) next(t *table, key int) bool {
 	}
 	if t.iterationKeys == nil {
 		j, keys := 0, make([]value, len(t.hash))
-		for hk, _ := range t.hash {
+		for hk := range t.hash {
 			keys[j] = hk
 			j++
 		}

@@ -840,7 +840,7 @@ func (f *function) Indexed(t, k exprDesc) (r exprDesc) {
 	f.assert(!t.hasJumps())
 	r = makeExpression(kindIndexed, 0)
 	r.table = t.info
-	k, r.index = f.expressionToRegisterOrConstant(k)
+	_, r.index = f.expressionToRegisterOrConstant(k)
 	if t.kind == kindUpValue {
 		r.tableType = kindUpValue
 	} else {
