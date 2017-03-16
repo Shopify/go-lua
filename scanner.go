@@ -79,7 +79,7 @@ type scanner struct {
 
 func (s *scanner) assert(cond bool)           { s.l.assert(cond) }
 func (s *scanner) syntaxError(message string) { s.scanError(message, s.t) }
-func (l *scanner) errorExpected(t rune)       { l.syntaxError(l.tokenToString(t) + " expected") }
+func (s *scanner) errorExpected(t rune)       { s.syntaxError(s.tokenToString(t) + " expected") }
 func (s *scanner) numberError()               { s.scanError("malformed number", tkNumber) }
 func isNewLine(c rune) bool                   { return c == '\n' || c == '\r' }
 func isDecimal(c rune) bool                   { return '0' <= c && c <= '9' }
@@ -504,41 +504,41 @@ func (s *scanner) scan() token {
 	panic("unreachable")
 }
 
-func (l *scanner) next() {
-	l.lastLine = l.lineNumber
-	if l.lookAheadToken.t != tkEOS {
-		l.token = l.lookAheadToken
-		l.lookAheadToken.t = tkEOS
+func (s *scanner) next() {
+	s.lastLine = s.lineNumber
+	if s.lookAheadToken.t != tkEOS {
+		s.token = s.lookAheadToken
+		s.lookAheadToken.t = tkEOS
 	} else {
-		l.token = l.scan()
+		s.token = s.scan()
 	}
 }
 
-func (l *scanner) lookAhead() rune {
-	l.l.assert(l.lookAheadToken.t == tkEOS)
-	l.lookAheadToken = l.scan()
-	return l.lookAheadToken.t
+func (s *scanner) lookAhead() rune {
+	s.l.assert(s.lookAheadToken.t == tkEOS)
+	s.lookAheadToken = s.scan()
+	return s.lookAheadToken.t
 }
 
-func (l *scanner) testNext(t rune) (r bool) {
-	if r = l.t == t; r {
-		l.next()
+func (s *scanner) testNext(t rune) (r bool) {
+	if r = s.t == t; r {
+		s.next()
 	}
 	return
 }
 
-func (l *scanner) check(t rune) {
-	if l.t != t {
-		l.errorExpected(t)
+func (s *scanner) check(t rune) {
+	if s.t != t {
+		s.errorExpected(t)
 	}
 }
 
-func (l *scanner) checkMatch(what, who rune, where int) {
-	if !l.testNext(what) {
-		if where == l.lineNumber {
-			l.errorExpected(what)
+func (s *scanner) checkMatch(what, who rune, where int) {
+	if !s.testNext(what) {
+		if where == s.lineNumber {
+			s.errorExpected(what)
 		} else {
-			l.syntaxError(fmt.Sprintf("%s expected (to close %s at line %d)", l.tokenToString(what), l.tokenToString(who), where))
+			s.syntaxError(fmt.Sprintf("%s expected (to close %s at line %d)", s.tokenToString(what), s.tokenToString(who), where))
 		}
 	}
 }
