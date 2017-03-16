@@ -99,10 +99,11 @@ func (s *scanner) tokenToString(t rune) string {
 }
 
 func (s *scanner) scanError(message string, token rune) {
+	buff := chunkID(s.source)
 	if token != 0 {
-		message = fmt.Sprintf("%s:%d: %s near %s", s.source, s.lineNumber, message, s.tokenToString(token))
+		message = fmt.Sprintf("%s:%d: %s near %s", buff, s.lineNumber, message, s.tokenToString(token))
 	} else {
-		message = fmt.Sprintf("%s:%d: %s", s.source, s.lineNumber, message)
+		message = fmt.Sprintf("%s:%d: %s", buff, s.lineNumber, message)
 	}
 	s.l.push(message)
 	s.l.throw(SyntaxError)
