@@ -19,9 +19,8 @@ func functionName(l *State, d Debug) string {
 			s, _ := l.ToString(-1)
 			l.Pop(1)
 			return fmt.Sprintf("function '%s'", s)
-		} else {
-			return "?"
 		}
+		return "?"
 	}
 	return fmt.Sprintf("function <%s:%d>", d.ShortSource, d.LineDefined)
 }

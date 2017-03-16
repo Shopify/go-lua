@@ -390,11 +390,11 @@ func Info(l *State, what string, where Frame) (d Debug, ok bool) {
 func upValueHelper(f func(*State, int, int) (string, bool), returnValueCount int) Function {
 	return func(l *State) int {
 		CheckType(l, 1, TypeFunction)
-		if name, ok := f(l, 1, CheckInteger(l, 2)); !ok {
+		name, ok := f(l, 1, CheckInteger(l, 2))
+		if !ok {
 			return 0
-		} else {
-			l.PushString(name)
 		}
+		l.PushString(name)
 		l.Insert(-returnValueCount)
 		return returnValueCount
 	}

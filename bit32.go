@@ -62,16 +62,17 @@ func fieldArguments(l *State, fieldIndex int) (uint, uint) {
 
 var bitLibrary = []RegistryFunction{
 	{"arshift", func(l *State) int {
-		if r, i := CheckUnsigned(l, 1), CheckInteger(l, 2); i < 0 || 0 == (r&(1<<(bitCount-1))) {
+		r, i := CheckUnsigned(l, 1), CheckInteger(l, 2)
+		if i < 0 || 0 == (r&(1<<(bitCount-1))) {
 			return shift(l, r, -i)
-		} else {
-			if i >= bitCount {
-				r = math.MaxUint32
-			} else {
-				r = trim((r >> uint(i)) | ^(math.MaxUint32 >> uint(i)))
-			}
-			l.PushUnsigned(r)
 		}
+
+		if i >= bitCount {
+			r = math.MaxUint32
+		} else {
+			r = trim((r >> uint(i)) | ^(math.MaxUint32 >> uint(i)))
+		}
+		l.PushUnsigned(r)
 		return 1
 	}},
 	{"band", func(l *State) int { l.PushUnsigned(andHelper(l)); return 1 }},

@@ -477,10 +477,9 @@ func (s *scanner) scan() token {
 				if s.checkNext(".") {
 					s.buffer.Reset()
 					return token{t: tkDots}
-				} else {
-					s.buffer.Reset()
-					return token{t: tkConcat}
 				}
+				s.buffer.Reset()
+				return token{t: tkConcat}
 			} else if !unicode.IsDigit(s.current) {
 				s.buffer.Reset()
 				return token{t: '.'}

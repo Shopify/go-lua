@@ -887,9 +887,8 @@ func (f *function) Prefix(op int, e exprDesc, line int) exprDesc {
 		if e.isNumeral() {
 			e.value = -e.value
 			return e
-		} else {
-			return f.encodeArithmetic(opUnaryMinus, f.ExpressionToAnyRegister(e), makeExpression(kindNumber, 0), line)
 		}
+		return f.encodeArithmetic(opUnaryMinus, f.ExpressionToAnyRegister(e), makeExpression(kindNumber, 0), line)
 	case oprNot:
 		return f.encodeNot(e)
 	case oprLength:
