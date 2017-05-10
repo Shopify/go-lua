@@ -15,63 +15,69 @@ func (d *dumpState) write(data interface{}) error {
 	return binary.Write(d.out, d.order, data)
 }
 
-func (d *dumpState) writeInt(i int32) {
-	d.write(i)
+func (d *dumpState) writeInt(i int) error {
+	return d.write(i)
 }
 
-func (d *dumpState) writeChar(i int32) {
+func (d *dumpState) writeChar(i int) error {
 	x := rune(i)
-	d.write(x)
+	return d.write(x)
 }
 
-func (d *dumpState) writeCode(p *prototype) {
+func (d *dumpState) writeCode(p *prototype) error {
 	//d.writeInt(p.sizecode)
-	d.write(p.code)
+	return d.write(p.code)
 }
 
 func (d *dumpState) writeByte(b byte) error {
 	return d.write(b)
 }
 
-func (d *dumpState) writeBool(b bool) {
-	d.writeByte(b)
+func (d *dumpState) writeBool(b bool) error {
+	return d.writeByte(b)
 }
 
-func (d *dumpState) writeNumber(f float64) {
-	d.write(f)
+func (d *dumpState) writeNumber(f float64) error {
+	return d.write(f)
 }
 
-func (d *dumpState) writeString(s string) {
-
+func (d *dumpState) writeString(s string) error {
+	return
 }
 
 func (d *dumpState) writeConstants(p *prototype) {
 	for i := range p.constants {
-		var n = p.sizek
-		writeInt(n)
+		var n = len(p.constants)
 
 		for i := 0; i < n; i++ {
-			var o = p.k[i]
-			writeChar(o)
+			var o = p.constants[i]
+			err := d.writeChar(i)
 
-			switch o {
-			case LUA_TNIL:
+			switch i := o.(type) {
+			case nil:
 				break
-			case LUA_TBOOLEAN:
-				DumpChar(bvalue(o), D)
+			case bool:
+				if i {
+					err = d.writeChar(1)
+				} else {
+					err = d.writeChar(0)
+				}
 				break
-			case LUA_TNUMBER:
-				DumpNumber(nvalue(o), D)
+			case int:
+				err = d.writeInt(i)
 				break
-			case LUA_TSTRING:
-				DumpString(rawtsvalue(o), D)
+			case string:
+				err = d.writeString(i)
 				break
 			default:
-				lua_assert(0)
+				err = errUnknownConstantType
+			}
+			if err != nil {
+				return
 			}
 		}
 
-		n = p.sizep
+		n = len(p)
 		writeInt(n)
 
 		for i = 0; i < n; i++ {
@@ -92,7 +98,13 @@ func (d *dumpState) dumpFunction(p *prototype) (err error) {
 	d.writeInt(p.lineDefined)
 	d.writeInt(p.lastLineDefined)
 	d.writeChar(p.parameterCount)
-	d.writeChar(p.isVarArg)
+
+	if p.isVarArg {
+		d.writeChar(1)
+	} else {
+		d.writeChar(0)
+	}
+
 	d.writeChar(p.maxStackSize)
 	d.writeCode(p)
 	d.writeConstants(p)
