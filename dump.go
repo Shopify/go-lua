@@ -2,110 +2,124 @@ package lua
 
 import (
 	"encoding/binary"
+	"fmt"
 	"io"
 )
 
 type dumpState struct {
+	l     *State
 	out   io.Writer
 	order binary.ByteOrder
 	err   error
 }
 
-func (d *dumpState) write(data interface{}) error {
-	return binary.Write(d.out, d.order, data)
+func (d *dumpState) write(data interface{}) {
+	if d.err == nil {
+		d.err = binary.Write(d.out, d.order, data)
+	}
 }
 
-func (d *dumpState) writeInt(i int) error {
-	return d.write(i)
+func (d *dumpState) writeInt(i int) {
+	d.write(int32(i))
 }
 
-func (d *dumpState) writeChar(i int) error {
-	x := rune(i)
-	return d.write(x)
+func (d *dumpState) writePC(p pc) {
+	d.writeInt(int(p))
 }
 
-func (d *dumpState) writeCode(p *prototype) error {
-	//d.writeInt(p.sizecode)
-	return d.write(p.code)
+func (d *dumpState) writeCode(p *prototype) {
+	d.writeInt(len(p.code))
+	d.write(p.code)
 }
 
-func (d *dumpState) writeByte(b byte) error {
-	return d.write(b)
+func (d *dumpState) writeByte(b byte) {
+	d.write(b)
 }
 
-func (d *dumpState) writeBool(b bool) error {
-	return d.writeByte(b)
+func (d *dumpState) writeBool(b bool) {
+	if b {
+		d.writeByte(1)
+	} else {
+		d.writeByte(0)
+	}
 }
 
-func (d *dumpState) writeNumber(f float64) error {
-	return d.write(f)
-}
-
-func (d *dumpState) writeString(s string) error {
-	return
+func (d *dumpState) writeNumber(f float64) {
+	d.write(f)
 }
 
 func (d *dumpState) writeConstants(p *prototype) {
-	for i := range p.constants {
-		var n = len(p.constants)
+	d.writeInt(len(p.constants))
 
-		for i := 0; i < n; i++ {
-			var o = p.constants[i]
-			err := d.writeChar(i)
+	for _, o := range p.constants {
+		d.writeByte(byte(d.l.valueToType(o)))
 
-			switch i := o.(type) {
-			case nil:
-				break
-			case bool:
-				if i {
-					err = d.writeChar(1)
-				} else {
-					err = d.writeChar(0)
-				}
-				break
-			case int:
-				err = d.writeInt(i)
-				break
-			case string:
-				err = d.writeString(i)
-				break
-			default:
-				err = errUnknownConstantType
-			}
-			if err != nil {
-				return
-			}
+		switch o := o.(type) {
+		case nil:
+		case bool:
+			d.writeBool(o)
+		case float64:
+			d.writeNumber(o)
+		case string:
+			d.writeString(o)
+		default:
+			d.l.assert(false)
 		}
+	}
 
-		n = len(p)
-		writeInt(n)
+	d.writeInt(len(p.prototypes))
 
-		for i = 0; i < n; i++ {
-			dumpFunction(p)
-		}
+	for _, o := range p.prototypes {
+		d.dumpFunction(&o)
 	}
 }
 
 func (d *dumpState) writeUpvalues(p *prototype) {
+	d.writeInt(len(p.upValues))
 
+	for _, u := range p.upValues {
+		d.writeBool(u.isLocal)
+		d.writeByte(byte(u.index))
+	}
+}
+
+func (d *dumpState) writeString(s string) {
+	switch header.PointerSize {
+	case 8:
+		d.write(uint64(len(s)))
+	case 4:
+		d.write(uint32(len(s)))
+	default:
+		panic(fmt.Sprintf("unsupported pointer size (%d)"))
+	}
 }
 
 func (d *dumpState) writeDebug(p *prototype) {
+	var n int
+	d.writeString(p.source)
+	d.writeInt(n)
+	d.write(p.lineInfo)
+	d.writeInt(n)
 
-}
-
-func (d *dumpState) dumpFunction(p *prototype) (err error) {
-	d.writeInt(p.lineDefined)
-	d.writeInt(p.lastLineDefined)
-	d.writeChar(p.parameterCount)
-
-	if p.isVarArg {
-		d.writeChar(1)
-	} else {
-		d.writeChar(0)
+	for _, lv := range p.localVariables {
+		d.writeString(lv.name)
+		d.writePC(lv.startPC)
+		d.writePC(lv.endPC)
 	}
 
-	d.writeChar(p.maxStackSize)
+	d.writeInt(n)
+
+	for _, uv := range p.upValues {
+		d.writeString(uv.name)
+	}
+}
+
+func (d *dumpState) dumpFunction(p *prototype) {
+	d.writeInt(p.lineDefined)
+	d.writeInt(p.lastLineDefined)
+	d.writeByte(byte(p.parameterCount))
+	d.writeBool(p.isVarArg)
+	d.writeByte(byte(p.maxStackSize))
 	d.writeCode(p)
 	d.writeConstants(p)
 	d.writeUpvalues(p)
@@ -118,7 +132,7 @@ func (d *dumpState) dumpHeader() {
 }
 
 func (l *State) dump(p *prototype, w io.Writer) error {
-	d := dumpState{out: w}
+	d := dumpState{l: l, out: w, order: endianness()}
 	d.dumpHeader()
 	d.dumpFunction(p)
 
