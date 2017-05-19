@@ -128,7 +128,6 @@ func (d *dumpState) dumpFunction(p *prototype) {
 }
 
 func (d *dumpState) dumpHeader() {
-	//enfianness is 0 or 1 - need to figure that out
 	d.err = binary.Write(d.out, endianness(), header)
 }
 
