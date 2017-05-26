@@ -60,6 +60,8 @@ func (d *dumpState) writeConstants(p *prototype) {
 			d.writeBool(o)
 		case int:
 			d.writeInt(o)
+		case float64:
+			d.writeNumber(o)
 		case string:
 			d.writeString(o)
 		default:
