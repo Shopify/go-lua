@@ -24,6 +24,7 @@ func TestDump(t *testing.T) {
 	if err != nil {
 		t.Fatal("couldn't open checktable.bin")
 	}
+
 	l := NewState()
 	closure, err := l.undump(file, "test")
 	if err != nil {
