@@ -1,5 +1,3 @@
-// validates what you wrote you can read in successfuly
-
 package lua
 
 import (
