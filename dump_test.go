@@ -102,7 +102,4 @@ func TestDumpThenUndumpReturnsTheSameFunction(t *testing.T) {
 	if reflect.DeepEqual(p, undumpedPrototype) {
 		t.Error("not the same")
 	}
-
 }
-
-//refelct deep equal to compare the structs from dump then undump
