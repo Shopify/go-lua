@@ -437,6 +437,19 @@ func (l *State) Load(r io.Reader, chunkName string, mode string) error {
 	return nil
 }
 
+// Dump dumps a function as a binary chunk. It receives a Lua function on
+// the top of the stack and produces a binary chunk that, if loaded again,
+// results in a function equivalent to the one dumped.
+//
+// http://www.lua.org/manual/5.3/manual.html#lua_dump
+func (l *State) Dump(w io.Writer) error {
+	l.checkElementCount(1)
+	if f, ok := l.stack[l.top-1].(*luaClosure); ok {
+		return l.dump(f.prototype, w)
+	}
+	panic("closure expected")
+}
+
 // NewState creates a new thread running in a new, independent state.
 //
 // http://www.lua.org/manual/5.2/manual.html#lua_newstate
