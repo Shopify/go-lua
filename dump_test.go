@@ -102,5 +102,4 @@ func TestDumpThenUndumpReturnsTheSameFunction(t *testing.T) {
 	if reflect.DeepEqual(p, undumpedPrototype) {
 		t.Error("not the same")
 	}
-
 }
