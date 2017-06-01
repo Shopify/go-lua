@@ -219,6 +219,7 @@ func (l *State) next(t *table, key int) bool {
 	if k == nil { // first iteration
 		t.iterationKeys = nil
 	} else if i = arrayIndex(k); 0 < i && i <= len(t.array) {
+		k = nil
 	} else if _, ok := t.hash[k]; !ok {
 		l.runtimeError("invalid key to 'next'") // key not found
 	} else {
