@@ -371,3 +371,26 @@ func TestPairsSplit(t *testing.T) {
 	assert(keys[4] == 16, 'got ' .. tostring(keys[4]) .. '; want 16')
 	`)
 }
+
+func TestConcurrentNext(t *testing.T) {
+	testString(t, `
+	t = {}
+	t[1], t[2], t[3] = true, true, true
+
+	outer = {}
+	for k1 in pairs(t) do
+		table.insert(outer, k1)
+		inner = {}
+		for k2 in pairs(t) do
+			table.insert(inner, k2)
+		end
+		table.sort(inner)
+		got = table.concat(inner, '')
+		assert(got == '123', 'got ' .. got .. '; want 123')
+	end
+
+	table.sort(outer)
+	got = table.concat(outer, '')
+	assert(got == '123', 'got ' .. got .. '; want 123')
+	`)
+}

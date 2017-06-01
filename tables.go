@@ -79,6 +79,13 @@ func (t *table) maybeResizeArray(key int) bool {
 	return false
 }
 
+func (t *table) addOrInsertInMap(k, v value) {
+	if _, ok := t.hash[k]; !ok {
+		t.iterationKeys = nil // invalidate iterations when adding an entry
+	}
+	t.hash[k] = v
+}
+
 func (t *table) putAtInt(k int, v value) {
 	if 0 < k && k <= len(t.array) {
 		t.array[k-1] = v
@@ -87,7 +94,7 @@ func (t *table) putAtInt(k int, v value) {
 	} else if v == nil {
 		delete(t.hash, float64(k))
 	} else {
-		t.hash[float64(k)] = v
+		t.addOrInsertInMap(float64(k), v)
 	}
 }
 
@@ -120,19 +127,19 @@ func (t *table) put(l *State, k, v value) {
 		} else if v == nil {
 			delete(t.hash, k)
 		} else {
-			t.hash[k] = v
+			t.addOrInsertInMap(k, v)
 		}
 	case string:
 		if v == nil {
 			delete(t.hash, k)
 		} else {
-			t.hash[k] = v
+			t.addOrInsertInMap(k, v)
 		}
 	default:
 		if v == nil {
 			delete(t.hash, k)
 		} else {
-			t.hash[k] = v
+			t.addOrInsertInMap(k, v)
 		}
 	}
 }
@@ -217,7 +224,6 @@ func arrayIndex(k value) int {
 func (l *State) next(t *table, key int) bool {
 	i, k := 0, l.stack[key]
 	if k == nil { // first iteration
-		t.iterationKeys = nil
 	} else if i = arrayIndex(k); 0 < i && i <= len(t.array) {
 		k = nil
 	} else if _, ok := t.hash[k]; !ok {
@@ -250,6 +256,5 @@ func (l *State) next(t *table, key int) bool {
 			found = true
 		}
 	}
-	t.iterationKeys = nil
 	return false // no more elements
 }
