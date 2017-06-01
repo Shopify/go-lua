@@ -347,3 +347,27 @@ func TestErrorf(t *testing.T) {
 		t.Error("error not handled")
 	}
 }
+
+func TestPairsSplit(t *testing.T) {
+	testString(t, `
+	local t = {}
+	-- first two keys go into array
+	t[1] = true
+	t[2] = true
+	-- next key forced into map instead of array since it's non-sequential
+	t[16] = true
+	-- next key inserted into array
+	t[3] = true
+
+	local keys = {}
+	for k, v in pairs(t) do
+		keys[#keys + 1] = k
+	end
+
+	table.sort(keys)
+	assert(keys[1] == 1, 'got ' .. tostring(keys[1]) .. '; want 1')
+	assert(keys[2] == 2, 'got ' .. tostring(keys[2]) .. '; want 2')
+	assert(keys[3] == 3, 'got ' .. tostring(keys[3]) .. '; want 3')
+	assert(keys[4] == 16, 'got ' .. tostring(keys[4]) .. '; want 16')
+	`)
+}
