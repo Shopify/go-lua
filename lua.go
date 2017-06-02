@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"math"
+	"os"
 	"strings"
 )
 
@@ -219,6 +220,8 @@ const (
 
 // A State is an opaque structure representing per thread Lua state.
 type State struct {
+	Env *Environment
+
 	error                 error
 	shouldYield           bool
 	top                   int // first free slot in the stack
@@ -239,6 +242,12 @@ type State struct {
 	errorFunction         int      // current error handling function (stack index)
 	baseCallInfo          callInfo // callInfo for first level (go calling lua)
 	protectFunction       func()
+}
+
+type Environment struct {
+	Stdout io.Writer
+	Stderr io.Writer
+	Stdin  io.Reader
 }
 
 type globalState struct {
@@ -442,7 +451,8 @@ func (l *State) Load(r io.Reader, chunkName string, mode string) error {
 // http://www.lua.org/manual/5.2/manual.html#lua_newstate
 func NewState() *State {
 	v := float64(VersionNumber)
-	l := &State{allowHook: true, error: nil, nonYieldableCallCount: 1}
+	env := &Environment{Stdout: os.Stdout, Stderr: os.Stderr, Stdin: os.Stdin}
+	l := &State{Env: env, allowHook: true, error: nil, nonYieldableCallCount: 1}
 	g := &globalState{mainThread: l, registry: newTable(), version: &v, memoryErrorMessage: "not enough memory"}
 	l.global = g
 	l.initializeStack()
