@@ -247,8 +247,11 @@ func (l *State) next(t *table, key int) bool {
 		t.iterationKeys = keys
 	}
 	found := k == nil
-	for _, hk := range t.iterationKeys {
-		if found {
+	for i, hk := range t.iterationKeys {
+		if hk == nil { // skip deleted key
+		} else if _, present := t.hash[hk]; !present {
+			t.iterationKeys[i] = nil // mark key as deleted
+		} else if found {
 			l.stack[key] = hk
 			l.stack[key+1] = t.hash[hk]
 			return true
