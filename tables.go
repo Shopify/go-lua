@@ -79,7 +79,7 @@ func (t *table) maybeResizeArray(key int) bool {
 	return false
 }
 
-func (t *table) addOrInsertInMap(k, v value) {
+func (t *table) addOrInsertHash(k, v value) {
 	if _, ok := t.hash[k]; !ok {
 		t.iterationKeys = nil // invalidate iterations when adding an entry
 	}
@@ -94,7 +94,7 @@ func (t *table) putAtInt(k int, v value) {
 	} else if v == nil {
 		delete(t.hash, float64(k))
 	} else {
-		t.addOrInsertInMap(float64(k), v)
+		t.addOrInsertHash(float64(k), v)
 	}
 }
 
@@ -127,19 +127,19 @@ func (t *table) put(l *State, k, v value) {
 		} else if v == nil {
 			delete(t.hash, k)
 		} else {
-			t.addOrInsertInMap(k, v)
+			t.addOrInsertHash(k, v)
 		}
 	case string:
 		if v == nil {
 			delete(t.hash, k)
 		} else {
-			t.addOrInsertInMap(k, v)
+			t.addOrInsertHash(k, v)
 		}
 	default:
 		if v == nil {
 			delete(t.hash, k)
 		} else {
-			t.addOrInsertInMap(k, v)
+			t.addOrInsertHash(k, v)
 		}
 	}
 }
