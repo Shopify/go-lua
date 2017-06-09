@@ -86,7 +86,7 @@ func (state *loadState) readString() (s string, err error) {
 
 func (state *loadState) readCode() (code []instruction, err error) {
 	n, err := state.readInt()
-	if err != nil {
+	if err != nil || n == 0 {
 		return
 	}
 	code = make([]instruction, n)
@@ -96,7 +96,7 @@ func (state *loadState) readCode() (code []instruction, err error) {
 
 func (state *loadState) readUpValues() (u []upValueDesc, err error) {
 	n, err := state.readInt()
-	if err != nil {
+	if err != nil || n == 0 {
 		return
 	}
 	v := make([]struct{ IsLocal, Index byte }, n)
@@ -111,19 +111,9 @@ func (state *loadState) readUpValues() (u []upValueDesc, err error) {
 	return
 }
 
-func (state *loadState) readDebug(p *prototype) (source string, lineInfo []int32, localVariables []localVariable, names []string, err error) {
+func (state *loadState) readLocalVariables() (localVariables []localVariable, err error) {
 	var n int32
-	if source, err = state.readString(); err != nil {
-		return
-	}
-	if n, err = state.readInt(); err != nil {
-		return
-	}
-	lineInfo = make([]int32, n)
-	if err = state.read(lineInfo); err != nil {
-		return
-	}
-	if n, err = state.readInt(); err != nil {
+	if n, err = state.readInt(); err != nil || n == 0 {
 		return
 	}
 	localVariables = make([]localVariable, n)
@@ -137,6 +127,30 @@ func (state *loadState) readDebug(p *prototype) (source string, lineInfo []int32
 		if localVariables[i].endPC, err = state.readPC(); err != nil {
 			return
 		}
+	}
+	return
+}
+
+func (state *loadState) readLineInfo() (lineInfo []int32, err error) {
+	var n int32
+	if n, err = state.readInt(); err != nil || n == 0 {
+		return
+	}
+	lineInfo = make([]int32, n)
+	err = state.read(lineInfo)
+	return
+}
+
+func (state *loadState) readDebug(p *prototype) (source string, lineInfo []int32, localVariables []localVariable, names []string, err error) {
+	var n int32
+	if source, err = state.readString(); err != nil {
+		return
+	}
+	if lineInfo, err = state.readLineInfo(); err != nil {
+		return
+	}
+	if localVariables, err = state.readLocalVariables(); err != nil {
+		return
 	}
 	if n, err = state.readInt(); err != nil {
 		return
@@ -152,9 +166,10 @@ func (state *loadState) readDebug(p *prototype) (source string, lineInfo []int32
 
 func (state *loadState) readConstants() (constants []value, prototypes []prototype, err error) {
 	var n int32
-	if n, err = state.readInt(); err != nil {
+	if n, err = state.readInt(); err != nil || n == 0 {
 		return
 	}
+
 	constants = make([]value, n)
 	for i := range constants {
 		var t byte
@@ -176,7 +191,12 @@ func (state *loadState) readConstants() (constants []value, prototypes []prototy
 			return
 		}
 	}
-	if n, err = state.readInt(); err != nil {
+	return
+}
+
+func (state *loadState) readPrototypes() (prototypes []prototype, err error) {
+	var n int32
+	if n, err = state.readInt(); err != nil || n == 0 {
 		return
 	}
 	prototypes = make([]prototype, n)
@@ -215,6 +235,9 @@ func (state *loadState) readFunction() (p prototype, err error) {
 		return
 	}
 	if p.constants, p.prototypes, err = state.readConstants(); err != nil {
+		return
+	}
+	if p.prototypes, err = state.readPrototypes(); err != nil {
 		return
 	}
 	if p.upValues, err = state.readUpValues(); err != nil {
