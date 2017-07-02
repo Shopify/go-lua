@@ -461,15 +461,21 @@ func NewLibrary(l *State, functions []RegistryFunction) {
 
 func skipComment(r *bufio.Reader) (bool, error) {
 	bom := "\xEF\xBB\xBF"
-	if ba, err := r.Peek(len(bom)); err != nil {
+	if ba, err := r.Peek(len(bom)); err != nil && err != io.EOF {
 		return false, err
 	} else if string(ba) == bom {
 		_, _ = r.Read(ba)
 	}
 	if c, _, err := r.ReadRune(); err != nil {
+		if err == io.EOF {
+			err = nil
+		}
 		return false, err
 	} else if c == '#' {
 		_, err = r.ReadBytes('\n')
+		if err == io.EOF {
+			err = nil
+		}
 		return true, err
 	}
 	return false, r.UnreadRune()
