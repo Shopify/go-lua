@@ -21,9 +21,47 @@ func field(l *State, key string, def int) int {
 	return r
 }
 
+func setfield(l *State, key string, value int) {
+    l.PushInteger(value)
+    l.SetField(-2, key)
+}
+
+func setboolfield(l *State, key string, value bool) {
+    l.PushBoolean(value)
+    l.SetField(-2, key)
+}
+
+func setallfields(l *State, stm time.Time) {
+    setfield(l, "sec", stm.Second())
+    setfield(l, "min", stm.Minute())
+    setfield(l, "hour", stm.Hour())
+    setfield(l, "day", stm.Day())
+    setfield(l, "month", int(stm.Month()))
+    setfield(l, "year", stm.Year())
+    setfield(l, "wday", int(stm.Weekday()) + 1)
+    setfield(l, "yday", stm.YearDay())
+    //setboolfield(l, "isdst", false) // FIXME can't found daylight saving in golang
+}
+
 var osLibrary = []RegistryFunction{
 	{"clock", clock},
-	// {"date", os_date},
+	{"date", func(l *State) int { //os_date
+        now := time.Now()
+        var stm time.Time
+		c := OptString(l, 1, "")
+        if c[0] == '!' { /*  UTC? */
+            stm = now.UTC()
+            c = c[1:]
+        } else {
+            stm = now.Local()
+        }
+        if c == "*t" {
+            l.CreateTable(0, 9)
+            setallfields(l, stm)
+            return 1
+        }
+        return 0
+    }},
 	{"difftime", func(l *State) int {
 		l.PushNumber(time.Unix(int64(CheckNumber(l, 1)), 0).Sub(time.Unix(int64(OptNumber(l, 2, 0)), 0)).Seconds())
 		return 1
