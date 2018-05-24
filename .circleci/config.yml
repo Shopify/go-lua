@@ -1,0 +1,24 @@
+version: 2
+jobs:
+  build:
+    working_directory: ~/repo
+    docker:
+      - image: circleci/golang:1.8
+    steps:
+      - checkout
+      - run: sudo apt-get install lua5.2
+      - run:
+          name: System information
+          command: |
+            echo "Golang $(go version)"
+            echo "Lua $(lua -v)"
+      - run: git submodule update --init
+      - run:
+          name: go get
+          command: go get -t -d -v ./...
+      - run:
+          name: go build
+          command: go build -v
+      - run:
+          name: go test
+          command: go test -v -race ./...
