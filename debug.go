@@ -14,7 +14,7 @@ func (l *State) prototype(ci *callInfo) *prototype {
 	return l.stack[ci.function].(*luaClosure).prototype
 }
 func (l *State) currentLine(ci *callInfo) int {
-	return int(l.prototype(ci).lineInfo[ci.savedPC])
+	return int(l.prototype(ci).lineInfo[ci.savedPC - 1])
 }
 
 func chunkID(source string) string {
