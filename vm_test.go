@@ -394,3 +394,64 @@ func TestConcurrentNext(t *testing.T) {
 	assert(got == '123', 'got ' .. got .. '; want 123')
 	`)
 }
+
+func TestLocIsCorrectOnRegisteredFuncCall(t *testing.T) {
+	l := NewState()
+	l.Register("barf", func(l *State) int {
+		Errorf(l, "Boom!")
+		return 0
+	})
+	if err := l.Load(strings.NewReader(`
+			local thing = barf()  -- line 2; is the source of the error
+			print(thing)          -- line 3; this won't execute, and must NOT be the loc of the error!
+			`), "test", ""); err != nil {
+		t.Errorf("Unexpected error! Got %v", err)
+	}
+	err := l.ProtectedCall(0, 0, 0)
+	if err == nil {
+		t.Errorf("Expected error! Got none... :(")
+	} else {
+		if err.Error() != "runtime error: [string \"test\"]:2: Boom!" {
+			t.Errorf("Wrong error reported: %v", err)
+		}
+	}
+}
+
+func TestLocIsCorrectOnFuncCall(t *testing.T) {
+	l := NewState()
+	if err := l.Load(strings.NewReader(`
+			function barf()
+				a = 3 + 2
+				isNotDefined("Boom!", a)  -- line 4; is the source of the error
+			end
+			barf()                        -- line 6
+			`), "test", ""); err != nil {
+		t.Errorf("Unexpected error! Got %v", err)
+	}
+	err := l.ProtectedCall(0, 0, 0)
+	if err == nil {
+		t.Errorf("Expected error! Got none... :(")
+	} else {
+		if err.Error() != "runtime error: [string \"test\"]:4: attempt to call a nil value" {
+			t.Errorf("Wrong error reported: %v", err)
+		}
+	}
+}
+
+func TestLocIsCorrectOnError(t *testing.T) {
+	l := NewState()
+	if err := l.Load(strings.NewReader(`
+			a = 3 - 3
+			b = 3 / q  -- line 3; errs!
+			`), "test", ""); err != nil {
+		t.Errorf("Unexpected error! Got %v", err)
+	}
+	err := l.ProtectedCall(0, 0, 0)
+	if err == nil {
+		t.Errorf("Expected error! Got none... :(")
+	} else {
+		if err.Error() != "runtime error: [string \"test\"]:3: attempt to perform arithmetic on a nil value" {
+			t.Errorf("Wrong error reported: %v", err)
+		}
+	}
+}
