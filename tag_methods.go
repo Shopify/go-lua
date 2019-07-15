@@ -58,11 +58,11 @@ var typeNames = []string{
 	"upval",
 }
 
-func (events *table) tagMethod(event tm, name string) value {
-	tm := events.atString(name)
+func (t *table) tagMethod(event tm, name string) value {
+	tm := t.atString(name)
 	//l.assert(event <= tmEq)
 	if tm == nil {
-		events.flags |= 1 << event
+		t.flags |= 1 << event
 	}
 	return tm
 }
