@@ -80,8 +80,10 @@ func (t *table) maybeResizeArray(key int) bool {
 }
 
 func (t *table) addOrInsertHash(k, v value) {
-	if _, ok := t.hash[k]; !ok {
-		t.iterationKeys = nil // invalidate iterations when adding an entry
+	if t.iterationKeys != nil {
+		if _, ok := t.hash[k]; !ok {
+			t.iterationKeys = nil // invalidate iterations when adding an entry
+		}
 	}
 	t.hash[k] = v
 }
@@ -147,30 +149,42 @@ func (t *table) put(l *State, k, v value) {
 // OPT: tryPut is an optimized variant of the at/put pair used by setTableAt to avoid hashing the key twice.
 func (t *table) tryPut(l *State, k, v value) bool {
 	switch k := k.(type) {
-	case nil:
 	case float64:
 		if i := int(k); float64(i) == k && 0 < i && i <= len(t.array) && t.array[i-1] != nil {
 			t.array[i-1] = v
-			return true
-		} else if math.IsNaN(k) {
-			return false
-		} else if t.hash[k] != nil && v != nil {
-			t.hash[k] = v
-			return true
-		}
-	case string:
-		if t.hash[k] != nil && v != nil {
-			t.hash[k] = v
-			return true
-		}
-	default:
-		if t.hash[k] != nil && v != nil {
-			t.hash[k] = v
 			return true
 		}
 	}
 	return false
 }
+
+//// OPT: tryPut is an optimized variant of the at/put pair used by setTableAt to avoid hashing the key twice.
+//func (t *table) tryPut(l *State, k, v value) bool {
+//	switch k := k.(type) {
+//	case nil:
+//	case float64:
+//		if i := int(k); float64(i) == k && 0 < i && i <= len(t.array) && t.array[i-1] != nil {
+//			t.array[i-1] = v
+//			return true
+//		} else if math.IsNaN(k) {
+//			return false
+//		} else if t.hash[k] != nil && v != nil {
+//			t.hash[k] = v
+//			return true
+//		}
+//	case string:
+//		if t.hash[k] != nil && v != nil {
+//			t.hash[k] = v
+//			return true
+//		}
+//	default:
+//		if t.hash[k] != nil && v != nil {
+//			t.hash[k] = v
+//			return true
+//		}
+//	}
+//	return false
+//}
 
 func (t *table) unboundSearch(j int) int {
 	i := j
