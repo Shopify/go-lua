@@ -179,8 +179,8 @@ var stringLibrary = []RegistryFunction{
 		l.PushString(formatHelper(l, CheckString(l, 1), l.Top()))
 		return 1
 	}},
-	// {"gmatch", ...},
-	// {"gsub", ...},
+	{"gmatch", func(l *State) int { return 0 }}, // TODO
+	{"gsub", func(l *State) int { return 0 }},   // TODO
 	{"len", func(l *State) int { l.PushInteger(len(CheckString(l, 1))); return 1 }},
 	{"lower", func(l *State) int { l.PushString(strings.ToLower(CheckString(l, 1))); return 1 }},
 	// {"match", ...},
