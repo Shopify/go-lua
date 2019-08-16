@@ -183,7 +183,7 @@ var stringLibrary = []RegistryFunction{
 	{"gsub", func(l *State) int { return 0 }},   // TODO
 	{"len", func(l *State) int { l.PushInteger(len(CheckString(l, 1))); return 1 }},
 	{"lower", func(l *State) int { l.PushString(strings.ToLower(CheckString(l, 1))); return 1 }},
-	// {"match", ...},
+	{"match", func(l *State) int { return 0 }}, // TODO
 	{"rep", func(l *State) int {
 		s, n, sep := CheckString(l, 1), CheckInteger(l, 2), OptString(l, 3, "")
 		if n <= 0 {
