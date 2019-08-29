@@ -115,5 +115,9 @@ func MathOpen(l *State) int {
 	l.SetField(-2, "pi")
 	l.PushNumber(math.MaxFloat64)
 	l.SetField(-2, "huge")
+	l.PushNumber(math.MaxInt64)
+	l.SetField(-2, "maxinteger")
+	l.PushNumber(math.MinInt64)
+	l.SetField(-2, "mininteger")
 	return 1
 }
