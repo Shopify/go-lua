@@ -296,7 +296,7 @@ func (l *State) toString(index int) (s string, ok bool) {
 }
 
 func numberToString(f float64) string {
-	return fmt.Sprintf("%.14g", f)
+	return fmt.Sprintf("%.16g", f)
 }
 
 func toString(r value) (string, bool) {
