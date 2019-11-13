@@ -97,7 +97,7 @@ func (d *dumpState) writeString(s string) {
 	case 4:
 		d.write(uint32(size))
 	default:
-		panic(fmt.Sprintf("unsupported pointer size (%d)"))
+		panic(fmt.Sprintf("unsupported pointer size (%d)", header.PointerSize))
 	}
 	if size > 0 {
 		d.write(ba)
