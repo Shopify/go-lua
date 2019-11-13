@@ -29,7 +29,7 @@ func TestIsControl(t *testing.T) {
 	for i := 0; i < 256; i++ {
 		control := i < 0x20 || i == 0x7f
 		if lib := unicode.Is(unicode.Cc, rune(i)); control != lib {
-			t.Errorf("%x: is control? %s", i, lib)
+			t.Errorf("%x: is control? %s", i, strconv.FormatBool(lib))
 		}
 	}
 }
