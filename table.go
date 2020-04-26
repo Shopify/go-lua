@@ -155,10 +155,10 @@ var tableLibrary = []RegistryFunction{
 		l.SetTop(2)
 		h := sortHelper{l, n, hasFunction}
 		sort.Sort(h)
-		// Check result is sorted.
-		if n > 0 && h.Less(n-1, 0) {
-			Errorf(l, "invalid order function for sorting")
-		}
+		//// Check result is sorted.
+		//if n > 0 && h.Less(n-1, 0) {
+		//	Errorf(l, "invalid order function for sorting")
+		//}
 		return 0
 	}},
 }
