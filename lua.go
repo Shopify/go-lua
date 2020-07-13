@@ -560,7 +560,7 @@ func (l *State) SetTop(index int) {
 			panic("new top too large")
 		}
 		i := l.top
-		for l.top = f + 1 + index; i < l.top; i++ {
+		for l.top = f + 1 + index; i < len(l.stack); i++ {
 			l.stack[i] = nil
 		}
 	} else {
