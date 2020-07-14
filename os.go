@@ -118,14 +118,14 @@ var osLibrary = []RegistryFunction{
 		} else {
 			CheckType(l, 1, TypeTable)
 			l.SetTop(1)
-			year := field(l, "year", -1) - 1900
-			month := field(l, "month", -1) - 1
+			year := field(l, "year", -1)
+			month := field(l, "month", -1)
 			day := field(l, "day", -1)
 			hour := field(l, "hour", 12)
 			min := field(l, "min", 0)
 			sec := field(l, "sec", 0)
 			// dst := boolField(l, "isdst") // TODO how to use dst?
-			l.PushNumber(float64(time.Date(year, time.Month(month), day, hour, min, sec, 0, time.Local).Unix()))
+			l.PushNumber(float64(time.Date(year, time.Month(month), day, hour, min, sec, 0, time.UTC).Unix()))
 		}
 		return 1
 	}},
