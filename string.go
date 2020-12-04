@@ -16,6 +16,66 @@ func relativePosition(pos, length int) int {
 	return length + pos + 1
 }
 
+const specials string = "^$*+?.([%-"
+
+// static int match_class
+func matchCharacterClass(character string, characterClass string) bool {
+	switch strings.ToLower(class) {
+	case "a":
+		return unicode.IsLetter(character)
+	case "c":
+		return unicode.IsControl(character)
+	case "d":
+		return unicode.IsDigit(character)
+	case "g":
+		return unicode.IsGraph(character)
+	case "l":
+		return unicode.IsLower(character)
+	case "p":
+		return unicode.IsPunct(character)
+	case "s":
+		return unicode.IsSpace(character)
+	case "u":
+		return unicode.IsUpper(character)
+	case "w":
+		return unicode.IsLetter(character) || unicode.IsDigit(character)
+	case "x":
+		return (character >= "A" && character <= "F") || (character >= "a" && character <= "f") || (character >= "0" && character <= "9")
+	default:
+		return character == characterClass
+	}
+}
+
+func match(ms *matchState, s string, pattern string) string {
+	ms.matchDepth = ms.matchDepth - 1
+	if ms.matchDepth == 0 {
+		panic("pattern too complex")
+	}
+	for i, char := range pattern {
+		switch char {
+		case "(":
+			fmt.Println("start capture")
+		case ")":
+			fmt.Println("end capture")
+		case "$":
+			fmt.Println("end of pattern")
+		case lEsc:
+			fmt.Println("escape sequences not in the format class[*+?-]?")
+			switch s[i+1] {
+			case "b":
+				fmt.Println("balanced string?")
+			case "f":
+				fmt.Println("frontier?")
+			case "0", "1", "2", "3", "4", "5", "6", "7", "8", "9":
+				fmt.Println("capture results 0-9")
+			}
+		default:
+			fmt.Println("default behaviour")
+		}
+	}
+}
+
+// str_find_aux
 func findHelper(l *State, isFind bool) int {
 	s, p := CheckString(l, 1), CheckString(l, 2)
 	init := relativePosition(OptInteger(l, 3, 1), len(s))
@@ -26,14 +86,23 @@ func findHelper(l *State, isFind bool) int {
 		return 1
 	}
 	isPlain := l.TypeOf(4) == TypeNone || l.ToBoolean(4)
-	if isFind && (isPlain || !strings.ContainsAny(p, "^$*+?.([%-")) {
+	if isFind && (isPlain || !strings.ContainsAny(p, specials)) {
 		if start := strings.Index(s[init-1:], p); start >= 0 {
 			l.PushInteger(start + init)
 			l.PushInteger(start + init + len(p) - 1)
 			return 2
 		}
 	} else {
-		l.assert(false) // TODO implement pattern matching
+		patternLength := len(p)
+		stringLength := len(s)
+		anchor := p[0] == "^"
+		if anchor {
+			patternLength := patternLength - 1
+			s := s[1:]
+		}
+		ms := newMatchState()
+		ms.l = l
+		ms.srcInit = s
 	}
 	l.PushNil()
 	return 1
@@ -243,4 +312,52 @@ func StringOpen(l *State) int {
 	l.SetField(-2, "__index")
 	l.Pop(1)
 	return 1
+}
+
+// Pattern Matching
+type capture struct {
+	init int
+	len  int
+}
+
+type matchState struct {
+	matchDepth int
+	src        string
+	srcInit    int
+	srcEnd     int
+	pattern    string
+	pEnd       string
+	luaState   *State
+	level      int
+	captures   *[]capture
+}
+
+// static void push_onecapture
+func (ms *matchState) pushOneCapture(i int, s string, e int) {
+	if i >= ms.level {
+		if i == 0 {
+			ms.l.PushString(s)
+		} else {
+			Errorf(ms.l, "invalid capture index")
+		}
+	}
+}
+
+// push_captures
+func (ms *matchState) pushCaptures() {
+}
+
+func newMatchState() matchState {
+	ms := matchState{}
+	ms.matchDepth = 200
+	return ms
+}
+
+const lEsc string = `%`
+const capUnfinished int = -1
+const capPosition int = -2
+
+func strFindAux(l *State, int find) int {
+	s := CheckString(l, 1)
+	p := CheckString(l, 2)
 }
