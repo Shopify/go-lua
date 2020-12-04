@@ -1,0 +1,9 @@
+containers:
+  default:
+    docker: golang:1.15
+
+steps:
+- label: Tests
+  timeout: 5m
+  run:
+  - go test -v ./...
