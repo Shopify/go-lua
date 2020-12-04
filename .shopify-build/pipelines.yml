@@ -1,0 +1,13 @@
+containers:
+  default:
+    docker: golang:1.15
+    wordir: /app
+
+
+pipelines:
+  go-lua:
+    default_container: default
+    steps:
+      - label: "unit tests"
+        run: go test -v ./...
+        timeout: 5m
