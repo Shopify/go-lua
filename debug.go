@@ -214,6 +214,7 @@ func functionInfo(p Debug, f closure) (d Debug) {
 		d.What = "Go"
 	} else {
 		p := l.prototype
+		fmt.Printf("prototype %+v\n", p)
 		d.Source = p.source
 		if d.Source == "" {
 			d.Source = "=?"
@@ -342,7 +343,6 @@ func Info(l *State, what string, where Frame) (d Debug, ok bool) {
 	ok, hasL, hasF := true, false, false
 	d.callInfo = where
 	ci := d.callInfo
-	fmt.Printf("Where %+v\n", d.callInfo)
 
 	for _, r := range what {
 		switch r {
