@@ -231,11 +231,15 @@ func functionInfo(p Debug, f closure) (d Debug) {
 func (l *State) functionName(ci *callInfo) (name, kind string) {
 	var tm tm
 	p := l.prototype(ci)
+	fmt.Printf("xx %+v\n", p)
 	if p == nil {
 		return
 	}
 	pc := ci.savedPC
-	switch i := p.code[pc]; i.opCode() {
+	fmt.Printf("xx1 %+v\n", pc)
+	i := p.code[pc]
+	fmt.Printf("xx2 %+v\n", i.opCode())
+	switch i.opCode() {
 	case opCall, opTailCall:
 		return p.objectName(i.a(), pc)
 	case opTForCall:
