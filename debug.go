@@ -11,10 +11,13 @@ type Frame *callInfo
 
 func (l *State) resetHookCount() { l.hookCount = l.baseHookCount }
 func (l *State) prototype(ci *callInfo) *prototype {
+	if l.stack[ci.function] == nil {
+		return nil
+	}
 	return l.stack[ci.function].(*luaClosure).prototype
 }
 func (l *State) currentLine(ci *callInfo) int {
-	return int(l.prototype(ci).lineInfo[ci.savedPC - 1])
+	return int(l.prototype(ci).lineInfo[ci.savedPC-1])
 }
 
 func chunkID(source string) string {
@@ -228,6 +231,9 @@ func functionInfo(p Debug, f closure) (d Debug) {
 func (l *State) functionName(ci *callInfo) (name, kind string) {
 	var tm tm
 	p := l.prototype(ci)
+	if p == nil {
+		return
+	}
 	pc := ci.savedPC
 	switch i := p.code[pc]; i.opCode() {
 	case opCall, opTailCall:
@@ -335,6 +341,7 @@ func Info(l *State, what string, where Frame) (d Debug, ok bool) {
 	ok, hasL, hasF := true, false, false
 	d.callInfo = where
 	ci := d.callInfo
+	fmt.Printf("hello %+v\n", where)
 	for _, r := range what {
 		switch r {
 		case 'S':
