@@ -240,7 +240,7 @@ func (l *State) functionName(ci *callInfo) (name, kind string) {
 	i := p.code[pc]
 	fmt.Printf("xx2 %+v\n", i.opCode())
 	switch i.opCode() {
-	case opCall, opTailCall:
+	case 31, opCall, opTailCall:
 		fmt.Printf("here")
 		return p.objectName(i.a(), pc)
 	case opTForCall:
@@ -273,7 +273,7 @@ func (l *State) functionName(ci *callInfo) (name, kind string) {
 		tm = tmLT
 	case opLessOrEqual:
 		tm = tmLE
-	case 31:
+	case opConcat:
 		tm = tmConcat
 	default:
 		fmt.Printf("here3")
