@@ -342,7 +342,7 @@ func Info(l *State, what string, where Frame) (d Debug, ok bool) {
 	d.callInfo = where
 	ci := d.callInfo
 	fmt.Printf("hello %+v\n", where)
-	fmt.Printf("hello1 %+v\n", where.luaCallInfo)
+	fmt.Printf("hello1 %+v\n", where.luaCallInfo.frame)
 	for _, r := range what {
 		switch r {
 		case 'S':
