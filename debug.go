@@ -273,7 +273,7 @@ func (l *State) functionName(ci *callInfo) (name, kind string) {
 		tm = tmLT
 	case opLessOrEqual:
 		tm = tmLE
-	case opConcat:
+	case 31:
 		tm = tmConcat
 	default:
 		fmt.Printf("here3")
