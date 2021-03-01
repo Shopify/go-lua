@@ -238,7 +238,7 @@ func (l *State) functionName(ci *callInfo) (name, kind string) {
 	pc := ci.savedPC
 	fmt.Printf("xx1 %+v\n", pc)
 	i := p.code[pc]
-	fmt.Printf("xx2 %+v\n", callStatus)
+	fmt.Printf("xx2 %+v\n", ci.callStatus)
 	switch i.opCode() {
 	case opCall, opTailCall:
 		fmt.Printf("here")
