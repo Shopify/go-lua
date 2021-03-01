@@ -241,10 +241,13 @@ func (l *State) functionName(ci *callInfo) (name, kind string) {
 	fmt.Printf("xx2 %+v\n", i.opCode())
 	switch i.opCode() {
 	case opCall, opTailCall:
+		fmt.Printf("here")
 		return p.objectName(i.a(), pc)
 	case opTForCall:
+		fmt.Printf("here1")
 		return "for iterator", "for iterator"
 	case opSelf, opGetTableUp, opGetTable:
+		fmt.Printf("here2")
 		tm = tmIndex
 	case opSetTableUp, opSetTable:
 		tm = tmNewIndex
@@ -273,6 +276,7 @@ func (l *State) functionName(ci *callInfo) (name, kind string) {
 	case opConcat:
 		tm = tmConcat
 	default:
+		fmt.Printf("here3")
 		return
 	}
 	return eventNames[tm], "metamethod"
