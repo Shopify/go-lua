@@ -231,7 +231,6 @@ func functionInfo(p Debug, f closure) (d Debug) {
 func (l *State) functionName(ci *callInfo) (name, kind string) {
 	var tm tm
 	p := l.prototype(ci)
-	fmt.Printf("xx %+v\n", p)
 	if p == nil {
 		return
 	}
@@ -343,9 +342,9 @@ func Info(l *State, what string, where Frame) (d Debug, ok bool) {
 	ok, hasL, hasF := true, false, false
 	d.callInfo = where
 	ci := d.callInfo
-	fmt.Printf("l %+v\n", *l)
-	fmt.Printf("hello %+v\n", *where)
-	fmt.Printf("hello1 %+v\n", l.indexToValue(l.top-1))
+	fmt.Printf("State %+v\n", l)
+	fmt.Printf("What %+v\n", what)
+	fmt.Printf("Where %+v\n", where)
 	for _, r := range what {
 		switch r {
 		case 'S':
