@@ -236,18 +236,13 @@ func (l *State) functionName(ci *callInfo) (name, kind string) {
 		return
 	}
 	pc := ci.savedPC
-	fmt.Printf("xx1 %+v\n", pc)
 	i := p.code[pc]
-	fmt.Printf("xx2 %+v\n", ci.callStatus)
 	switch i.opCode() {
 	case opCall, opTailCall:
-		fmt.Printf("here")
 		return p.objectName(i.a(), pc)
 	case opTForCall:
-		fmt.Printf("here1")
 		return "for iterator", "for iterator"
 	case opSelf, opGetTableUp, opGetTable:
-		fmt.Printf("here2")
 		tm = tmIndex
 	case opSetTableUp, opSetTable:
 		tm = tmNewIndex
@@ -276,7 +271,6 @@ func (l *State) functionName(ci *callInfo) (name, kind string) {
 	case opConcat:
 		tm = tmConcat
 	default:
-		fmt.Printf("here3")
 		return
 	}
 	return eventNames[tm], "metamethod"
@@ -349,7 +343,8 @@ func Info(l *State, what string, where Frame) (d Debug, ok bool) {
 	ok, hasL, hasF := true, false, false
 	d.callInfo = where
 	ci := d.callInfo
-	fmt.Printf("hello %+v\n", where)
+	fmt.Printf("l %+v\n", *l)
+	fmt.Printf("hello %+v\n", *where)
 	fmt.Printf("hello1 %+v\n", l.indexToValue(l.top-1))
 	for _, r := range what {
 		switch r {
