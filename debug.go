@@ -2,7 +2,6 @@ package lua
 
 import (
 	"fmt"
-	"runtime"
 	"strings"
 )
 
@@ -343,14 +342,7 @@ func Info(l *State, what string, where Frame) (d Debug, ok bool) {
 	ok, hasL, hasF := true, false, false
 	d.callInfo = where
 	ci := d.callInfo
-	fmt.Printf("What %+v\n", what)
-	fmt.Printf("Where %+v\n", where)
-	pc, _, line, _ := runtime.Caller(1)
-	parts := strings.Split(runtime.FuncForPC(pc).Name(), ".")
-	pl := len(parts)
-	funcName := parts[pl-1]
-	fmt.Printf("funcName %+v\n", funcName)
-	fmt.Printf("line %+v\n", line)
+	fmt.Printf("Where %+v\n", d.callInfo)
 
 	for _, r := range what {
 		switch r {

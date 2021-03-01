@@ -62,7 +62,7 @@ func Traceback(l, l1 *State, message string, level int) {
 			buf += "\n\t..."
 			level = levels - levels2
 		} else {
-			d, _ := Info(l1, "Sflnt", f)
+			d, _ := Info(l1, "Slfnt", f)
 			buf += "\n\t" + d.ShortSource + ":"
 			if d.CurrentLine > 0 {
 				buf += fmt.Sprintf("%d:", d.CurrentLine)
