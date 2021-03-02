@@ -226,6 +226,9 @@ func functionInfo(p Debug, f closure) (d Debug) {
 }
 
 func (l *State) functionName(ci *callInfo) (name, kind string) {
+	if ci == &l.baseCallInfo {
+		return
+	}
 	var tm tm
 	p := l.prototype(ci)
 	pc := ci.savedPC
