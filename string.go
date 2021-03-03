@@ -79,6 +79,9 @@ func formatHelper(l *State, fs string, argCount int) string {
 				ArgumentError(l, arg, "no value")
 			}
 			f := scanFormat(l, fs[i:])
+			const uint_max = ^uint(0)
+			const int_max = int(uint_max >> 1)
+			const int_min = -int_max - 1
 			switch i += len(f) - 2; fs[i] {
 			case 'c':
 				// Ensure each character is represented by a single byte, while preserving format modifiers.
@@ -91,18 +94,16 @@ func formatHelper(l *State, fs string, argCount int) string {
 				fallthrough
 			case 'd':
 				n := CheckNumber(l, arg)
+				ArgumentCheck(l, float64(int_min) <= n && n < float64(int_max), arg, "not a number in proper range")
 				ni := int(n)
-				diff := n - float64(ni)
-				ArgumentCheck(l, -1 < diff && diff < 1, arg, "not a number in proper range")
 				fmt.Fprintf(&b, f, ni)
 			case 'u': // The fmt package doesn't support %u.
 				f = f[:len(f)-1] + "d"
 				fallthrough
 			case 'o', 'x', 'X':
 				n := CheckNumber(l, arg)
+				ArgumentCheck(l, 0 <= n && n < float64(uint_max), arg, "not a non-negative number in proper range")
 				ni := uint(n)
-				diff := n - float64(ni)
-				ArgumentCheck(l, -1 < diff && diff < 1, arg, "not a non-negative number in proper range")
 				fmt.Fprintf(&b, f, ni)
 			case 'e', 'E', 'f', 'g', 'G':
 				fmt.Fprintf(&b, f, CheckNumber(l, arg))
