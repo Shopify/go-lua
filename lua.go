@@ -1242,6 +1242,8 @@ func (l *State) protectedCall(f func(), oldTop, errorFunc int) error {
 	err := l.protect(f)
 	if err != nil {
 		l.close(oldTop)
+		// This is added to be able to log stack trace when runtime error happens
+		Traceback(l, l, "Error:", 1)
 		l.setErrorObject(err, oldTop)
 		l.callInfo, l.allowHook, l.nonYieldableCallCount = callInfo, allowHook, nonYieldableCallCount
 		// TODO l.shrinkStack()
