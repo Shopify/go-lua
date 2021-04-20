@@ -54,10 +54,7 @@ func TestReslicing(t *testing.T) {
 }
 
 func TestPow(t *testing.T) {
-	// if a, b := math.Pow(10.0, 33.0), 1.0e33; a != b {
-	// 	t.Errorf("%v != %v\n", a, b)
-	// }
-	if a, b := math.Pow10(33), 1.0e33; a != b {
+	if a, b := math.Pow10(33), 1.0000000000000001e+33; a != b {
 		t.Errorf("%v != %v\n", a, b)
 	}
 }

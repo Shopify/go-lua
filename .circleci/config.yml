@@ -3,7 +3,7 @@ jobs:
   build:
     working_directory: ~/repo
     docker:
-      - image: circleci/golang:1.8
+      - image: circleci/golang:1.16
     steps:
       - checkout
       - run: sudo apt-get install lua5.2
