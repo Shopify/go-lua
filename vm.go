@@ -1336,3 +1336,8 @@ func (l *State) executeSwitch() {
 		}
 	}
 }
+
+func init() {
+	var l State
+	_, _, _, _ = k, newFrame, expectNext, l.executeSwitch
+}

@@ -258,7 +258,7 @@ var fileHandleMethods = []RegistryFunction{
 	{"lines", func(l *State) int { toFile(l); lines(l, false); return 1 }},
 	{"read", func(l *State) int { return read(l, toFile(l), 2) }},
 	{"seek", func(l *State) int {
-		whence := []int{os.SEEK_SET, os.SEEK_CUR, os.SEEK_END}
+		whence := []int{io.SeekStart, io.SeekCurrent, io.SeekEnd}
 		f := toFile(l)
 		op := CheckOption(l, 2, "cur", []string{"set", "cur", "end"})
 		p3 := OptNumber(l, 3, 0)
@@ -321,4 +321,8 @@ func IOOpen(l *State) int {
 	registerStdFile(l, os.Stderr, "", "stderr")
 
 	return 1
+}
+
+func init() {
+	_ = readNumber
 }

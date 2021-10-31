@@ -313,7 +313,7 @@ func (l *State) preCall(function int, resultCount int) bool {
 			l.stack[function] = tm
 		}
 	}
-	panic("unreachable")
+	//panic("unreachable")
 }
 
 func (l *State) callHook(ci *callInfo) {
@@ -486,4 +486,18 @@ func (l *State) growStack(n int) {
 			l.reallocStack(newSize)
 		}
 	}
+}
+
+func init() {
+	var ci callInfo
+	ci.goCallInfo = &goCallInfo{
+		context:          0,
+		extra:            0,
+		oldErrorFunction: 0,
+		continuation:     nil,
+		oldAllowHook:     false,
+		shouldYield:      false,
+		error:            nil,
+	}
+	_ = ci.frameIndex
 }

@@ -1529,3 +1529,7 @@ func (l *State) IsNoneOrNil(index int) bool { return l.TypeOf(index) <= TypeNil 
 //
 // http://www.lua.org/manual/5.2/manual.html#lua_pushglobaltable
 func (l *State) PushGlobalTable() { l.RawGetInt(RegistryIndex, RegistryIndexGlobals) }
+
+func init() {
+	_ = callStatusError
+}

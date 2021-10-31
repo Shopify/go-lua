@@ -24,7 +24,9 @@ func testNoPanicString(t *testing.T, s string) {
 func testStringHelper(t *testing.T, s string, trace bool) {
 	l := NewState()
 	OpenLibraries(l)
-	LoadString(l, s)
+	if err := LoadString(l, s); err != nil {
+		panic(err)
+	}
 	if trace {
 		SetDebugHook(l, func(state *State, ar Debug) {
 			ci := state.callInfo
@@ -44,7 +46,9 @@ func TestProtectedCall(t *testing.T) {
 		_ = stack(state.stack[ci.base():state.top])
 		_ = ci.code[ci.savedPC].String()
 	}, MaskCount, 1)
-	LoadString(l, "assert(not pcall(bit32.band, {}))")
+	if err := LoadString(l, "assert(not pcall(bit32.band, {}))"); err != nil {
+		panic(err)
+	}
 	l.Call(0, 0)
 }
 
@@ -103,12 +107,13 @@ func TestLua(t *testing.T) {
 		l.Field(-1, "traceback")
 		traceback := l.Top()
 		// t.Logf("%#v", l.ToValue(traceback))
-		if err := LoadFile(l, filepath.Join("lua-tests", v.name+".lua"), "text"); err != nil {
-			t.Errorf("'%s' failed: %s", v.name, err.Error())
+		fn := filepath.Join("lua-tests", v.name+".lua")
+		if err := LoadFile(l, fn, "text"); err != nil {
+			t.Fatalf("'%s' failed: %s", v.name, err.Error())
 		}
 		// l.Call(0, 0)
 		if err := l.ProtectedCall(0, 0, traceback); err != nil {
-			t.Errorf("'%s' failed: %s", v.name, err.Error())
+			t.Fatalf("'%s' failed: %s", v.name, err.Error())
 		}
 	}
 }
@@ -120,11 +125,15 @@ func benchmarkSort(b *testing.B, program string) {
 		for i=1,%d do
 			a[i] = math.random()
 		end`
-	LoadString(l, fmt.Sprintf(s, b.N))
+	if err := LoadString(l, fmt.Sprintf(s, b.N)); err != nil {
+		b.Error(err.Error())
+	}
 	if err := l.ProtectedCall(0, 0, 0); err != nil {
 		b.Error(err.Error())
 	}
-	LoadString(l, program)
+	if err := LoadString(l, program); err != nil {
+		b.Error(err.Error())
+	}
 	b.ResetTimer()
 	if err := l.ProtectedCall(0, 0, 0); err != nil {
 		b.Error(err.Error())
@@ -152,7 +161,9 @@ func BenchmarkFibonnaci(b *testing.B) {
 			end
 			return n1
 		end`
-	LoadString(l, s)
+	if err := LoadString(l, s); err != nil {
+		b.Error(err.Error())
+	}
 	if err := l.ProtectedCall(0, 1, 0); err != nil {
 		b.Error(err.Error())
 	}
@@ -233,7 +244,9 @@ func TestTableUserdataEquality(t *testing.T) {
 
 	l := NewState()
 	OpenLibraries(l)
-	LoadString(l, s)
+	if err := LoadString(l, s); err != nil {
+		t.Error(err.Error())
+	}
 	if err := l.ProtectedCall(0, 1, 0); err != nil {
 		t.Error(err.Error())
 	}
@@ -253,7 +266,9 @@ func TestUserDataEqualityNil(t *testing.T) {
 
 	l := NewState()
 	OpenLibraries(l)
-	LoadString(l, s)
+	if err := LoadString(l, s); err != nil {
+		t.Error(err.Error())
+	}
 	if err := l.ProtectedCall(0, 1, 0); err != nil {
 		t.Error(err.Error())
 	}
@@ -312,8 +327,10 @@ func TestError(t *testing.T) {
 		errorHandled = true
 		return 1
 	})
-	LoadString(l, program)
-	l.ProtectedCall(0, 0, -2)
+	if err := LoadString(l, program); err != nil {
+		t.Error(err.Error())
+	}
+	_ = l.ProtectedCall(0, 0, -2)
 	if !errorHandled {
 		t.Error("error not handled")
 	}
@@ -341,8 +358,10 @@ func TestErrorf(t *testing.T) {
 		errorHandled = true
 		return 1
 	})
-	LoadString(l, program)
-	l.ProtectedCall(0, 0, -2)
+	if err := LoadString(l, program); err != nil {
+		t.Error(err.Error())
+	}
+	_ = l.ProtectedCall(0, 0, -2)
 	if !errorHandled {
 		t.Error("error not handled")
 	}
@@ -454,4 +473,8 @@ func TestLocIsCorrectOnError(t *testing.T) {
 			t.Errorf("Wrong error reported: %v", err)
 		}
 	}
+}
+
+func init() {
+	_ = traceString
 }

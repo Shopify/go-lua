@@ -61,8 +61,7 @@ func TestUndump(t *testing.T) {
 	if err != nil {
 		offset, _ := file.Seek(0, 1)
 		t.Error("unexpected error", err, "at file offset", offset)
-	}
-	if closure == nil {
+	} else if closure == nil {
 		t.Error("closure was nil")
 	}
 	p := closure.prototype

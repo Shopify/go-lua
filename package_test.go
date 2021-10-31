@@ -2,7 +2,8 @@ package lua_test
 
 import (
 	"fmt"
-	"github.com/Shopify/go-lua"
+
+	lua "github.com/Shopify/go-lua"
 )
 
 type step struct {
@@ -24,9 +25,11 @@ func Example() {
 	l.PushValue(-1)
 	l.SetGlobal("step")
 	lua.SetMetaTableNamed(l, "stepMetaTable")
-	lua.LoadString(l, `step.request_tracking_js = function ()
+	if err := lua.LoadString(l, `step.request_tracking_js = function ()
     get(config.domain..'/javascripts/shopify_stats.js')
-  end`)
+  end`); err != nil {
+		panic(err)
+	}
 	l.Call(0, 0)
 	fmt.Println(steps[0].name)
 	// Output: request_tracking_js

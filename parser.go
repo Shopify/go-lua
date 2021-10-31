@@ -164,7 +164,7 @@ func (p *parser) suffixedExpression() exprDesc {
 			return e
 		}
 	}
-	panic("unreachable")
+	//panic("unreachable")
 }
 
 func (p *parser) simpleExpression() (e exprDesc) {
@@ -681,11 +681,18 @@ func protectedParser(l *State, r io.Reader, name, chunkMode string) error {
 			closure = l.parse(b, name)
 		} else if c == Signature[0] {
 			l.checkMode(chunkMode, "binary")
-			b.UnreadByte()
-			closure, err = l.undump(b, name) // TODO handle err
+			if err = b.UnreadByte(); err != nil {
+				panic(err)
+			}
+			closure, err = l.undump(b, name)
+			if err != nil {
+				panic(err)
+			}
 		} else {
 			l.checkMode(chunkMode, "text")
-			b.UnreadByte()
+			if err := b.UnreadByte(); err != nil {
+				panic(err)
+			}
 			closure = l.parse(b, name)
 		}
 		l.assert(closure.upValueCount() == len(closure.prototype.upValues))
