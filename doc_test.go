@@ -20,3 +20,8 @@ func ExampleFunction(l *lua.State) int {
 	l.PushNumber(sum)              // Second result.
 	return 2                       // Result count.
 }
+
+func ExampleFunction() {
+	l := lua.NewState()
+	_ = exampleFunction(l)
+}

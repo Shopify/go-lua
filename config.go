@@ -18,3 +18,7 @@ const (
 )
 
 var defaultPath = "./?.lua" // TODO "${LUA_LDIR}?.lua;${LUA_LDIR}?/init.lua;./?.lua"
+
+func init() {
+	_ = internalCheck
+}

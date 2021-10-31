@@ -1152,3 +1152,7 @@ func (f *function) CloseMainFunction() *function {
 	f.assert(f.block == nil)
 	return f.previous
 }
+
+func init() {
+	_ = kinds
+}

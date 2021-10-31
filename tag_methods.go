@@ -98,3 +98,7 @@ func (l *State) callTagMethodV(f, p1, p2, p3 value) {
 	l.push(p3)
 	l.call(l.top-4, 0, l.callInfo.isLua())
 }
+
+func init() {
+	_, _ = tmGC, tmMode
+}

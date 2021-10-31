@@ -324,3 +324,7 @@ func pairAsStrings(p1, p2 value) (s1, s2 string, ok bool) {
 	s2, ok = p2.(string)
 	return
 }
+
+func init() {
+	_ = pairAsStrings
+}

@@ -267,3 +267,8 @@ var opModes []byte = []byte{
 	opmode(0, 1, opArgU, opArgN, iABC),  // opVarArg
 	opmode(0, 0, opArgU, opArgU, iAx),   // opExtraArg
 }
+
+func init() {
+	var i instruction
+	_, _, _ = i.arg, i.setBx, i.setAx
+}
