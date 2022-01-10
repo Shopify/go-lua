@@ -1,7 +1,7 @@
 name: go-lua
 
 up:
-  - go: 1.7.3
+  - go: 1.17.5
   - custom:
       name: Initializing submodules
       met?: test -f lua-tests/.git
@@ -15,9 +15,9 @@ up:
           echo "brew install lua"
           exit 1
         fi
-      meet: 'true'
+      meet: "true"
 
 commands:
   test:
-    run: go test ./...
-    desc: 'run unit tests'
+    run: go test -v -tags=!skip ./...
+    desc: "run unit tests"

@@ -313,7 +313,6 @@ func (l *State) preCall(function int, resultCount int) bool {
 			l.stack[function] = tm
 		}
 	}
-	panic("unreachable")
 }
 
 func (l *State) callHook(ci *callInfo) {
