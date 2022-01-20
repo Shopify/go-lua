@@ -3,6 +3,7 @@ package lua
 import (
 	"bytes"
 	"fmt"
+	"math"
 	"strings"
 	"unicode"
 )
@@ -91,18 +92,19 @@ func formatHelper(l *State, fs string, argCount int) string {
 				fallthrough
 			case 'd':
 				n := CheckNumber(l, arg)
+				ArgumentCheck(l, math.Floor(n) == n && -math.Pow(2, 63) <= n && n < math.Pow(2, 63), arg, "number has no integer representation")
 				ni := int(n)
-				diff := n - float64(ni)
-				ArgumentCheck(l, -1 < diff && diff < 1, arg, "not a number in proper range")
 				fmt.Fprintf(&b, f, ni)
 			case 'u': // The fmt package doesn't support %u.
 				f = f[:len(f)-1] + "d"
-				fallthrough
+				n := CheckNumber(l, arg)
+				ArgumentCheck(l, math.Floor(n) == n && 0.0 <= n && n < math.Pow(2, 64), arg, "not a non-negative number in proper range")
+				ni := uint(n)
+				fmt.Fprintf(&b, f, ni)
 			case 'o', 'x', 'X':
 				n := CheckNumber(l, arg)
+				ArgumentCheck(l, 0.0 <= n && n < math.Pow(2, 64), arg, "not a non-negative number in proper range")
 				ni := uint(n)
-				diff := n - float64(ni)
-				ArgumentCheck(l, -1 < diff && diff < 1, arg, "not a non-negative number in proper range")
 				fmt.Fprintf(&b, f, ni)
 			case 'e', 'E', 'f', 'g', 'G':
 				fmt.Fprintf(&b, f, CheckNumber(l, arg))

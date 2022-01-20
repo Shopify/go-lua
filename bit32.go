@@ -63,7 +63,7 @@ func fieldArguments(l *State, fieldIndex int) (uint, uint) {
 var bitLibrary = []RegistryFunction{
 	{"arshift", func(l *State) int {
 		r, i := CheckUnsigned(l, 1), CheckInteger(l, 2)
-		if i < 0 || 0 == (r&(1<<(bitCount-1))) {
+		if i < 0 || (r&(1<<(bitCount-1)) == 0) {
 			return shift(l, r, -i)
 		}
 

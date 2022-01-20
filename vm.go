@@ -259,7 +259,7 @@ type engine struct {
 }
 
 func (e *engine) k(field int) value {
-	if 0 != field&bitRK { // OPT: Inline isConstant(field).
+	if field&bitRK != 0 { // OPT: Inline isConstant(field).
 		return e.constants[field & ^bitRK] // OPT: Inline constantIndex(field).
 	}
 	return e.frame[field]

@@ -8,8 +8,11 @@ import (
 	"testing"
 )
 
-func testString(t *testing.T, s string)  { testStringHelper(t, s, false) }
-func traceString(t *testing.T, s string) { testStringHelper(t, s, true) }
+func testString(t *testing.T, s string) { testStringHelper(t, s, false) }
+
+// Commented out to avoid a warning relating to the method not being used. Left here since it's useful for debugging.
+//func traceString(t *testing.T, s string) { testStringHelper(t, s, true) }
+
 func testNoPanicString(t *testing.T, s string) {
 	defer func() {
 		if rc := recover(); rc != nil {

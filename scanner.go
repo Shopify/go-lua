@@ -501,7 +501,6 @@ func (s *scanner) scan() token {
 			return token{t: c}
 		}
 	}
-	panic("unreachable")
 }
 
 func (s *scanner) next() {

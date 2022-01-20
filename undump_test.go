@@ -16,7 +16,7 @@ func TestAllHeaderNoFun(t *testing.T) {
 
 func TestWrongEndian(t *testing.T) {
 	h := header
-	if 0 == h.Endianness {
+	if h.Endianness == 0 {
 		h.Endianness = 1
 	} else {
 		h.Endianness = 0
