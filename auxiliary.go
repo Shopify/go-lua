@@ -482,10 +482,13 @@ func skipComment(r *bufio.Reader) (bool, error) {
 }
 
 func LoadFile(l *State, fileName, mode string) error {
+	fmt.Println("-----LoadFile function-----")
 	var f *os.File
 	fileNameIndex := l.Top() + 1
+	fmt.Printf("fileNameIndex is %d", fileNameIndex)
 	fileError := func(what string) error {
 		fileName, _ := l.ToString(fileNameIndex)
+		fmt.Println("fileName is " + fileName)
 		l.PushFString("cannot %s %s", what, fileName[1:])
 		l.Remove(fileNameIndex)
 		return FileError

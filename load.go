@@ -87,14 +87,20 @@ func readable(filename string) bool {
 }
 
 func searchPath(l *State, name, path, sep, dirSep string) (string, error) {
+	fmt.Println("----- searchPath function -----")
 	var msg string
+	fmt.Printf("name: %s, path: %s, sep: %s, dirSep: %s", name, path, sep, dirSep)
 	if sep != "" {
 		name = strings.Replace(name, sep, dirSep, -1) // Replace sep by dirSep.
 	}
+	fmt.Println("name is now " + name)
 	path = strings.Replace(path, string(pathListSeparator), string(filepath.ListSeparator), -1)
+	fmt.Println("path is now " + name)
 	for _, template := range filepath.SplitList(path) {
+		fmt.Println("template is " + template)
 		if template != "" {
 			filename := strings.Replace(template, "?", name, -1)
+			fmt.Println("filename is " + filename)
 			if readable(filename) {
 				return filename, nil
 			}
