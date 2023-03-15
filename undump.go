@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"log"
 	"math"
 	"unsafe"
 )
@@ -145,7 +144,7 @@ func (state *loadState) readLineInfo() (lineInfo []int32, err error) {
 func (state *loadState) readDebug(p *prototype) (source string, lineInfo []int32, localVariables []localVariable, names []string, err error) {
 	var n int32
 	if source, err = state.readString(); err != nil {
-		log.Default().Printf("ReadString call from ReadDebug line 147! value: %v, err: %v", source, err)
+		fmt.Printf("ReadString call from ReadDebug line 147! value: %v, err: %v \n", source, err)
 		return
 	}
 	if lineInfo, err = state.readLineInfo(); err != nil {
@@ -160,7 +159,7 @@ func (state *loadState) readDebug(p *prototype) (source string, lineInfo []int32
 	names = make([]string, n)
 	for i := range names {
 		if names[i], err = state.readString(); err != nil {
-			log.Default().Printf("ReadString call from ReadDebug line 163! value: %v, err: %v", names[i], err)
+			fmt.Printf("ReadString call from ReadDebug line 163! value: %v, err: %v \n", names[i], err)
 			return
 		}
 	}
@@ -273,6 +272,7 @@ func init() {
 	tail := "\x19\x93\r\n\x1a\n"
 	copy(header.Tail[:], tail)
 
+	fmt.Println("blarg I'm memory!")
 	// The uintptr numeric type is implementation-specific
 	uintptrBitCount := byte(0)
 	for bits := ^uintptr(0); bits != 0; bits >>= 1 {
