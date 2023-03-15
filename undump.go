@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log"
 	"math"
 	"unsafe"
 )
@@ -144,9 +145,7 @@ func (state *loadState) readLineInfo() (lineInfo []int32, err error) {
 func (state *loadState) readDebug(p *prototype) (source string, lineInfo []int32, localVariables []localVariable, names []string, err error) {
 	var n int32
 	if source, err = state.readString(); err != nil {
-		fmt.Println("--------ReadString call from ReadDebug line 147!---------")
-		fmt.Println(source)
-		fmt.Println("--------ReadString call from ReadDebug line 149!---------")
+		log.Default().Printf("ReadString call from ReadDebug line 147! value: %v, err: %v", source, err)
 		return
 	}
 	if lineInfo, err = state.readLineInfo(); err != nil {
@@ -161,9 +160,7 @@ func (state *loadState) readDebug(p *prototype) (source string, lineInfo []int32
 	names = make([]string, n)
 	for i := range names {
 		if names[i], err = state.readString(); err != nil {
-			fmt.Println("--------ReadString call from ReadDebug Begin line 164!---------")
-			fmt.Println(names[i])
-			fmt.Println("--------ReadString call from ReadDebug End line 166!---------")
+			log.Default().Printf("ReadString call from ReadDebug line 163! value: %v, err: %v", names[i], err)
 			return
 		}
 	}
