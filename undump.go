@@ -307,7 +307,7 @@ func (state *loadState) checkHeader() error {
 }
 
 func (l *State) undump(in io.Reader, name string) (c *luaClosure, err error) {
-	fmt.Printf("blarg I'm undump! name: %v", name)
+	fmt.Printf("I'm undump and I've got this name: %v \n", name)
 	if name[0] == '@' || name[0] == '=' {
 		name = name[1:]
 	} else if name[0] == Signature[0] {
