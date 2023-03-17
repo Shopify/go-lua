@@ -677,17 +677,17 @@ func protectedParser(l *State, r io.Reader, name, chunkMode string) error {
 		b := bufio.NewReader(r)
 		if c, err := b.ReadByte(); err != nil {
 			l.checkMode(chunkMode, "text")
-			fmt.Printf("This thing is text! %v\n", name)
+			fmt.Printf("This thing is text! name: %v, byte: %v \n", name, c)
 			closure = l.parse(b, name)
 		} else if c == Signature[0] {
 			l.checkMode(chunkMode, "binary")
 			b.UnreadByte()
-			fmt.Printf("This thing is binary! %v\n", name)
+			fmt.Printf("This thing is binary! name: %v, byte: %v \n", name, c)
 			closure, _ = l.undump(b, name) // TODO handle err
 		} else {
 			l.checkMode(chunkMode, "text")
 			b.UnreadByte()
-			fmt.Printf("This thing is text (else)! %v\n", name)
+			fmt.Printf("This thing is text (else)! name: %v, byte: %v \n", name, c)
 			closure = l.parse(b, name)
 		}
 		l.assert(closure.upValueCount() == len(closure.prototype.upValues))
