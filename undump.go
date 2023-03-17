@@ -273,7 +273,6 @@ func init() {
 	tail := "\x19\x93\r\n\x1a\n"
 	copy(header.Tail[:], tail)
 
-	fmt.Println("blarg I'm memory!")
 	// The uintptr numeric type is implementation-specific
 	uintptrBitCount := byte(0)
 	for bits := ^uintptr(0); bits != 0; bits >>= 1 {
