@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"math"
+	"time"
 	"unsafe"
 )
 
@@ -307,7 +308,8 @@ func (state *loadState) checkHeader() error {
 }
 
 func (l *State) undump(in io.Reader, name string) (c *luaClosure, err error) {
-	fmt.Printf("I'm undump and I've got this name: %v \n", name)
+	fmt.Printf("Undumping lua module: %v \n", name)
+	start := time.Now()
 	if name[0] == '@' || name[0] == '=' {
 		name = name[1:]
 	} else if name[0] == Signature[0] {
@@ -323,5 +325,8 @@ func (l *State) undump(in io.Reader, name string) (c *luaClosure, err error) {
 	}
 	c = l.newLuaClosure(&p)
 	l.push(c)
+
+	fmt.Printf("undumped lua module: %v load_time_ms=%v\n", name, time.Since(start).Milliseconds())
+
 	return
 }
