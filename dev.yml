@@ -1,7 +1,7 @@
 name: go-lua
 
 up:
-  - go: 1.19.1
+  - go: 1.22.1
   - custom:
       name: Initializing submodules
       met?: test -f lua-tests/.git
