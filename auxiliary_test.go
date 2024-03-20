@@ -1,6 +1,9 @@
 package lua
 
-import "testing"
+import (
+	"errors"
+	"testing"
+)
 
 func TestLoadFileSyntaxError(t *testing.T) {
 	l := NewState()
@@ -35,5 +38,16 @@ func TestLoadStringSyntaxError(t *testing.T) {
 	estr, _ := l.ToString(-1)
 	if estr != "[string \"this_is_a_syntax_error\"]:1: syntax error near <eof>" {
 		t.Error("didn't push the correct error string")
+	}
+
+}
+
+func TestLoadFileRuntimeError(t *testing.T) {
+	l := NewState()
+	err := LoadFile(l, "fixtures/runtime_error.lua", "")
+
+	target := RuntimeError("")
+	if errors.As(err, &target) != true {
+		t.Error("didn't return RuntimeError on file with runtime error")
 	}
 }
