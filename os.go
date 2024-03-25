@@ -1,7 +1,6 @@
 package lua
 
 import (
-	"io/ioutil"
 	"os"
 	"os/exec"
 	"syscall"
@@ -130,7 +129,7 @@ var osLibrary = []RegistryFunction{
 		return 1
 	}},
 	{"tmpname", func(l *State) int {
-		f, err := ioutil.TempFile("", "lua_")
+		f, err := os.CreateTemp("", "lua_")
 		if err != nil {
 			Errorf(l, "unable to generate a unique filename")
 		}
