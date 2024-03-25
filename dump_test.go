@@ -2,7 +2,7 @@ package lua
 
 import (
 	"bytes"
-	"io/ioutil"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -45,11 +45,11 @@ func TestUndumpThenDumpReturnsTheSameFunction(t *testing.T) {
 		t.Error("unexpected error", err, "with testing dump")
 	}
 
-	expectedBinary, err := ioutil.ReadFile(binary)
+	expectedBinary, err := os.ReadFile(binary)
 	if err != nil {
 		t.Error("error reading file", err)
 	}
-	actualBinary, err := ioutil.ReadAll(&out)
+	actualBinary, err := io.ReadAll(&out)
 	if err != nil {
 		t.Error("error reading out bugger", err)
 	}
