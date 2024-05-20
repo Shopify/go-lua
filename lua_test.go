@@ -1,23 +1,25 @@
-package lua
+package lua_test
 
 import (
 	"fmt"
 	"testing"
+
+	"github.com/Shopify/go-lua"
 )
 
 func TestPushFStringPointer(t *testing.T) {
-	l := NewState()
+	l := lua.NewState()
 	l.PushFString("%p %s", l, "test")
 
 	expected := fmt.Sprintf("%p %s", l, "test")
-	actual := CheckString(l, -1)
+	actual := lua.CheckString(l, -1)
 	if expected != actual {
 		t.Errorf("PushFString, expected \"%s\" but found \"%s\"", expected, actual)
 	}
 }
 
 func TestToBooleanOutOfRange(t *testing.T) {
-	l := NewState()
+	l := lua.NewState()
 	l.SetTop(0)
 	l.PushBoolean(false)
 	l.PushBoolean(true)
