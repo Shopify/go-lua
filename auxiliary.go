@@ -492,7 +492,7 @@ func LoadFile(l *State, fileName, mode string) error {
 	}
 	if fileName == "" {
 		l.PushString("=stdin")
-		f = os.Stdin
+		f = l.stdin
 	} else {
 		l.PushString("@" + fileName)
 		var err error
@@ -509,7 +509,7 @@ func LoadFile(l *State, fileName, mode string) error {
 	}
 	s, _ := l.ToString(-1)
 	err := l.Load(r, s, mode)
-	if f != os.Stdin {
+	if f != l.stdin {
 		_ = f.Close()
 	}
 	switch err {
@@ -538,7 +538,7 @@ func NewStateEx() *State {
 	if l != nil {
 		_ = AtPanic(l, func(l *State) int {
 			s, _ := l.ToString(-1)
-			fmt.Fprintf(os.Stderr, "PANIC: unprotected error in call to Lua API (%s)\n", s)
+			fmt.Fprintf(l.stderr, "PANIC: unprotected error in call to Lua API (%s)\n", s)
 			return 0
 		})
 	}
