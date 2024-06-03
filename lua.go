@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"math"
+	"os"
 	"strings"
 )
 
@@ -239,6 +240,7 @@ type State struct {
 	errorFunction         int      // current error handling function (stack index)
 	baseCallInfo          callInfo // callInfo for first level (go calling lua)
 	protectFunction       func()
+	stdout, stderr, stdin *os.File
 }
 
 type globalState struct {
@@ -455,7 +457,8 @@ func (l *State) Dump(w io.Writer) error {
 // http://www.lua.org/manual/5.2/manual.html#lua_newstate
 func NewState() *State {
 	v := float64(VersionNumber)
-	l := &State{allowHook: true, error: nil, nonYieldableCallCount: 1}
+	l := &State{allowHook: true, error: nil, nonYieldableCallCount: 1,
+		stdout: os.Stdout, stderr: os.Stderr, stdin: os.Stdin}
 	g := &globalState{mainThread: l, registry: newTable(), version: &v, memoryErrorMessage: "not enough memory"}
 	l.global = g
 	l.initializeStack()
@@ -1529,3 +1532,12 @@ func (l *State) IsNoneOrNil(index int) bool { return l.TypeOf(index) <= TypeNil 
 //
 // http://www.lua.org/manual/5.2/manual.html#lua_pushglobaltable
 func (l *State) PushGlobalTable() { l.RawGetInt(RegistryIndex, RegistryIndexGlobals) }
+
+// SetStdout redirects interpreter stdout to the given *os.File
+func (l *State) SetStdout(stdout *os.File) { l.stdout = stdout }
+
+// SetStderr redirects interpreter stderr to the given *os.File
+func (l *State) SetStderr(stderr *os.File) { l.stderr = stderr }
+
+// SetStdin redirects interpreter stdin from the given *os.File
+func (l *State) SetStdin(stdin *os.File) { l.stdin = stdin }

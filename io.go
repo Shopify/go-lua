@@ -316,9 +316,9 @@ func IOOpen(l *State) int {
 	SetFunctions(l, fileHandleMethods, 0)
 	l.Pop(1)
 
-	registerStdFile(l, os.Stdin, input, "stdin")
-	registerStdFile(l, os.Stdout, output, "stdout")
-	registerStdFile(l, os.Stderr, "", "stderr")
+	registerStdFile(l, l.stdin, input, "stdin")
+	registerStdFile(l, l.stdout, output, "stdout")
+	registerStdFile(l, l.stderr, "", "stderr")
 
 	return 1
 }
