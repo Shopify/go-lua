@@ -1,9 +1,11 @@
 package lua
 
 import (
+	"fmt"
 	"io/ioutil"
 	"os"
 	"os/exec"
+	"strings"
 	"syscall"
 	"time"
 )
@@ -21,9 +23,142 @@ func field(l *State, key string, def int) int {
 	return r
 }
 
+func setfield(l *State, key string, value int) {
+	l.PushInteger(value)
+	l.SetField(-2, key)
+}
+
+func setboolfield(l *State, key string, value bool) {
+	l.PushBoolean(value)
+	l.SetField(-2, key)
+}
+
+func setallfields(l *State, stm time.Time) {
+	setfield(l, "sec", stm.Second())
+	setfield(l, "min", stm.Minute())
+	setfield(l, "hour", stm.Hour())
+	setfield(l, "day", stm.Day())
+	setfield(l, "month", int(stm.Month()))
+	setfield(l, "year", stm.Year())
+	setfield(l, "wday", int(stm.Weekday())+1)
+	setfield(l, "yday", stm.YearDay())
+	//setboolfield(l, "isdst", false) // FIXME can't found daylight saving in golang
+}
+
 var osLibrary = []RegistryFunction{
 	{"clock", clock},
-	// {"date", os_date},
+	{"date", func(l *State) int { //os_date
+		timestamp := OptInteger(l, 2, int(time.Now().Unix()))
+		now := time.Unix(int64(timestamp), 0)
+		var stm time.Time
+		c := OptString(l, 1, "%c")
+		if c[0] == '!' { /*  UTC? */
+			stm = now.UTC()
+			c = c[1:]
+		} else {
+			stm = now.Local()
+		}
+		if c == "*t" {
+			l.CreateTable(0, 9)
+			setallfields(l, stm)
+			return 1
+		} else {
+			strftime := func(t *time.Time, f string) string {
+				var result []string
+				format := []rune(f)
+				add := func(str string) {
+					result = append(result, str)
+				}
+				weekNumber := func(t *time.Time, char int) int {
+					weekday := int(t.Weekday())
+					if char == 'W' {
+						// Monday as the first day of the week
+						if weekday == 0 {
+							weekday = 6
+						} else {
+							weekday -= 1
+						}
+					}
+					return (t.YearDay() + 6 - weekday) / 7
+				}
+				for i := 0; i < len(format); i++ {
+					switch format[i] {
+					case '%':
+						if i < len(format)-1 {
+							switch format[i+1] {
+							case 'a':
+								add(string(t.Weekday())[:3])
+							case 'A':
+								add(string(t.Weekday()))
+							case 'w':
+								add(fmt.Sprintf("%d", t.Weekday()))
+							case 'd':
+								add(fmt.Sprintf("%02d", t.Day()))
+							case 'b':
+								add(string(t.Month())[:3])
+							case 'B':
+								add(string(t.Month()))
+							case 'm':
+								add(fmt.Sprintf("%02d", t.Month()))
+							case 'y':
+								add(fmt.Sprintf("%02d", t.Year()%100))
+							case 'Y':
+								add(fmt.Sprintf("%02d", t.Year()))
+							case 'H':
+								add(fmt.Sprintf("%02d", t.Hour()))
+							case 'I':
+								if t.Hour() == 0 {
+									add(fmt.Sprintf("%02d", 12))
+								} else if t.Hour() > 12 {
+									add(fmt.Sprintf("%02d", t.Hour()-12))
+								} else {
+									add(fmt.Sprintf("%02d", t.Hour()))
+								}
+							case 'p':
+								if t.Hour() < 12 {
+									add("AM")
+								} else {
+									add("PM")
+								}
+							case 'M':
+								add(fmt.Sprintf("%02d", t.Minute()))
+							case 'S':
+								add(fmt.Sprintf("%02d", t.Second()))
+							case 'f':
+								add(fmt.Sprintf("%06d", t.Nanosecond()/1000))
+							case 'z':
+								add(t.Format("-0700"))
+							case 'Z':
+								add(t.Format("MST"))
+							case 'j':
+								add(fmt.Sprintf("%03d", t.YearDay()))
+							case 'U':
+								add(fmt.Sprintf("%02d", weekNumber(t, 'U')))
+							case 'W':
+								add(fmt.Sprintf("%02d", weekNumber(t, 'W')))
+							case 'c':
+								add(t.Format("Mon Jan 2 15:04:05 2006"))
+							case 'x':
+								add(fmt.Sprintf("%02d/%02d/%02d", t.Month(), t.Day(), t.Year()%100))
+							case 'X':
+								add(fmt.Sprintf("%02d:%02d:%02d", t.Hour(), t.Minute(), t.Second()))
+							case '%':
+								add("%")
+							}
+							i += 1
+						}
+					default:
+						add(string(format[i]))
+					}
+				}
+				return strings.Join(result, "")
+			}
+			result := strftime(&stm, c)
+			l.PushString(result)
+			return 1
+		}
+		return 0
+	}},
 	{"difftime", func(l *State) int {
 		l.PushNumber(time.Unix(int64(CheckNumber(l, 1)), 0).Sub(time.Unix(int64(OptNumber(l, 2, 0)), 0)).Seconds())
 		return 1
