@@ -1,5 +1,5 @@
-[![Build Status](https://circleci.com/gh/Shopify/go-lua.png?circle-token=997f951c602c0c63a263eba92975428a49ee4c2e)](https://circleci.com/gh/Shopify/go-lua)
-[![GoDoc](https://godoc.org/github.com/Shopify/go-lua?status.png)](https://godoc.org/github.com/Shopify/go-lua)
+[![Build Status](https://circleci.com/gh/Shopify/go-lua.svg?circle-token=997f951c602c0c63a263eba92975428a49ee4c2e)](https://circleci.com/gh/Shopify/go-lua)
+[![GoDoc](https://godoc.org/github.com/Shopify/go-lua?status.svg)](https://godoc.org/github.com/Shopify/go-lua)
 
 A Lua VM in pure Go
 ===================
