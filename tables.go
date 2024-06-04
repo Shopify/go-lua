@@ -212,19 +212,19 @@ func (t *table) length() int {
 	return t.unboundSearch(j)
 }
 
-func arrayIndex(k value) int {
-	if n, ok := k.(float64); ok {
-		if i := int(n); float64(i) == n {
-			return i
-		}
-	}
-	return -1
+func (l *State) arrayIndex(k value) int {
+        if n, ok := l.toNumber(k); ok {
+                if i := int(n); float64(i) == n {
+                        return i
+                }
+        }
+        return -1
 }
 
 func (l *State) next(t *table, key int) bool {
 	i, k := 0, l.stack[key]
 	if k == nil { // first iteration
-	} else if i = arrayIndex(k); 0 < i && i <= len(t.array) {
+	} else if i = l.arrayIndex(k); 0 < i && i <= len(t.array) {
 		k = nil
 	} else if _, ok := t.hash[k]; !ok {
 		l.runtimeError("invalid key to 'next'") // key not found
