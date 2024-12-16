@@ -86,12 +86,14 @@ func protectedTestParser(l *State, t *testing.T, source string) {
 }
 
 func expectEqual(t *testing.T, x, y interface{}, m string) {
+	t.Helper()
 	if x != y {
 		t.Errorf("%s doesn't match: %v, %v\n", m, x, y)
 	}
 }
 
 func expectDeepEqual(t *testing.T, x, y interface{}, m string) bool {
+	t.Helper()
 	if reflect.DeepEqual(x, y) {
 		return true
 	}
