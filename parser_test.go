@@ -1,6 +1,7 @@
 package lua
 
 import (
+	"math"
 	"os/exec"
 	"path/filepath"
 	"reflect"
@@ -100,8 +101,32 @@ func expectDeepEqual(t *testing.T, x, y interface{}, m string) bool {
 	if reflect.TypeOf(x).Kind() == reflect.Slice && reflect.ValueOf(y).Len() == 0 && reflect.ValueOf(x).Len() == 0 {
 		return true
 	}
+	// The following exception is necessary because Go stdlib math
+	// functions may be less precise than the C equivalents. In
+	// particular constants[153] in lua-tests/attrib.lua:360
+	// which is the result of "10^33" gives different results. See
+	// https://github.com/golang/go/issues/25270 for discussion.
+	if m == "constants" {
+		xc, yc := x.([]value), y.([]value)
+		if len(xc) != len(yc) {
+			return false
+		}
+		for i := range xc {
+			if fx, ok := xc[i].(float64); ok {
+				fy, ok2 := yc[i].(float64)
+				if !ok2 || !similarFloat64(fx, fy) {
+					return false
+				}
+			}
+		}
+		return true
+	}
 	t.Errorf("%s doesn't match: %v, %v\n", m, x, y)
 	return false
+}
+
+func similarFloat64(x, y float64) bool {
+	return x == y || math.Nextafter(x, y) == y
 }
 
 func compareClosures(t *testing.T, a, b *luaClosure) {
