@@ -11,7 +11,7 @@ import (
 )
 
 func TestUndumpThenDumpReturnsTheSameFunction(t *testing.T) {
-	_, err := exec.LookPath("luac")
+	_, err := exec.LookPath("luac5.2")
 	if err != nil {
 		t.Skipf("testing dump requires luac: %s", err)
 	}

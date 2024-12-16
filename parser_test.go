@@ -46,9 +46,9 @@ func TestEmptyString(t *testing.T) {
 }
 
 func TestParserExhaustively(t *testing.T) {
-	_, err := exec.LookPath("luac")
+	_, err := exec.LookPath("luac5.2")
 	if err != nil {
-		t.Skipf("exhaustively testing the parser requires luac: %s", err)
+		t.Skipf("exhaustively testing the parser requires luac5.2: %s", err)
 	}
 	l := NewState()
 	matches, err := filepath.Glob(filepath.Join("lua-tests", "*.lua"))
@@ -73,8 +73,8 @@ func protectedTestParser(l *State, t *testing.T, source string) {
 	}()
 	t.Log("Compiling " + source)
 	binary := strings.TrimSuffix(source, ".lua") + ".bin"
-	if err := exec.Command("luac", "-o", binary, source).Run(); err != nil {
-		t.Fatalf("luac failed to compile %s: %s", source, err)
+	if err := exec.Command("luac5.2", "-o", binary, source).Run(); err != nil {
+		t.Fatalf("luac5.2 failed to compile %s: %s", source, err)
 	}
 	t.Log("Parsing " + source)
 	bin := load(l, t, binary)
