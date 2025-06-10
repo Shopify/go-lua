@@ -2,7 +2,6 @@ package lua
 
 import (
 	"io"
-	"os"
 	"runtime"
 	"strconv"
 	"strings"
@@ -215,13 +214,13 @@ var baseLibrary = []RegistryFunction{
 				panic("unreachable")
 			}
 			if i > 1 {
-				os.Stdout.WriteString("\t")
+				l.writeToStdout("\t")
 			}
-			os.Stdout.WriteString(s)
+			l.writeToStdout(s)
 			l.Pop(1) // pop result
 		}
-		os.Stdout.WriteString("\n")
-		os.Stdout.Sync()
+		l.writeToStdout("\n")
+		l.stdout.Sync()
 		return 0
 	}},
 	{"rawequal", func(l *State) int {
@@ -327,4 +326,12 @@ func BaseOpen(l *State) int {
 	l.PushString(VersionString)
 	l.SetField(-2, "_VERSION")
 	return 1
+}
+
+func (l *State) writeToStdout(s string) {
+	_, err := l.stdout.WriteString(s)
+	if err != nil {
+		Errorf(l, "failed writing to stdout: %v", err)
+		panic("unreachable")
+	}
 }
