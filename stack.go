@@ -1,6 +1,9 @@
 package lua
 
-import "log"
+import (
+	"fmt"
+	"log"
+)
 
 func (l *State) push(v value) {
 	l.stack[l.top] = v
@@ -406,7 +409,10 @@ func (l *State) protect(f func()) (err error) {
 	nestedGoCallCount, protectFunction := l.nestedGoCallCount, l.protectFunction
 	l.protectFunction = func() {
 		if e := recover(); e != nil {
-			err = e.(error)
+			var ok bool
+			if err, ok = e.(error); !ok {
+				err = fmt.Errorf("%v", e)
+			}
 			l.nestedGoCallCount, l.protectFunction = nestedGoCallCount, protectFunction
 		}
 	}
