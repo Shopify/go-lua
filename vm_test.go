@@ -351,6 +351,15 @@ func TestErrorf(t *testing.T) {
 	}
 }
 
+func TestPanicWithString(t *testing.T) {
+	l := NewState()
+	OpenLibraries(l)
+	LoadString(l, "debug.gethook()")
+	if err := l.ProtectedCall(0, 0, 0); err == nil {
+		t.Fatal("expected an error, got none")
+	}
+}
+
 func TestPairsSplit(t *testing.T) {
 	testString(t, `
 	local t = {}
