@@ -183,6 +183,11 @@ func (l *State) pushLuaFrame(function, base, resultCount int, p *prototype) *cal
 	ci.resultCount = resultCount
 	ci.callStatus = callStatusLua
 	ci.frame = l.stack[base:ci.top]
+	first := base + p.parameterCount
+	if l.top > first {
+		first = l.top
+	}
+	clear(l.stack[first:ci.top])
 	l.callInfo = ci
 	l.top = ci.top
 	return ci

@@ -8,6 +8,8 @@ import (
 	"testing"
 )
 
+const functionPrefixSize = 11
+
 func chunkPrefix(t *testing.T, parameterCount, maxStackSize byte) *bytes.Buffer {
 	t.Helper()
 	b := new(bytes.Buffer)
@@ -35,6 +37,20 @@ func undumpChunk(t *testing.T, b *bytes.Buffer) error {
 	_, err := NewState().undump(bytes.NewReader(b.Bytes()), "crafted")
 	return err
 }
+
+func dumpedChunk(t *testing.T, source string) []byte {
+	t.Helper()
+	l := NewState()
+	if err := LoadString(l, source); err != nil {
+		t.Fatal(err)
+	}
+	var out bytes.Buffer
+	if err := l.Dump(&out); err != nil {
+		t.Fatal(err)
+	}
+	return out.Bytes()
+}
+
 func TestUndumpBoundsHugeCodeCount(t *testing.T) {
 	b := chunkPrefix(t, 0, 2)
 	writeInts(t, b, 0x7fffffff)
@@ -126,6 +142,31 @@ func TestLoadReportsUndumpErrorAsSyntaxError(t *testing.T) {
 	writeInts(t, b, 0x7fffffff)
 	if err := LoadBuffer(NewState(), b.String(), "crafted", "b"); err != SyntaxError {
 		t.Errorf("expected SyntaxError for a truncated binary chunk, got %v", err)
+	}
+}
+
+func TestCraftedReturnDoesNotExposePoppedHostValues(t *testing.T) {
+	const secret = "SECRET"
+	chunk := dumpedChunk(t, "return 1")
+	at := binary.Size(header) + functionPrefixSize + 4
+	endianness().PutUint32(chunk[at:at+4], uint32(createABC(opReturn, 0, 2, 0)))
+
+	l := NewState()
+	l.PushString("filler")
+	l.PushString(secret)
+	l.Pop(2)
+
+	if err := l.Load(bytes.NewReader(chunk), "crafted", ""); err != nil {
+		return
+	}
+	if err := l.ProtectedCall(0, 1, 0); err != nil {
+		return
+	}
+	if s, ok := l.ToString(-1); ok && s == secret {
+		t.Fatalf("crafted chunk returned the popped host value %q", s)
+	}
+	if !l.IsNil(-1) {
+		t.Errorf("expected an unwritten register to read as nil, got %v", l.TypeOf(-1))
 	}
 }
 
