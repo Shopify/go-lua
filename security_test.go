@@ -197,6 +197,40 @@ func TestDebugSetHookThenGetHook(t *testing.T) {
 	}
 }
 
+func TestDebugSetHookArgumentFormsDoNotEscapeProtectedCall(t *testing.T) {
+	for _, source := range []string{
+		"debug.sethook()",
+		"debug.sethook(nil)",
+		`debug.sethook(function() end, "")`,
+		`debug.sethook(function() end, "", 1)`,
+		`debug.sethook(function() end, "c", 0)`,
+		`debug.sethook(function() end, "lcr", 5)`,
+	} {
+		l := NewState()
+		Require(l, "debug", DebugOpen, true)
+		l.Pop(1)
+		if err := DoString(l, source); err != nil {
+			t.Errorf("%s returned %v", source, err)
+		}
+	}
+}
+
+func TestDebugSetHookCountHookFires(t *testing.T) {
+	l := NewState()
+	OpenLibraries(l)
+	if err := DoString(l, `
+		local calls = 0
+		debug.sethook(function() calls = calls + 1 end, "", 1)
+		local x = 0
+		for i = 1, 50 do x = x + i end
+		debug.sethook()
+		assert(x == 1275, "loop computed " .. tostring(x))
+		assert(calls > 0, "the count hook never fired")
+	`); err != nil {
+		t.Fatalf("count hook: %v", err)
+	}
+}
+
 func TestProtectedCallContainsNonErrorPanic(t *testing.T) {
 	l := NewState()
 	l.PushGoFunction(func(*State) int { panic("boom") })
