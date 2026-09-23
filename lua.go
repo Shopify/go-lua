@@ -421,6 +421,13 @@ func (l *State) ProtectedCallWithContinuation(argCount, resultCount, errorFuncti
 // pushes the compiled chunk as a Lua function on top of the stack.
 // Otherwise, it pushes an error message.
 //
+// The mode controls which kinds of chunk are accepted: "t" permits only text
+// chunks, "b" only binary chunks, and "" (or any other value) permits both.
+// Binary chunks are checked for structural consistency but are not verified
+// instruction by instruction, so a crafted chunk can still make a Lua
+// function misbehave within its own state. Load binary chunks only from a
+// trusted source, and pass "t" for input you do not control.
+//
 // http://www.lua.org/manual/5.2/manual.html#lua_load
 func (l *State) Load(r io.Reader, chunkName string, mode string) error {
 	if chunkName == "" {
