@@ -547,7 +547,8 @@ func (l *State) AbsIndex(index int) int {
 
 // SetTop accepts any index, or 0, and sets the stack top to index. If the
 // new top is larger than the old one, then the new elements are filled with
-// nil. If index is 0, then all stack elements are removed.
+// nil. If index is 0, then all stack elements are removed. Removed elements
+// are cleared, so they are neither visible to Lua code nor kept alive.
 //
 // If index is negative, the stack will be decremented by that much. If
 // the decrement is larger than the stack, SetTop will panic().
@@ -567,7 +568,11 @@ func (l *State) SetTop(index int) {
 		if apiCheck && -(index+1) > l.top-(f+1) {
 			panic("invalid new top")
 		}
+		old := l.top
 		l.top += index + 1 // 'subtract' index (index is negative)
+		for i := l.top; i < old; i++ {
+			l.stack[i] = nil
+		}
 	}
 }
 
