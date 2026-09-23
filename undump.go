@@ -12,7 +12,13 @@ import (
 type loadState struct {
 	in    io.Reader
 	order binary.ByteOrder
+	depth int
 }
+
+const (
+	undumpBatchSize  = 4096
+	maxUndumpNesting = 200
+)
 
 var header struct {
 	Signature                            [4]byte
@@ -59,6 +65,20 @@ func (state *loadState) readBool() (bool, error) {
 	return b != 0, err
 }
 
+func (state *loadState) readCount() (int, error) {
+	n, err := state.readInt()
+	if err != nil {
+		return 0, err
+	} else if n < 0 {
+		return 0, errCorrupted
+	}
+	return int(n), nil
+}
+
+func initialCapacity(n int) int {
+	return min(n, undumpBatchSize)
+}
+
 func (state *loadState) readString() (s string, err error) {
 	// Feel my pain
 	maxUint := ^uint(0)
@@ -77,72 +97,98 @@ func (state *loadState) readString() (s string, err error) {
 	if err != nil || size == 0 {
 		return
 	}
-	ba := make([]byte, size)
-	if err = state.read(ba); err == nil {
-		s = string(ba[:len(ba)-1])
+	capacity := uintptr(undumpBatchSize)
+	if size < capacity {
+		capacity = size
 	}
+	ba := make([]byte, 0, capacity)
+	for uintptr(len(ba)) < size {
+		start := len(ba)
+		batch := size - uintptr(start)
+		if batch > undumpBatchSize {
+			batch = undumpBatchSize
+		}
+		ba = append(ba, make([]byte, batch)...)
+		if err = state.read(ba[start:]); err != nil {
+			return "", err
+		}
+	}
+	s = string(ba[:len(ba)-1])
 	return
 }
 
 func (state *loadState) readCode() (code []instruction, err error) {
-	n, err := state.readInt()
+	n, err := state.readCount()
 	if err != nil || n == 0 {
 		return
 	}
-	code = make([]instruction, n)
-	err = state.read(code)
+	code = make([]instruction, 0, initialCapacity(n))
+	for len(code) < n {
+		start := len(code)
+		code = append(code, make([]instruction, min(undumpBatchSize, n-start))...)
+		if err = state.read(code[start:]); err != nil {
+			return nil, err
+		}
+	}
 	return
 }
 
 func (state *loadState) readUpValues() (u []upValueDesc, err error) {
-	n, err := state.readInt()
+	n, err := state.readCount()
 	if err != nil || n == 0 {
 		return
 	}
-	v := make([]struct{ IsLocal, Index byte }, n)
-	err = state.read(v)
-	if err != nil {
-		return
-	}
-	u = make([]upValueDesc, n)
-	for i := range v {
-		u[i].isLocal, u[i].index = v[i].IsLocal != 0, int(v[i].Index)
+	u = make([]upValueDesc, 0, initialCapacity(n))
+	for i := 0; i < n; i++ {
+		var v struct{ IsLocal, Index byte }
+		if err = state.read(&v); err != nil {
+			return nil, err
+		}
+		u = append(u, upValueDesc{isLocal: v.IsLocal != 0, index: int(v.Index)})
 	}
 	return
 }
 
 func (state *loadState) readLocalVariables() (localVariables []localVariable, err error) {
-	var n int32
-	if n, err = state.readInt(); err != nil || n == 0 {
+	var n int
+	if n, err = state.readCount(); err != nil || n == 0 {
 		return
 	}
-	localVariables = make([]localVariable, n)
-	for i := range localVariables {
-		if localVariables[i].name, err = state.readString(); err != nil {
-			return
+	localVariables = make([]localVariable, 0, initialCapacity(n))
+	for i := 0; i < n; i++ {
+		var v localVariable
+		if v.name, err = state.readString(); err != nil {
+			return nil, err
 		}
-		if localVariables[i].startPC, err = state.readPC(); err != nil {
-			return
+		if v.startPC, err = state.readPC(); err != nil {
+			return nil, err
 		}
-		if localVariables[i].endPC, err = state.readPC(); err != nil {
-			return
+		if v.endPC, err = state.readPC(); err != nil {
+			return nil, err
 		}
+		localVariables = append(localVariables, v)
 	}
 	return
 }
 
 func (state *loadState) readLineInfo() (lineInfo []int32, err error) {
-	var n int32
-	if n, err = state.readInt(); err != nil || n == 0 {
+	var n int
+	if n, err = state.readCount(); err != nil || n == 0 {
 		return
 	}
-	lineInfo = make([]int32, n)
-	err = state.read(lineInfo)
+	lineInfo = make([]int32, 0, initialCapacity(n))
+	for len(lineInfo) < n {
+		start := len(lineInfo)
+		lineInfo = append(lineInfo, make([]int32, min(undumpBatchSize, n-start))...)
+		if err = state.read(lineInfo[start:]); err != nil {
+			return nil, err
+		}
+	}
 	return
 }
 
 func (state *loadState) readDebug(p *prototype) (source string, lineInfo []int32, localVariables []localVariable, names []string, err error) {
-	var n int32
+	var n int
 	if source, err = state.readString(); err != nil {
 		return
 	}
@@ -152,63 +198,76 @@ func (state *loadState) readDebug(p *prototype) (source string, lineInfo []int32
 	if localVariables, err = state.readLocalVariables(); err != nil {
 		return
 	}
-	if n, err = state.readInt(); err != nil {
+	if n, err = state.readCount(); err != nil {
+		return
+	} else if n > len(p.upValues) {
+		err = errCorrupted
 		return
 	}
-	names = make([]string, n)
-	for i := range names {
-		if names[i], err = state.readString(); err != nil {
+	names = make([]string, 0, initialCapacity(n))
+	for i := 0; i < n; i++ {
+		var name string
+		if name, err = state.readString(); err != nil {
 			return
 		}
+		names = append(names, name)
 	}
 	return
 }
 
 func (state *loadState) readConstants() (constants []value, prototypes []prototype, err error) {
-	var n int32
-	if n, err = state.readInt(); err != nil || n == 0 {
+	var n int
+	if n, err = state.readCount(); err != nil || n == 0 {
 		return
 	}
 
-	constants = make([]value, n)
-	for i := range constants {
+	constants = make([]value, 0, initialCapacity(n))
+	for i := 0; i < n; i++ {
+		var c value
 		var t byte
 		switch t, err = state.readByte(); {
 		case err != nil:
 			return
 		case t == byte(TypeNil):
-			constants[i] = nil
+			c = nil
 		case t == byte(TypeBoolean):
-			constants[i], err = state.readBool()
+			c, err = state.readBool()
 		case t == byte(TypeNumber):
-			constants[i], err = state.readNumber()
+			c, err = state.readNumber()
 		case t == byte(TypeString):
-			constants[i], err = state.readString()
+			c, err = state.readString()
 		default:
 			err = errUnknownConstantType
 		}
 		if err != nil {
 			return
 		}
+		constants = append(constants, c)
 	}
 	return
 }
 
 func (state *loadState) readPrototypes() (prototypes []prototype, err error) {
-	var n int32
-	if n, err = state.readInt(); err != nil || n == 0 {
+	var n int
+	if n, err = state.readCount(); err != nil || n == 0 {
 		return
 	}
-	prototypes = make([]prototype, n)
-	for i := range prototypes {
-		if prototypes[i], err = state.readFunction(); err != nil {
-			return
+	prototypes = make([]prototype, 0, initialCapacity(n))
+	for i := 0; i < n; i++ {
+		var p prototype
+		if p, err = state.readFunction(); err != nil {
+			return nil, err
 		}
+		prototypes = append(prototypes, p)
 	}
 	return
 }
 
 func (state *loadState) readFunction() (p prototype, err error) {
+	if state.depth++; state.depth > maxUndumpNesting {
+		return p, errCorrupted
+	}
+	defer func() { state.depth-- }()
 	var n int32
 	if n, err = state.readInt(); err != nil {
 		return
@@ -231,8 +290,14 @@ func (state *loadState) readFunction() (p prototype, err error) {
 		return
 	}
 	p.maxStackSize = int(b)
+	if p.maxStackSize < p.parameterCount {
+		return p, errCorrupted
+	}
 	if p.code, err = state.readCode(); err != nil {
 		return
+	}
+	if len(p.code) > 0 && p.maxStackSize == 0 {
+		return p, errCorrupted
 	}
 	if p.constants, p.prototypes, err = state.readConstants(); err != nil {
 		return
@@ -310,7 +375,7 @@ func (l *State) undump(in io.Reader, name string) (c *luaClosure, err error) {
 		name = "binary string"
 	}
 	// TODO assign name to p.source?
-	s := &loadState{in, endianness()}
+	s := &loadState{in: in, order: endianness()}
 	var p prototype
 	if err = s.checkHeader(); err != nil {
 		return

@@ -1,6 +1,9 @@
 package lua
 
-import "log"
+import (
+	"fmt"
+	"log"
+)
 
 func (l *State) push(v value) {
 	l.stack[l.top] = v
@@ -180,6 +183,11 @@ func (l *State) pushLuaFrame(function, base, resultCount int, p *prototype) *cal
 	ci.resultCount = resultCount
 	ci.callStatus = callStatusLua
 	ci.frame = l.stack[base:ci.top]
+	first := base + p.parameterCount
+	if l.top > first {
+		first = l.top
+	}
+	clear(l.stack[first:ci.top])
 	l.callInfo = ci
 	l.top = ci.top
 	return ci
@@ -358,7 +366,7 @@ func (l *State) postCall(firstResult int) bool {
 		result++
 	}
 	l.top = result
-	if l.hookMask&(MaskReturn|MaskLine) != 0 {
+	if l.hookMask&(MaskReturn|MaskLine) != 0 && l.callInfo.isLua() {
 		l.oldPC = l.callInfo.savedPC // oldPC for caller function
 	}
 	return wanted != MultipleReturns
@@ -406,7 +414,10 @@ func (l *State) protect(f func()) (err error) {
 	nestedGoCallCount, protectFunction := l.nestedGoCallCount, l.protectFunction
 	l.protectFunction = func() {
 		if e := recover(); e != nil {
-			err = e.(error)
+			var ok bool
+			if err, ok = e.(error); !ok {
+				err = fmt.Errorf("%v", e)
+			}
 			l.nestedGoCallCount, l.protectFunction = nestedGoCallCount, protectFunction
 		}
 	}

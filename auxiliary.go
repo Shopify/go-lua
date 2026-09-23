@@ -522,8 +522,16 @@ func LoadFile(l *State, fileName, mode string) error {
 	return err
 }
 
+// LoadString loads the given string as a chunk, without running it.
+//
+// The chunk may be either Lua source or a precompiled binary chunk. Binary
+// chunks are not verified instruction by instruction, so load them only from
+// a trusted source. For untrusted input, use LoadBuffer with mode "t".
 func LoadString(l *State, s string) error { return LoadBuffer(l, s, s, "") }
 
+// LoadBuffer loads the given string as a chunk named name, without running
+// it. The mode is as described for (*State).Load: "t" permits only text
+// chunks, "b" only binary chunks, and "" (or any other value) permits both.
 func LoadBuffer(l *State, b, name, mode string) error {
 	return l.Load(strings.NewReader(b), name, mode)
 }
@@ -573,6 +581,9 @@ func FileResult(l *State, err error, filename string) int {
 }
 
 // DoFile loads and runs the given file.
+//
+// The file may contain either Lua source or a precompiled binary chunk. See
+// LoadString for the trust requirement that binary chunks carry.
 func DoFile(l *State, fileName string) error {
 	if err := LoadFile(l, fileName, ""); err != nil {
 		return err
@@ -581,6 +592,9 @@ func DoFile(l *State, fileName string) error {
 }
 
 // DoString loads and runs the given string.
+//
+// The string may contain either Lua source or a precompiled binary chunk. See
+// LoadString for the trust requirement that binary chunks carry.
 func DoString(l *State, s string) error {
 	if err := LoadString(l, s); err != nil {
 		return err

@@ -421,6 +421,13 @@ func (l *State) ProtectedCallWithContinuation(argCount, resultCount, errorFuncti
 // pushes the compiled chunk as a Lua function on top of the stack.
 // Otherwise, it pushes an error message.
 //
+// The mode controls which kinds of chunk are accepted: "t" permits only text
+// chunks, "b" only binary chunks, and "" (or any other value) permits both.
+// Binary chunks are checked for structural consistency but are not verified
+// instruction by instruction, so a crafted chunk can still make a Lua
+// function misbehave within its own state. Load binary chunks only from a
+// trusted source, and pass "t" for input you do not control.
+//
 // http://www.lua.org/manual/5.2/manual.html#lua_load
 func (l *State) Load(r io.Reader, chunkName string, mode string) error {
 	if chunkName == "" {
@@ -547,7 +554,8 @@ func (l *State) AbsIndex(index int) int {
 
 // SetTop accepts any index, or 0, and sets the stack top to index. If the
 // new top is larger than the old one, then the new elements are filled with
-// nil. If index is 0, then all stack elements are removed.
+// nil. If index is 0, then all stack elements are removed. Removed elements
+// are cleared, so they are neither visible to Lua code nor kept alive.
 //
 // If index is negative, the stack will be decremented by that much. If
 // the decrement is larger than the stack, SetTop will panic().
@@ -567,7 +575,11 @@ func (l *State) SetTop(index int) {
 		if apiCheck && -(index+1) > l.top-(f+1) {
 			panic("invalid new top")
 		}
+		old := l.top
 		l.top += index + 1 // 'subtract' index (index is negative)
+		for i := l.top; i < old; i++ {
+			l.stack[i] = nil
+		}
 	}
 }
 
