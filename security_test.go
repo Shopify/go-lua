@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/binary"
 	"runtime"
+	"strings"
 	"testing"
 )
 
@@ -125,5 +126,44 @@ func TestLoadReportsUndumpErrorAsSyntaxError(t *testing.T) {
 	writeInts(t, b, 0x7fffffff)
 	if err := LoadBuffer(NewState(), b.String(), "crafted", "b"); err != SyntaxError {
 		t.Errorf("expected SyntaxError for a truncated binary chunk, got %v", err)
+	}
+}
+
+func TestDebugGetHookWithoutExternalHook(t *testing.T) {
+	l := NewState()
+	Require(l, "debug", DebugOpen, true)
+	l.Pop(1)
+	if err := DoString(l, "return debug.gethook()"); err != nil {
+		t.Fatalf("debug.gethook() on a state with no hook installed: %v", err)
+	}
+}
+
+func TestDebugSetHookThenGetHook(t *testing.T) {
+	l := NewState()
+	OpenLibraries(l)
+	if err := DoString(l, `
+		local calls = 0
+		local h = function() calls = calls + 1 end
+		debug.sethook(h, "l")
+		local got, mask = debug.gethook()
+		local x = 1
+		debug.sethook()
+		assert(got == h, "gethook did not return the installed hook")
+		assert(mask == "l", "gethook returned mask " .. tostring(mask))
+		assert(calls > 0, "the line hook never fired")
+	`); err != nil {
+		t.Fatalf("debug.sethook/gethook round trip: %v", err)
+	}
+}
+
+func TestProtectedCallContainsNonErrorPanic(t *testing.T) {
+	l := NewState()
+	l.PushGoFunction(func(*State) int { panic("boom") })
+	err := l.ProtectedCall(0, 0, 0)
+	if err == nil {
+		t.Fatal("expected an error from a Go function that panicked with a string")
+	}
+	if !strings.Contains(err.Error(), "boom") {
+		t.Errorf("expected the panic payload in the error, got %q", err.Error())
 	}
 }
