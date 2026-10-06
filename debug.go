@@ -481,9 +481,7 @@ var debugLibrary = []RegistryFunction{
 			l.PushString("external hook")
 		} else {
 			hookTable(l)
-			l1.PushThread()
-			//			XMove(l1, l, 1)
-			panic("XMove not implemented yet")
+			l.apiPush(l1)
 			l.RawGet(-2)
 			l.Remove(-2)
 		}
@@ -542,9 +540,7 @@ var debugLibrary = []RegistryFunction{
 			l.PushValue(-1)
 			l.SetMetaTable(-2)
 		}
-		l1.PushThread()
-		//	 	XMove(l1, l, 1)
-		panic("XMove not yet implemented")
+		l.apiPush(l1)
 		l.PushValue(i + 1)
 		l.RawSet(-3)
 		SetDebugHook(l1, hook, mask, count)

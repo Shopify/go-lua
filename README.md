@@ -8,6 +8,32 @@ go-lua is a port of the Lua 5.2 VM to pure Go. It is compatible with binary file
 
 The motivation is to enable simple scripting of Go applications. For example, it is used to describe flows in [Shopify's](http://www.shopify.com/) load generation tool, Genghis.
 
+Security
+--------
+
+go-lua is a VM, not a sandbox. Two boundaries are worth knowing before you run
+code you did not write:
+
+**Binary chunks are not verified.** `luac` output is checked for structural
+consistency when it is loaded, but individual instructions are not validated
+against the function's registers, constants or jump targets. A crafted binary
+chunk can therefore make a Lua function misbehave within its own state. Load
+binary chunks only from a trusted source; for untrusted input pass mode `"t"`
+so only Lua source is accepted:
+
+```go
+err := l.Load(reader, name, "t")
+```
+
+Note that `LoadString`, `LoadBuffer`, `DoString` and `DoFile` pass mode `""` by
+default, which accepts both text and binary.
+
+**The `debug` library is not safe to expose.** `OpenLibraries` opens `debug`
+along with everything else. It hands scripts access to the registry, upvalues
+and hook machinery. If you are running untrusted code, use `Require` to open
+only the libraries you need.
+
+
 Usage
 -----
 

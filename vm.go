@@ -233,9 +233,15 @@ func (l *State) traceExecution() {
 	if mask&MaskLine != 0 {
 		p := l.prototype(callInfo)
 		npc := callInfo.savedPC - 1
-		newline := p.lineInfo[npc]
-		if npc == 0 || callInfo.savedPC <= l.oldPC || newline != p.lineInfo[l.oldPC-1] {
-			l.hook(HookLine, int(newline))
+		if npc < 0 {
+			npc = 0
+		}
+		if int(npc) < len(p.lineInfo) {
+			newline := p.lineInfo[npc]
+			if npc == 0 || l.oldPC == 0 || callInfo.savedPC <= l.oldPC ||
+				int(l.oldPC-1) >= len(p.lineInfo) || newline != p.lineInfo[l.oldPC-1] {
+				l.hook(HookLine, int(newline))
+			}
 		}
 	}
 	l.oldPC = callInfo.savedPC
