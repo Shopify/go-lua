@@ -187,7 +187,9 @@ func (l *State) pushLuaFrame(function, base, resultCount int, p *prototype) *cal
 	if l.top > first {
 		first = l.top
 	}
-	clear(l.stack[first:ci.top])
+	if first < ci.top {
+		clear(l.stack[first:ci.top])
+	}
 	l.callInfo = ci
 	l.top = ci.top
 	return ci
