@@ -170,6 +170,13 @@ func TestCraftedReturnDoesNotExposePoppedHostValues(t *testing.T) {
 	}
 }
 
+func TestCallWithMoreArgumentsThanRegisters(t *testing.T) {
+	l := NewState()
+	if err := DoString(l, `local function noop() end noop(nil, "x", {})`); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestDebugGetHookWithoutExternalHook(t *testing.T) {
 	l := NewState()
 	Require(l, "debug", DebugOpen, true)
