@@ -75,7 +75,7 @@ func TestLua(t *testing.T) {
 		// {name: "main"},
 		{name: "math"},
 		// {name: "nextvar"},
-		// {name: "pm"},
+		{name: "pm"},
 		{name: "sort", nonPort: true}, // sort.lua depends on os.clock(), which is not yet implemented on Windows.
 		{name: "strings"},
 		// {name: "vararg"},
@@ -111,7 +111,12 @@ func TestLua(t *testing.T) {
 		}
 		// l.Call(0, 0)
 		if err := l.ProtectedCall(0, 0, traceback); err != nil {
-			t.Errorf("'%s' failed: %s", v.name, err.Error())
+			str, ok := l.ToString(-1)
+			if ok {
+				t.Errorf("'%s' failed: %s", v.name, str)
+			} else {
+				t.Errorf("'%s' failed (no Lua message): %s", v.name, err.Error())
+			}
 		}
 	}
 }

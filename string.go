@@ -17,29 +17,6 @@ func relativePosition(pos, length int) int {
 	return length + pos + 1
 }
 
-func findHelper(l *State, isFind bool) int {
-	s, p := CheckString(l, 1), CheckString(l, 2)
-	init := relativePosition(OptInteger(l, 3, 1), len(s))
-	if init < 1 {
-		init = 1
-	} else if init > len(s)+1 {
-		l.PushNil()
-		return 1
-	}
-	isPlain := l.TypeOf(4) == TypeNone || l.ToBoolean(4)
-	if isFind && (isPlain || !strings.ContainsAny(p, "^$*+?.([%-")) {
-		if start := strings.Index(s[init-1:], p); start >= 0 {
-			l.PushInteger(start + init)
-			l.PushInteger(start + init + len(p) - 1)
-			return 2
-		}
-	} else {
-		l.assert(false) // TODO implement pattern matching
-	}
-	l.PushNil()
-	return 1
-}
-
 func scanFormat(l *State, fs string) string {
 	i := 0
 	skipDigit := func() {
@@ -176,16 +153,16 @@ var stringLibrary = []RegistryFunction{
 		return 1
 	}},
 	// {"dump", ...},
-	{"find", func(l *State) int { return findHelper(l, true) }},
+	{"find", strFind},
 	{"format", func(l *State) int {
 		l.PushString(formatHelper(l, CheckString(l, 1), l.Top()))
 		return 1
 	}},
-	// {"gmatch", ...},
-	// {"gsub", ...},
+	{"gmatch", gmatch},
+	{"gsub", strGsub},
 	{"len", func(l *State) int { l.PushInteger(len(CheckString(l, 1))); return 1 }},
 	{"lower", func(l *State) int { l.PushString(strings.ToLower(CheckString(l, 1))); return 1 }},
-	// {"match", ...},
+	{"match", strMatch},
 	{"rep", func(l *State) int {
 		s, n, sep := CheckString(l, 1), CheckInteger(l, 2), OptString(l, 3, "")
 		if n <= 0 {
