@@ -3,7 +3,6 @@ package lua
 import (
 	"fmt"
 	"io"
-	"io/ioutil"
 	"os"
 )
 
@@ -231,7 +230,7 @@ var ioLibrary = []RegistryFunction{
 	{"read", func(l *State) int { return read(l, ioFile(l, input), 1) }},
 	{"tmpfile", func(l *State) int {
 		s := newFile(l)
-		f, err := ioutil.TempFile("", "")
+		f, err := os.CreateTemp("", "")
 		if err == nil {
 			s.f = f
 			return 1
