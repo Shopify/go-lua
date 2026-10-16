@@ -1,10 +1,12 @@
 package lua
 
 import (
+	"bufio"
 	"fmt"
 	"io"
 	"io/ioutil"
 	"os"
+	"strconv"
 )
 
 const fileHandle = "FILE*"
@@ -114,14 +116,65 @@ func readNumber(l *State, f *os.File) (err error) {
 	return
 }
 
+func readAll(l *State, f *os.File) error {
+	bytes, err := ioutil.ReadAll(f)
+	if err == nil {
+		l.PushString(string(bytes))
+	}
+	return err
+}
+
+func readLineHelper(l *State, f *os.File) error {
+	originalFileOffset, err := f.Seek(0, 1)
+	if err != nil {
+		return err
+	}
+
+	reader := bufio.NewReader(f)
+	bytes, err := reader.ReadBytes('\n')
+	if err == nil {
+		l.PushString(string(bytes))
+		length := int64(len(bytes))
+		f.Seek(originalFileOffset+length, 0) // bufio loads the entire file. This is a lazy hack to get around the problem.
+	}
+	return err
+}
+
+func readBytes(l *State, f *os.File, i int) error {
+	buf := make([]byte, i)
+	_, err := f.Read(buf)
+	if err == nil {
+		l.PushString(string(buf))
+	}
+	return err
+}
+
 func read(l *State, f *os.File, argIndex int) int {
 	resultCount := 0
 	var err error
 	if argCount := l.Top() - 1; argCount == 0 {
-		//		err = readLineHelper(l, f, true)
+		err = readLineHelper(l, f)
 		resultCount = argIndex + 1
 	} else {
-		// TODO
+		if !l.CheckStack(l.Top() - 1) {
+			Errorf(l, "too many arguments")
+		}
+
+		p := CheckString(l, l.Top())
+		switch p[0:2] {
+		case "*a":
+			err = readAll(l, f)
+		case "*n":
+			err = readNumber(l, f)
+		case "*l":
+			err = readLineHelper(l, f)
+		default:
+			i, err := strconv.Atoi(p)
+			if err != nil {
+				Errorf(l, "invalid format")
+			}
+			err = readBytes(l, f, i)
+		}
 	}
 	if err != nil {
 		return FileResult(l, err, "")
@@ -256,7 +309,7 @@ var fileHandleMethods = []RegistryFunction{
 	{"close", close},
 	{"flush", func(l *State) int { return FileResult(l, toFile(l).Sync(), "") }},
 	{"lines", func(l *State) int { toFile(l); lines(l, false); return 1 }},
-	{"read", func(l *State) int { return read(l, toFile(l), 2) }},
+	{"read", func(l *State) int { read(l, toFile(l), 2); return 1 }},
 	{"seek", func(l *State) int {
 		whence := []int{os.SEEK_SET, os.SEEK_CUR, os.SEEK_END}
 		f := toFile(l)
