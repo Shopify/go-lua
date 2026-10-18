@@ -397,7 +397,10 @@ func (l *State) ProtectedCallWithContinuation(argCount, resultCount, errorFuncti
 	l.checkResults(argCount, resultCount)
 	if errorFunction != 0 {
 		apiCheckStackIndex(errorFunction, l.indexToValue(errorFunction))
-		errorFunction = l.AbsIndex(errorFunction)
+		// The error handler is addressed relative to this frame, but it is
+		// called later from whichever frame raises the error, so remember its
+		// absolute stack position.
+		errorFunction = l.callInfo.function + l.AbsIndex(errorFunction)
 	}
 
 	f := l.top - (argCount + 1)
