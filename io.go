@@ -92,11 +92,7 @@ func close(l *State) int {
 func write(l *State, f *os.File, argIndex int) int {
 	var err error
 	for argCount := l.Top(); argIndex < argCount && err == nil; argIndex++ {
-		if n, ok := l.ToNumber(argIndex); ok {
-			_, err = f.WriteString(numberToString(n))
-		} else {
-			_, err = f.WriteString(CheckString(l, argIndex))
-		}
+		_, err = f.WriteString(CheckString(l, argIndex))
 	}
 	if err == nil {
 		return 1
