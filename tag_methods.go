@@ -84,11 +84,17 @@ func (l *State) tagMethodByObject(o value, event tm) value {
 }
 
 func (l *State) callTagMethod(f, p1, p2 value) value {
+	top := l.top
+	if l.callInfo.isLua() && l.top < l.callInfo.top {
+		l.top = l.callInfo.top
+	}
 	l.push(f)
 	l.push(p1)
 	l.push(p2)
 	l.call(l.top-3, 1, l.callInfo.isLua())
-	return l.pop()
+	v := l.pop()
+	l.top = top
+	return v
 }
 
 func (l *State) callTagMethodV(f, p1, p2, p3 value) {

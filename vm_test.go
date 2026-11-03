@@ -209,6 +209,27 @@ func TestVarArgMeta(t *testing.T) {
 	testString(t, s)
 }
 
+func TestConcatWithMetatableIndexInTableConstructor(t *testing.T) {
+	testString(t, `local meta = {
+		__index = function(self, key)
+			return "ASD"
+		end
+	}
+
+	TEST = {}
+	setmetatable(TEST, meta)
+	assert('b ' .. TEST.B .. ' b' == 'b ASD b')
+
+	local x = {
+		'a ' .. TEST.A .. ' a',
+		'b ' .. TEST.B .. ' b'
+	}
+
+	assert(x[1] == 'a ASD a')
+	assert(x[2] == 'b ASD b', 'got ' .. tostring(x[2]))
+	assert('c ' .. TEST.C == 'c ASD')`)
+}
+
 func TestCanRemoveNilObjectFromStack(t *testing.T) {
 	defer func() {
 		if r := recover(); r != nil {
