@@ -526,7 +526,7 @@ func init() {
 			c := e.k(i.c())
 			if nb, ok := b.(float64); ok {
 				if nc, ok := c.(float64); ok {
-					e.frame[i.a()] = math.Mod(nb, nc)
+					e.frame[i.a()] = arith(OpMod, nb, nc)
 					if e.hooked() {
 						e.hook()
 					}
@@ -1083,7 +1083,7 @@ func (l *State) executeSwitch() {
 			c := k(i.c(), constants, frame)
 			if nb, ok := b.(float64); ok {
 				if nc, ok := c.(float64); ok {
-					frame[i.a()] = math.Mod(nb, nc)
+					frame[i.a()] = arith(OpMod, nb, nc)
 					break
 				}
 			}

@@ -51,6 +51,24 @@ func TestProtectedCall(t *testing.T) {
 	l.Call(0, 0)
 }
 
+func TestModuloNegativeOperands(t *testing.T) {
+	l := NewState()
+	OpenLibraries(l)
+
+	if err := DoString(l, `local a,b,c,d=-3,2,3,-2
+		return -3%2, a%b, "-3"%b, c%d, math.fmod(a,b)`); err != nil {
+		t.Fatal(err)
+	}
+
+	want := []float64{1, 1, 1, -1, -1}
+	for i, expected := range want {
+		got, ok := l.ToNumber(i + 1)
+		if !ok || got != expected {
+			t.Errorf("result %d = %v (number: %t), want %v", i+1, got, ok, expected)
+		}
+	}
+}
+
 func TestLua(t *testing.T) {
 	tests := []struct {
 		name    string
