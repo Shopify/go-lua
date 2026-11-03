@@ -5,11 +5,12 @@ import (
 )
 
 type table struct {
-	array         []value
-	hash          map[value]value
-	metaTable     *table
-	flags         byte
-	iterationKeys []value
+	array          []value
+	hash           map[value]value
+	metaTable      *table
+	flags          byte
+	iterationKeys  []value
+	iterationIndex map[value]int
 }
 
 func newTable() *table                     { return &table{hash: make(map[value]value)} }
@@ -82,6 +83,7 @@ func (t *table) maybeResizeArray(key int) bool {
 func (t *table) addOrInsertHash(k, v value) {
 	if _, ok := t.hash[k]; !ok {
 		t.iterationKeys = nil // invalidate iterations when adding an entry
+		t.iterationIndex = nil
 	}
 	t.hash[k] = v
 }
@@ -240,23 +242,32 @@ func (l *State) next(t *table, key int) bool {
 	}
 	if t.iterationKeys == nil {
 		j, keys := 0, make([]value, len(t.hash))
+		var indices map[value]int
+		if len(t.hash) > 0 {
+			indices = make(map[value]int, len(t.hash))
+		}
 		for hk := range t.hash {
 			keys[j] = hk
+			indices[hk] = j
 			j++
 		}
 		t.iterationKeys = keys
+		t.iterationIndex = indices
 	}
-	found := k == nil
-	for i, hk := range t.iterationKeys {
+	start := 0
+	if k != nil {
+		start = t.iterationIndex[k] + 1
+	}
+	for i := start; i < len(t.iterationKeys); i++ {
+		hk := t.iterationKeys[i]
 		if hk == nil { // skip deleted key
 		} else if _, present := t.hash[hk]; !present {
 			t.iterationKeys[i] = nil // mark key as deleted
-		} else if found {
+			delete(t.iterationIndex, hk)
+		} else {
 			l.stack[key] = hk
 			l.stack[key+1] = t.hash[hk]
 			return true
-		} else if l.equalObjects(hk, k) {
-			found = true
 		}
 	}
 	return false // no more elements
