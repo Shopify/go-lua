@@ -238,10 +238,6 @@ func arith(op Operator, v1, v2 float64) float64 {
 	case OpMod:
 		return v1 - math.Floor(v1/v2)*v2
 	case OpPow:
-		// Golang bug: math.Pow(10.0, 33.0) is incorrect by 1 bit.
-		if v1 == 10.0 && float64(int(v2)) == v2 {
-			return math.Pow10(int(v2))
-		}
 		return math.Pow(v1, v2)
 	case OpUnaryMinus:
 		return -v1
