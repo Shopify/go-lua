@@ -106,7 +106,7 @@ func (l *State) newUpValueAt(level int) *upValue {
 func (l *State) close(level int) {
 	// TODO this seems really inefficient - how can we terminate early?
 	var p *openUpValue
-	for e := l.upValues; e != nil; e, p = e.next, e {
+	for e := l.upValues; e != nil; e = e.next {
 		if e.upValue.isInStackAbove(level) {
 			e.upValue.close()
 			if p != nil {
@@ -114,6 +114,8 @@ func (l *State) close(level int) {
 			} else {
 				l.upValues = e.next
 			}
+		} else {
+			p = e
 		}
 	}
 }
